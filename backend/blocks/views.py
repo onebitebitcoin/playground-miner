@@ -137,7 +137,6 @@ def stream_view(_request):
 
     resp = StreamingHttpResponse(event_stream(), content_type='text/event-stream; charset=utf-8')
     resp['Cache-Control'] = 'no-cache'
-    resp['Connection'] = 'keep-alive'
     # For Nginx: disable proxy buffering to support SSE
     resp['X-Accel-Buffering'] = 'no'
     return resp

@@ -239,8 +239,10 @@ server {
         proxy_cache off;
         proxy_read_timeout 1d;
         proxy_send_timeout 1d;
-        add_header X-Accel-Buffering no;
-        add_header Cache-Control no-cache;
+        add_header X-Accel-Buffering no always;
+        add_header Cache-Control no-cache always;
+        gzip off;
+        proxy_hide_header Content-Encoding;
     }
 
     location /api/ {
