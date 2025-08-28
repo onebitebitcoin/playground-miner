@@ -3,7 +3,6 @@ import time
 import threading
 from django.db import transaction
 from django.db.models import Max
-from django.core.cache import cache
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from .models import Block
@@ -33,15 +32,10 @@ def calc_reward_for_height(next_height: int) -> int:
 
 
 def current_status():
-    cached = cache.get('blocks:status')
-    if cached is not None:
-        return cached
     height = Block.objects.aggregate(m=Max('height'))['m'] or 0
     difficulty = calc_difficulty_for_height(height)
     reward = calc_reward_for_height(height + 1) if height >= 0 else 100
-    data = { 'height': height, 'difficulty': difficulty, 'reward': reward }
-    cache.set('blocks:status', data, 30)
-    return data
+    return { 'height': height, 'difficulty': difficulty, 'reward': reward }
 
 
 def status_view(_request):
@@ -49,11 +43,8 @@ def status_view(_request):
 
 
 def blocks_view(_request):
-    data = cache.get('blocks:snapshot_200')
-    if data is None:
-        qs = Block.objects.order_by('-height').values('height','nonce','miner','difficulty','reward','timestamp')[:200]
-        data = list(qs)
-        cache.set('blocks:snapshot_200', data, 30)
+    qs = Block.objects.order_by('-height').values('height','nonce','miner','difficulty','reward','timestamp')[:200]
+    data = list(qs)
     return JsonResponse({ 'blocks': data })
 
 
@@ -92,8 +83,7 @@ def mine_view(request):
             difficulty=difficulty,
             reward=reward,
         )
-        # Invalidate caches affected by new block creation
-        cache.delete_many(['blocks:status', 'blocks:snapshot_200'])
+        # no cache layer; nothing to invalidate
 
     # 방송
     status = current_status()
@@ -116,11 +106,8 @@ def stream_view(_request):
             # Advise client to retry every 3s if disconnected
             yield "retry: 3000\n\n"
             # 초기 스냅샷 전송
-            # Use cached snapshot for performance
-            blocks_snapshot = cache.get('blocks:snapshot_200')
-            if blocks_snapshot is None:
-                blocks_snapshot = list(Block.objects.order_by('-height').values('height','nonce','miner','difficulty','reward','timestamp')[:200])
-                cache.set('blocks:snapshot_200', blocks_snapshot, 30)
+            # Build snapshot directly (no cache) for freshness
+            blocks_snapshot = list(Block.objects.order_by('-height').values('height','nonce','miner','difficulty','reward','timestamp')[:200])
             initial = {
                 'type': 'snapshot',
                 'blocks': blocks_snapshot,

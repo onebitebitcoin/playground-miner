@@ -69,10 +69,4 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 # Persistent DB connections to reduce cold-connection latency
 CONN_MAX_AGE = 60
 
-# Simple in-memory cache for status/snapshot caching
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'playground-cache'
-    }
-}
+# Note: No global caching configured to avoid stale heights on real-time UI
