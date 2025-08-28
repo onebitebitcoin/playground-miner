@@ -221,6 +221,29 @@ const miner = ref('guest')
 let es = null
 const broadcastMsg = ref('')
 const peers = ref([])
+let pollTimer = null
+
+function startPolling() {
+  if (pollTimer) return
+  pollTimer = setInterval(async () => {
+    try {
+      const s = await fetchStatus()
+      const prev = status.height
+      applyStatus(s)
+      if (status.height !== prev) {
+        const b = await fetchBlocks()
+        applyBlocks(b.blocks)
+      }
+    } catch (_) {}
+  }, 2000)
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
 
 // 보상 집계: 각 블록의 reward 합산
 const rewardByMiner = computed(() => {
@@ -331,6 +354,8 @@ onMounted(async () => {
       if (Array.isArray(payload.peers)) {
         peers.value = payload.peers
       }
+      // 실시간 연결 정상화 시 폴링 중지
+      stopPolling()
     } else if (payload.type === 'block') {
       // 새 블록 추가
       addOrUpdateBlock(payload.block)
@@ -351,11 +376,18 @@ onMounted(async () => {
       if (Array.isArray(payload.peers)) peers.value = payload.peers
     }
   })
+
+  // SSE 오류 시 폴링으로 폴백, 연결되면 중지
+  try {
+    es.onerror = () => startPolling()
+    es.onopen = () => stopPolling()
+  } catch (_) {}
 })
 
 onBeforeUnmount(() => {
   stopMining = true
   if (es) es.close()
+  stopPolling()
 })
 </script>
 
