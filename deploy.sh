@@ -163,8 +163,17 @@ EOF
 
 sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE_NAME"
-echo "Restarting backend service..."
-sudo systemctl restart "$SERVICE_NAME" || true
+
+echo "Stopping existing backend service if running..."
+sudo systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+
+echo "Killing any existing processes on port $BACKEND_PORT and stray gunicorn/uvicorn..."
+sudo fuser -k "$BACKEND_PORT"/tcp 2>/dev/null || true
+sudo pkill -f "gunicorn.*playground_server" 2>/dev/null || true
+sudo pkill -f "uvicorn.*playground_server" 2>/dev/null || true
+
+echo "Starting backend service (gunicorn via systemd)..."
+sudo systemctl start "$SERVICE_NAME" || true
 
 sleep 3
 if sudo systemctl is-active --quiet "$SERVICE_NAME"; then
