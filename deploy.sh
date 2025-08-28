@@ -155,15 +155,48 @@ fi
 
 echo "=== Nginx: Reverse proxy + static ==="
 # Name the nginx config after the server_name (e.g., playground.onebitebitcoin.com.conf)
+CERT_DOMAIN="${CERT_DOMAIN:-onebitebitcoin.com}"
 NGINX_BASENAME="${SERVER_NAME:-$PROJECT_NAME}"
-NGINX_CONF="/etc/nginx/sites-available/${NGINX_BASENAME}"
+NGINX_CONF="/etc/nginx/sites-available/${NGINX_BASENAME}.conf"
+
+# ACME challenge directory (for certbot)
+sudo mkdir -p /var/www/letsencrypt
+
+# Write nginx configuration referencing training script style (HTTP->HTTPS + SSL site)
 sudo bash -c "cat > '$NGINX_CONF'" <<EOF
 server {
     listen 80;
     server_name $SERVER_NAME;
 
+    location ~ /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+        allow all;
+        try_files \$uri =404;
+    }
+
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name $SERVER_NAME;
+
+    access_log /var/log/nginx/${NGINX_BASENAME}.access.log;
+    error_log  /var/log/nginx/${NGINX_BASENAME}.error.log;
+
+    ssl_certificate /etc/letsencrypt/live/$CERT_DOMAIN/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/$CERT_DOMAIN/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
     root $FRONTEND_DEPLOY_DIR;
     index index.html;
+
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
 
     location /api/ {
         proxy_pass http://127.0.0.1:$BACKEND_PORT;
@@ -177,13 +210,24 @@ server {
         proxy_cache_bypass \$http_upgrade;
     }
 
-    location / {
-        try_files \$uri \$uri/ /index.html;
+    # Static & media (if present)
+    location /static/ {
+        alias $FRONTEND_DEPLOY_DIR/staticfiles/;
+        access_log off;
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000";
+    }
+
+    location /media/ {
+        alias $FRONTEND_DEPLOY_DIR/media/;
+        access_log off;
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000";
     }
 }
 EOF
 
-sudo ln -sf "$NGINX_CONF" "/etc/nginx/sites-enabled/${NGINX_BASENAME}"
+sudo ln -sf "$NGINX_CONF" "/etc/nginx/sites-enabled/${NGINX_BASENAME}.conf"
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
