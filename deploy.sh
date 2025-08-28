@@ -218,6 +218,24 @@ server {
         try_files \$uri \$uri/ /index.html;
     }
 
+    # Dedicated SSE location for HTTP/2 safety
+    location /api/stream {
+        proxy_pass http://127.0.0.1:$BACKEND_PORT/api/stream;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Connection '';
+        proxy_set_header Accept-Encoding '';
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 1d;
+        proxy_send_timeout 1d;
+        add_header X-Accel-Buffering no;
+        add_header Cache-Control no-cache;
+    }
+
     location /api/ {
         proxy_pass http://127.0.0.1:$BACKEND_PORT;
         proxy_http_version 1.1;
@@ -230,8 +248,6 @@ server {
         proxy_cache_bypass \$http_upgrade;
         proxy_buffering off;
         proxy_read_timeout 3600s;
-        # For SSE
-        add_header X-Accel-Buffering no;
     }
 
     # Static & media (if present)

@@ -129,7 +129,7 @@ def stream_view(_request):
             # 접속자 목록 갱신 방송
             broadcaster.publish({ 'type': 'peers', 'peers': broadcaster.peers() })
 
-    resp = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
+    resp = StreamingHttpResponse(event_stream(), content_type='text/event-stream; charset=utf-8')
     resp['Cache-Control'] = 'no-cache'
     resp['Connection'] = 'keep-alive'
     # For Nginx: disable proxy buffering to support SSE
