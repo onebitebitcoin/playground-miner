@@ -2,21 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 약간의 페이지 기본 스타일 */
-html, body, #app { height: 100%; }
-
-/* Simple utility for smoother UI */
-.transition-base { @apply transition-colors transition-opacity duration-200; }
-
-/* Card density helpers (compact on desktop only) */
-@media (min-width: 768px) {
-  .compact .card { padding: 0.75rem !important; }
+/* Modern page styles */
+html, body, #app { 
+  height: 100%; 
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-/* TransitionGroup animations for lists */
-.list-enter-active, .list-leave-active { transition: all 220ms ease; }
-.list-enter-from, .list-leave-to { opacity: 0; transform: translateY(6px); }
+/* Enhanced transitions */
+.transition-base { @apply transition-all duration-300 ease-in-out; }
 
-/* Flash highlight for new blocks */
-@keyframes flashHighlight { from { background-color: rgb(240 253 244); } to { background-color: transparent; } }
-.block-highlight { animation: flashHighlight 1.2s ease-out; }
+/* Card density helpers */
+@media (min-width: 768px) {
+  .compact .card { padding: 1rem !important; }
+}
+
+/* Enhanced list animations */
+.list-enter-active, .list-leave-active { 
+  transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); 
+}
+.list-enter-from, .list-leave-to { 
+  opacity: 0; 
+  transform: translateY(-10px) scale(0.98); 
+}
+
+/* Enhanced block highlight */
+@keyframes flashHighlight { 
+  0% { 
+    background-color: rgb(220 252 231); 
+    box-shadow: 0 0 0 2px rgb(34 197 94); 
+    transform: scale(1.02);
+  } 
+  100% { 
+    background-color: transparent; 
+    box-shadow: none;
+    transform: scale(1);
+  } 
+}
+.block-highlight { 
+  animation: flashHighlight 1.5s ease-out; 
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Button hover effects */
+@layer components {
+  .btn-primary {
+    @apply bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200;
+  }
+  
+  .card-modern {
+    @apply bg-white rounded-2xl shadow-lg border border-slate-100 hover:shadow-xl transition-all duration-300;
+  }
+}
+
+/* Loading animation for mining button */
+@keyframes mining-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.mining-loading {
+  animation: mining-pulse 1s infinite;
+}
