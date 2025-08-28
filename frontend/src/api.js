@@ -42,8 +42,9 @@ export async function postMine({ miner, nonce }) {
   }
 }
 
-export function connectBlockStream(onMessage) {
-  const url = `${BASE_URL}/api/stream`
+export function connectBlockStream(onMessage, nickname) {
+  const q = nickname ? `?nick=${encodeURIComponent(nickname)}` : ''
+  const url = `${BASE_URL}/api/stream${q}`
   const es = new EventSource(url)
   es.onmessage = (e) => {
     try {
@@ -54,11 +55,12 @@ export function connectBlockStream(onMessage) {
   return es
 }
 
-export function connectEvents(onMessage) {
+export function connectEvents(onMessage, nickname) {
   // Try WebSocket first
   try {
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const wsUrl = `${proto}://${window.location.host}/ws/stream`
+    const qs = nickname ? `?nick=${encodeURIComponent(nickname)}` : ''
+    const wsUrl = `${proto}://${window.location.host}/ws/stream${qs}`
     const ws = new WebSocket(wsUrl)
     ws.onmessage = (e) => {
       try { onMessage(JSON.parse(e.data)) } catch (_) {}
@@ -66,6 +68,26 @@ export function connectEvents(onMessage) {
     return { kind: 'ws', socket: ws }
   } catch (_) {}
   // Fallback to SSE
-  const es = connectBlockStream(onMessage)
+  const es = connectBlockStream(onMessage, nickname)
   return { kind: 'sse', socket: es }
+}
+
+export async function apiRegisterNickname(nickname) {
+  const res = await fetch(`${BASE_URL}/api/register_nick`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({ nickname })
+  })
+  if (!res.ok) throw new Error(`register ${res.status}`)
+  return res.json()
+}
+
+export async function apiInitReset(token) {
+  const res = await fetch(`${BASE_URL}/api/init_reset`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({ token })
+  })
+  if (!res.ok) throw new Error(`init ${res.status}`)
+  return res.json()
 }

@@ -31,6 +31,12 @@
       <!-- Desktop header -->
       <header class="hidden md:flex items-center justify-between">
         <h1 class="text-2xl font-bold">플레이그라운드</h1>
+        <div class="flex items-center gap-2">
+          <button
+            class="px-3 py-1.5 text-sm rounded border border-red-300 text-red-600 hover:bg-red-50"
+            @click="onInitReset"
+          >초기화</button>
+        </div>
       </header>
 
       <section>
@@ -45,6 +51,8 @@
 import { inject, computed } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import BitcoinMining from './pages/mining/BitcoinMining.vue'
+import NicknameSetup from './pages/NicknameSetup.vue'
+import { apiInitReset } from './api'
 
 const state = inject('appState')
 
@@ -54,6 +62,7 @@ const menuItems = [
 ]
 
 const componentsMap = {
+  nick: NicknameSetup,
   mining: BitcoinMining,
   coming: {
     template: '<div class="text-slate-500">준비중입니다…</div>'
@@ -64,6 +73,26 @@ const currentComponent = computed(() => componentsMap[state.active] ?? component
 
 function onSelect(key) {
   state.active = key
+}
+
+// Force nickname setup if not set
+if (!localStorage.getItem('nickname')) {
+  state.active = 'nick'
+}
+
+async function onInitReset() {
+  const token = window.prompt('초기화 토큰을 입력하세요 (서버 INIT_TOKEN)')
+  if (!token) return
+  try {
+    const res = await apiInitReset(token)
+    if (res && res.ok) {
+      alert('초기화 완료')
+      // Optional: reload page state
+      window.location.reload()
+    } else {
+      alert(res?.error || '초기화 실패')
+    }
+  } catch (e) {}
 }
 </script>
 

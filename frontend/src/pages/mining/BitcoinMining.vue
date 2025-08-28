@@ -205,7 +205,7 @@
 
 <script setup>
 import { onMounted, onBeforeUnmount, reactive, ref, computed } from 'vue'
-import { fetchStatus, fetchBlocks, postMine, connectEvents, connectBlockStream } from '../../api'
+import { fetchStatus, fetchBlocks, postMine, connectEvents, connectBlockStream, apiInitReset } from '../../api'
 import MiningAnim from '../../components/MiningAnim.vue'
 import BlockGrid from '../../components/BlockGrid.vue'
 import CoinIcon from '../../components/CoinIcon.vue'
@@ -223,6 +223,7 @@ let wsWrapper = null
 const broadcastMsg = ref('')
 const peers = ref([])
 let pollTimer = null
+const savedNick = localStorage.getItem('nickname') || ''
 
 function startPolling() {
   if (pollTimer) return
@@ -339,6 +340,7 @@ function applyBlocks(list) {
 }
 
 onMounted(async () => {
+  if (savedNick) miner.value = savedNick
   const s = await fetchStatus()
   applyStatus(s)
   const b = await fetchBlocks()
@@ -346,7 +348,7 @@ onMounted(async () => {
 
   // Prefer WebSocket if available, else SSE
   try {
-    wsWrapper = connectEvents((payload) => handleMessage(payload))
+    wsWrapper = connectEvents((payload) => handleMessage(payload), savedNick || miner.value)
     if (wsWrapper.kind === 'ws') {
       // Stop polling when WS is open (handled in onopen)
       try { wsWrapper.socket.onopen = () => stopPolling() } catch (_) {}
@@ -355,7 +357,7 @@ onMounted(async () => {
     }
   } catch (_) {
     // Fallback to SSE if WS creation failed synchronously
-    es = connectBlockStream((payload) => handleMessage(payload))
+    es = connectBlockStream((payload) => handleMessage(payload), savedNick || miner.value)
   }
 
   function handleMessage(payload) {

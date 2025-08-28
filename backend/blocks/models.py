@@ -21,3 +21,11 @@ class Block(models.Model):
             'reward': self.reward,
             'timestamp': self.timestamp.isoformat(),
         }
+
+
+class Nickname(models.Model):
+    name = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name

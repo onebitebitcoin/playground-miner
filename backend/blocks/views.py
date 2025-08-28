@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models import Max
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from .models import Block
+from .models import Block, Nickname
 from .broadcast import broadcaster
 
 
@@ -94,9 +94,18 @@ def mine_view(request):
 
 def stream_view(_request):
     global _guest_counter
-    with _guest_lock:
-        _guest_counter += 1
-        nickname = f"guest {_guest_counter}"
+    requested = _request.GET.get('nick')
+    nickname = None
+    if requested:
+        try:
+            if Nickname.objects.filter(name=requested[:64]).exists():
+                nickname = requested[:64]
+        except Exception:
+            nickname = None
+    if not nickname:
+        with _guest_lock:
+            _guest_counter += 1
+            nickname = f"guest {_guest_counter}"
     q = broadcaster.add_listener({ 'nickname': nickname })
     # 새 접속자 목록을 모든 클라이언트에 즉시 방송(기존 클라이언트도 즉시 갱신)
     broadcaster.publish({ 'type': 'peers', 'peers': broadcaster.peers() })
@@ -140,3 +149,55 @@ def stream_view(_request):
     # For Nginx: disable proxy buffering to support SSE
     resp['X-Accel-Buffering'] = 'no'
     return resp
+
+
+@csrf_exempt
+def register_nick_view(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+        nickname = (payload.get('nickname') or '').strip()[:64]
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'invalid json'}, status=400)
+    if not nickname:
+        return JsonResponse({'ok': False, 'error': 'nickname required'}, status=400)
+    try:
+        obj, created = Nickname.objects.get_or_create(name=nickname)
+        return JsonResponse({'ok': True, 'nickname': obj.name, 'created': created})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': 'db error'}, status=500)
+
+
+def check_nick_view(request):
+    nickname = (request.GET.get('nickname') or '').strip()[:64]
+    if not nickname:
+        return JsonResponse({'ok': False, 'error': 'nickname required'}, status=400)
+    exists = Nickname.objects.filter(name=nickname).exists()
+    return JsonResponse({'ok': True, 'exists': exists})
+
+
+@csrf_exempt
+def init_reset_view(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+    # Simple protection using env token
+    import os
+    expected = os.environ.get('INIT_TOKEN') or os.environ.get('ADMIN_TOKEN')
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        payload = {}
+    token = payload.get('token') or request.headers.get('X-Admin-Token')
+    if expected and token != expected:
+        return JsonResponse({'ok': False, 'error': 'unauthorized'}, status=401)
+
+    # Reset blocks and guest counter
+    Block.objects.all().delete()
+    global _guest_counter
+    with _guest_lock:
+        _guest_counter = 0
+    # Broadcast updated status and peers
+    broadcaster.publish({'type': 'status', 'status': current_status()})
+    broadcaster.publish({'type': 'peers', 'peers': broadcaster.peers()})
+    return JsonResponse({'ok': True, 'status': current_status()})
