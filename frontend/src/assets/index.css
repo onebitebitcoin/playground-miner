@@ -1,0 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 약간의 페이지 기본 스타일 */
+html, body, #app { height: 100%; }
+

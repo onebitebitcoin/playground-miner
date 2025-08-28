@@ -1,0 +1,58 @@
+# OS & Editor
+.DS_Store
+.idea/
+.vscode/
+*.code-workspace
+
+# Environment files
+.env
+.env.*
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.so
+.Python
+*.egg-info/
+.eggs/
+*.egg
+
+# Virtualenvs
+.venv/
+venv/
+ENV/
+env/
+
+# Django
+*.log
+staticfiles/
+media/
+db.sqlite3
+db.sqlite3-journal
+
+# Tests / Coverage / Type checking
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.tox/
+.hypothesis/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Logs
+logs/
+*.log
+
