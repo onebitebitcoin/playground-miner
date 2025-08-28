@@ -31,13 +31,16 @@
             <div class="text-xs text-slate-500">내 보상</div>
           </div>
         </div>
-        <div class="flex items-center justify-center gap-2">
+        <button 
+          @click="showPeersModal = true"
+          class="flex items-center justify-center gap-2 hover:bg-slate-50 rounded-lg p-2 transition-colors"
+        >
           <span class="text-green-600 text-lg">👥</span>
           <div>
             <div class="font-bold text-slate-800">{{ peers.length }}</div>
             <div class="text-xs text-slate-500">접속자</div>
           </div>
-        </div>
+        </button>
       </div>
     </div>
 
@@ -198,6 +201,54 @@
       </div>
     </div>
 
+    <!-- Connected Users Modal -->
+    <div v-if="showPeersModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] flex flex-col">
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between p-6 border-b border-slate-200">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+              <span class="text-green-600 text-xl">👥</span>
+            </div>
+            <h3 class="text-xl font-bold text-slate-800">접속 중인 사용자</h3>
+          </div>
+          <button
+            @click="showPeersModal = false"
+            class="p-2 hover:bg-slate-100 rounded-full transition-colors"
+          >
+            <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <!-- Modal Content -->
+        <div class="flex-1 overflow-y-auto p-6">
+          <div v-if="peers.length === 0" class="text-center py-8 text-slate-500">
+            현재 접속자가 없습니다.
+          </div>
+          <div v-else class="space-y-3">
+            <div 
+              v-for="(peer, index) in peers" 
+              :key="peer || index" 
+              class="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors"
+            >
+              <div class="w-3 h-3 rounded-full bg-green-500 animate-pulse flex-shrink-0"></div>
+              <div class="flex-1 min-w-0">
+                <div class="font-medium text-slate-800 truncate">
+                  {{ peer || 'Unknown User' }}
+                  <span v-if="peer === miner" class="text-xs text-green-600 ml-2 font-normal">(나)</span>
+                </div>
+                <div class="text-xs text-slate-500">온라인</div>
+              </div>
+              <div v-if="peer === miner" class="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <span class="text-green-600 text-xs">✓</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -224,6 +275,7 @@ let pollTimer = null
 const savedNick = localStorage.getItem('nickname') || ''
 const highlighted = new Set()
 const showBlocksModal = ref(false)
+const showPeersModal = ref(false)
 
 function startPolling() {
   if (pollTimer) return
