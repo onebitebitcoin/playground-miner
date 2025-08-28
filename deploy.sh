@@ -6,7 +6,7 @@ set -euo pipefail
 # Based on ../training/deploy.sh, adapted for this repo layout.
 #
 # Usage:
-#   SERVER_NAME=playground.example.com BACKEND_PORT=8002 sudo -E ./deploy.sh
+#   SERVER_NAME=playground.onebitebitcoin.com BACKEND_PORT=8002 sudo -E ./deploy.sh
 #
 # Notes:
 # - Expects Ubuntu with apt. Installs Node LTS, Python, Nginx.
@@ -20,7 +20,8 @@ FRONTEND_DIR="$ROOT_DIR/frontend"
 FRONTEND_DEPLOY_DIR="/var/www/${PROJECT_NAME}"
 SERVICE_NAME="${PROJECT_NAME}-backend"
 BACKEND_PORT="${BACKEND_PORT:-8002}"
-SERVER_NAME="${SERVER_NAME:-_}"
+# Default to the intended domain; override via SERVER_NAME env
+SERVER_NAME="${SERVER_NAME:-playground.onebitebitcoin.com}"
 
 echo "=== Deploying $PROJECT_NAME ==="
 echo "Root: $ROOT_DIR"
@@ -153,7 +154,9 @@ else
 fi
 
 echo "=== Nginx: Reverse proxy + static ==="
-NGINX_CONF="/etc/nginx/sites-available/${PROJECT_NAME}.conf"
+# Name the nginx config after the server_name (e.g., playground.onebitebitcoin.com.conf)
+NGINX_BASENAME="${SERVER_NAME:-$PROJECT_NAME}"
+NGINX_CONF="/etc/nginx/sites-available/${NGINX_BASENAME}.conf"
 sudo bash -c "cat > '$NGINX_CONF'" <<EOF
 server {
     listen 80;
@@ -180,7 +183,7 @@ server {
 }
 EOF
 
-sudo ln -sf "$NGINX_CONF" "/etc/nginx/sites-enabled/${PROJECT_NAME}.conf"
+sudo ln -sf "$NGINX_CONF" "/etc/nginx/sites-enabled/${NGINX_BASENAME}.conf"
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
