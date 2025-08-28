@@ -1,13 +1,35 @@
 <template>
   <div class="min-h-screen flex">
-    <Sidebar
-      :items="menuItems"
-      :active="state.active"
-      @select="onSelect"
-    />
+    <!-- Desktop sidebar -->
+    <div class="hidden md:block">
+      <Sidebar
+        :items="menuItems"
+        :active="state.active"
+        @select="onSelect"
+      />
+    </div>
 
-    <main class="flex-1 p-6 space-y-6">
-      <header class="flex items-center justify-between">
+    <main class="flex-1 p-4 md:p-6 space-y-4 md:space-y-6">
+      <!-- Mobile topbar with nav -->
+      <div class="md:hidden sticky top-0 z-10 -mx-4 px-4 py-3 bg-slate-50/80 backdrop-blur border-b border-slate-200">
+        <div class="flex items-center justify-between">
+          <h1 class="text-xl font-bold">플레이그라운드</h1>
+        </div>
+        <nav class="mt-3 flex gap-2 overflow-x-auto">
+          <button
+            v-for="item in menuItems"
+            :key="item.key"
+            class="px-3 py-1.5 rounded-full text-sm whitespace-nowrap border"
+            :class="state.active === item.key ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300'"
+            @click="onSelect(item.key)"
+          >
+            {{ item.label }}
+          </button>
+        </nav>
+      </div>
+
+      <!-- Desktop header -->
+      <header class="hidden md:flex items-center justify-between">
         <h1 class="text-2xl font-bold">플레이그라운드</h1>
       </header>
 

@@ -32,7 +32,41 @@
         <div v-if="broadcastMsg" class="mb-2 text-sm p-2 rounded border border-indigo-200 bg-indigo-50 text-indigo-700">
           {{ broadcastMsg }}
         </div>
-        <div class="overflow-auto max-h-96">
+
+        <!-- Mobile: card list -->
+        <div class="space-y-2 md:hidden">
+          <div
+            v-for="b in blocks"
+            :key="b.height"
+            class="p-3 rounded border border-slate-200 bg-slate-50"
+          >
+            <div class="flex items-center justify-between text-sm">
+              <div class="font-semibold">#{{ b.height }}</div>
+              <div class="text-slate-500">{{ new Date(b.timestamp).toLocaleString() }}</div>
+            </div>
+            <div class="mt-2 grid grid-cols-2 gap-2 text-sm">
+              <div>
+                <div class="text-slate-500">난이도</div>
+                <div class="tabular-nums">{{ b.difficulty }}</div>
+              </div>
+              <div>
+                <div class="text-slate-500">Nonce</div>
+                <div class="tabular-nums">{{ b.nonce }}</div>
+              </div>
+              <div class="col-span-2 flex items-center gap-2">
+                <div class="text-slate-500">보상</div>
+                <span class="inline-flex items-center gap-1 font-medium"><CoinIcon /> <span class="tabular-nums">{{ b.reward || 0 }}</span></span>
+              </div>
+              <div class="col-span-2">
+                <div class="text-slate-500">채굴자</div>
+                <div class="truncate">{{ b.miner }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Desktop: table -->
+        <div class="hidden md:block overflow-auto max-h-96">
           <table class="min-w-full text-sm">
             <thead class="text-left text-slate-500">
               <tr>
@@ -66,7 +100,7 @@
         <h3 class="font-semibold">채굴 시도</h3>
         <label class="block text-sm">
           닉네임
-          <input v-model="miner" class="mt-1 w-full border rounded px-3 py-2" placeholder="예: satoshi" />
+          <input v-model="miner" class="mt-1 w-full border rounded px-3 py-2" placeholder="예: satoshi" inputmode="text" />
         </label>
 
         <div class="text-sm text-slate-600">
@@ -103,7 +137,7 @@
             <CoinIcon /> × <span class="tabular-nums">{{ myReward }}</span>
           </span>
         </div>
-        <ul class="text-sm divide-y">
+        <ul class="text-sm divide-y max-h-64 overflow-auto">
           <li v-for="item in rewardByMiner" :key="item.miner" class="py-1 flex items-center justify-between">
             <div class="flex items-center gap-2">
               <span :class="{'font-semibold text-slate-900': item.miner === miner}">{{ item.miner }}</span>
@@ -119,7 +153,7 @@
       <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
         <h3 class="font-semibold mb-2">접속 중인 게스트</h3>
         <div v-if="peers.length === 0" class="text-sm text-slate-500">현재 접속자가 없습니다.</div>
-        <ul v-else class="text-sm space-y-1">
+        <ul v-else class="text-sm space-y-1 max-h-64 overflow-auto">
           <li v-for="p in peers" :key="p" class="flex items-center gap-2">
             <span class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
             <span :class="{'font-semibold text-slate-900': p === miner}">{{ p }}<span v-if="p === miner" class="text-xs text-slate-500"> (나)</span></span>
