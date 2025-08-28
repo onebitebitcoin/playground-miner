@@ -1,47 +1,18 @@
 <template>
   <div class="space-y-6">
-    <!-- Network Status Cards with Mining Animation - Featured Section -->
-    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
-      <!-- Status Cards -->
-      <div class="bg-white rounded-2xl shadow-lg border border-blue-100 p-6 hover:shadow-xl transition-all duration-300">
-        <div class="flex items-center justify-between mb-2">
-          <div class="text-slate-500 text-sm font-medium">블록 높이</div>
-          <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-            <span class="text-blue-600 text-xl">📋</span>
-          </div>
-        </div>
-        <div class="text-3xl font-bold text-slate-800">{{ status.height }}</div>
+    <!-- Simple Network Status Cards -->
+    <div class="grid grid-cols-3 gap-4">
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-center">
+        <div class="text-2xl font-bold text-slate-800 mb-1">{{ status.height }}</div>
+        <div class="text-sm text-slate-500">블록 높이</div>
       </div>
-      <div class="bg-white rounded-2xl shadow-lg border border-indigo-100 p-6 hover:shadow-xl transition-all duration-300">
-        <div class="flex items-center justify-between mb-2">
-          <div class="text-slate-500 text-sm font-medium">난이도</div>
-          <div class="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-            <span class="text-indigo-600 text-xl">⚙️</span>
-          </div>
-        </div>
-        <div class="text-3xl font-bold text-slate-800">≤ {{ status.difficulty }}</div>
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-center">
+        <div class="text-2xl font-bold text-slate-800 mb-1">≤ {{ status.difficulty }}</div>
+        <div class="text-sm text-slate-500">난이도</div>
       </div>
-      <div class="bg-white rounded-2xl shadow-lg border border-yellow-100 p-6 hover:shadow-xl transition-all duration-300">
-        <div class="flex items-center justify-between mb-2">
-          <div class="text-slate-500 text-sm font-medium">블록 보상</div>
-          <div class="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-            <CoinIcon />
-          </div>
-        </div>
-        <div class="text-3xl font-bold text-slate-800 tabular-nums">{{ currentReward }}</div>
-      </div>
-      
-      <!-- Featured Mining Animation -->
-      <div class="bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl shadow-lg p-6 text-white hover:shadow-xl transition-all duration-300">
-        <div class="flex items-center justify-between mb-2">
-          <div class="text-blue-100 text-sm font-medium">채굴 상태</div>
-          <div class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-            <span class="text-white text-xl">⛏️</span>
-          </div>
-        </div>
-        <div class="h-16 flex items-center justify-center">
-          <MiningAnim :state="miningState" />
-        </div>
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-center">
+        <div class="text-2xl font-bold text-slate-800 mb-1 tabular-nums">{{ currentReward }}</div>
+        <div class="text-sm text-slate-500">블록 보상</div>
       </div>
     </div>
 
@@ -76,7 +47,7 @@
           </div>
 
           <!-- Mining Animation Above Button -->
-          <div class="bg-gradient-to-br from-slate-700 to-slate-800 rounded-xl p-6 mb-4 flex items-center justify-center">
+          <div class="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6 mb-4 flex items-center justify-center">
             <MiningAnim :state="miningState" />
           </div>
 
