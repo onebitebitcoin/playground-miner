@@ -156,7 +156,7 @@ fi
 echo "=== Nginx: Reverse proxy + static ==="
 # Name the nginx config after the server_name (e.g., playground.onebitebitcoin.com.conf)
 NGINX_BASENAME="${SERVER_NAME:-$PROJECT_NAME}"
-NGINX_CONF="/etc/nginx/sites-available/${NGINX_BASENAME}.conf"
+NGINX_CONF="/etc/nginx/sites-available/${NGINX_BASENAME}"
 sudo bash -c "cat > '$NGINX_CONF'" <<EOF
 server {
     listen 80;
@@ -183,7 +183,7 @@ server {
 }
 EOF
 
-sudo ln -sf "$NGINX_CONF" "/etc/nginx/sites-enabled/${NGINX_BASENAME}.conf"
+sudo ln -sf "$NGINX_CONF" "/etc/nginx/sites-enabled/${NGINX_BASENAME}"
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
