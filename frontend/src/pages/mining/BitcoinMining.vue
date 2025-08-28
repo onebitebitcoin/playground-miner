@@ -1,18 +1,43 @@
 <template>
   <div class="space-y-6">
-    <!-- Simple Network Status Cards -->
-    <div class="grid grid-cols-3 gap-4">
-      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-center">
-        <div class="text-2xl font-bold text-slate-800 mb-1">{{ status.height }}</div>
-        <div class="text-sm text-slate-500">블록 높이</div>
-      </div>
-      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-center">
-        <div class="text-2xl font-bold text-slate-800 mb-1">≤ {{ status.difficulty }}</div>
-        <div class="text-sm text-slate-500">난이도</div>
-      </div>
-      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-center">
-        <div class="text-2xl font-bold text-slate-800 mb-1 tabular-nums">{{ currentReward }}</div>
-        <div class="text-sm text-slate-500">블록 보상</div>
+    <!-- Compact Status Bar -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+        <div class="flex items-center justify-center gap-2">
+          <span class="text-blue-600 text-lg">📋</span>
+          <div>
+            <div class="font-bold text-slate-800">{{ status.height }}</div>
+            <div class="text-xs text-slate-500">블록 높이</div>
+          </div>
+        </div>
+        <div class="flex items-center justify-center gap-2">
+          <span class="text-indigo-600 text-lg">⚙️</span>
+          <div>
+            <div class="font-bold text-slate-800">≤ {{ status.difficulty }}</div>
+            <div class="text-xs text-slate-500">난이도</div>
+          </div>
+        </div>
+        <div class="flex items-center justify-center gap-2">
+          <CoinIcon />
+          <div>
+            <div class="font-bold text-slate-800 tabular-nums">{{ currentReward }}</div>
+            <div class="text-xs text-slate-500">블록 보상</div>
+          </div>
+        </div>
+        <div class="flex items-center justify-center gap-2">
+          <span class="text-yellow-600 text-lg">💰</span>
+          <div>
+            <div class="font-bold text-slate-800 tabular-nums">{{ myReward }}</div>
+            <div class="text-xs text-slate-500">내 보상</div>
+          </div>
+        </div>
+        <div class="flex items-center justify-center gap-2">
+          <span class="text-green-600 text-lg">👥</span>
+          <div>
+            <div class="font-bold text-slate-800">{{ peers.length }}</div>
+            <div class="text-xs text-slate-500">접속자</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -77,54 +102,6 @@
         </div>
 
 
-        <!-- Rewards Section -->
-        <div class="bg-white rounded-2xl shadow-lg border border-yellow-100 p-6 mb-6">
-          <div class="flex items-center gap-3 mb-4">
-            <div class="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-              <CoinIcon />
-            </div>
-            <h3 class="text-lg font-bold text-slate-800">보상 현황</h3>
-          </div>
-          <div class="mb-4 p-4 bg-yellow-50 rounded-xl">
-            <div class="text-sm text-yellow-800 mb-1">내 총 보상</div>
-            <div class="flex items-center gap-2">
-              <CoinIcon />
-              <span class="text-2xl font-bold text-yellow-700 tabular-nums">{{ myReward }}</span>
-            </div>
-          </div>
-          <div class="max-h-48 overflow-y-auto">
-            <div v-for="item in rewardByMiner" :key="item.miner" class="flex items-center justify-between py-2 border-b border-slate-100 last:border-b-0">
-              <div class="flex items-center gap-2">
-                <span :class="{'font-bold text-blue-600': item.miner === miner, 'text-slate-700': item.miner !== miner}">{{ item.miner }}</span>
-              </div>
-              <div class="flex items-center gap-1 font-medium">
-                <CoinIcon />
-                <span class="tabular-nums">{{ item.amount }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Connected Users -->
-        <div class="bg-white rounded-2xl shadow-lg border border-green-100 p-6">
-          <div class="flex items-center gap-3 mb-4">
-            <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-              <span class="text-green-600 text-xl">👥</span>
-            </div>
-            <h3 class="text-lg font-bold text-slate-800">접속 중인 사용자</h3>
-          </div>
-          <div v-if="peers.length === 0" class="text-center py-4 text-slate-500">
-            현재 접속자가 없습니다.
-          </div>
-          <div v-else class="space-y-2 max-h-32 overflow-y-auto">
-            <div v-for="p in peers" :key="p" class="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50">
-              <div class="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
-              <span :class="{'font-bold text-green-600': p === miner, 'text-slate-700': p !== miner}">
-                {{ p }}<span v-if="p === miner" class="text-xs text-green-500 ml-1">(나)</span>
-              </span>
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- Right Column - Block Controls -->
