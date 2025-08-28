@@ -35,7 +35,7 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python manage.py makemigrations
 python manage.py migrate
-python manage.py runserver 0.0.0.0:8000
+python manage.py runserver 0.0.0.0:8002
 ```
 
 엔드포인트
@@ -54,7 +54,7 @@ CORS는 간단한 미들웨어(`playground_server/simplecors.py`)로 허용되�
 cd frontend
 npm install
 # (선택) 백엔드 주소가 다르면 .env 파일에 설정
-# VITE_API_BASE=http://127.0.0.1:8000
+# VITE_API_BASE=http://127.0.0.1:8002
 npm run dev
 ```
 
@@ -69,8 +69,7 @@ npm run dev
 
 ## 참고 사항
 
-- 프론트-백엔드 기본 주소는 `http://127.0.0.1:8000`으로 설정되어 있습니다. 다른 주소를 사용할 경우 `frontend/.env`에 `VITE_API_BASE`를 지정하세요.
+- 프론트-백엔드 기본 주소는 `http://127.0.0.1:8002`으로 설정되어 있습니다. 다른 주소를 사용할 경우 `frontend/.env`에 `VITE_API_BASE`를 지정하세요.
 - 데이터베이스는 SQLite를 사용합니다. 파일은 `backend/db.sqlite3`로 생성됩니다.
 - 보안을 고려하지 않은 데모용 코드입니다. 실제 서비스 전에는 인증/권한, 입력 검증 강화, 내구성 있는 브로드캐스터(예: Redis Pub/Sub) 등을 도입하세요.
 - 요구하신 "TCP 서버"를 브라우저가 직접 사용할 수는 없으므로, 현재는 SSE(HTTP)로 구현했습니다. 만약 원하시면 별도의 순수 TCP 서버(예: 관리 커맨드로 `socketserver` 기반)와 백엔드 내부 브리지(예: 큐/브로드캐스터 공유)를 추가해 드릴 수 있습니다.
-

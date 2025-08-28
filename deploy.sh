@@ -6,7 +6,7 @@ set -euo pipefail
 # Based on ../training/deploy.sh, adapted for this repo layout.
 #
 # Usage:
-#   SERVER_NAME=playground.example.com BACKEND_PORT=8000 sudo -E ./deploy.sh
+#   SERVER_NAME=playground.example.com BACKEND_PORT=8002 sudo -E ./deploy.sh
 #
 # Notes:
 # - Expects Ubuntu with apt. Installs Node LTS, Python, Nginx.
@@ -19,7 +19,7 @@ BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 FRONTEND_DEPLOY_DIR="/var/www/${PROJECT_NAME}"
 SERVICE_NAME="${PROJECT_NAME}-backend"
-BACKEND_PORT="${BACKEND_PORT:-8000}"
+BACKEND_PORT="${BACKEND_PORT:-8002}"
 SERVER_NAME="${SERVER_NAME:-_}"
 
 echo "=== Deploying $PROJECT_NAME ==="
