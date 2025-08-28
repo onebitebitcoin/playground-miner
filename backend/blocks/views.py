@@ -2,7 +2,7 @@ import json
 import time
 import threading
 from django.db import transaction
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from .models import Block
 from .broadcast import broadcaster
@@ -129,7 +129,9 @@ def stream_view(_request):
             # 접속자 목록 갱신 방송
             broadcaster.publish({ 'type': 'peers', 'peers': broadcaster.peers() })
 
-    resp = HttpResponse(event_stream(), content_type='text/event-stream')
+    resp = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
     resp['Cache-Control'] = 'no-cache'
     resp['Connection'] = 'keep-alive'
+    # For Nginx: disable proxy buffering to support SSE
+    resp['X-Accel-Buffering'] = 'no'
     return resp
