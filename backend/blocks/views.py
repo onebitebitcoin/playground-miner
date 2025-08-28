@@ -113,6 +113,8 @@ def stream_view(_request):
 
     def event_stream():
         try:
+            # Advise client to retry every 3s if disconnected
+            yield "retry: 3000\n\n"
             # 초기 스냅샷 전송
             # Use cached snapshot for performance
             blocks_snapshot = cache.get('blocks:snapshot_200')
@@ -136,8 +138,8 @@ def stream_view(_request):
                     yield f"data: {data}\n\n"
                 except Exception:
                     pass
-                # 15초마다 하트비트
-                if time.time() - last_heartbeat > 15:
+                # 10초마다 하트비트
+                if time.time() - last_heartbeat > 10:
                     hb = { 'type': 'status', 'status': current_status() }
                     yield f"data: {json.dumps(hb)}\n\n"
                     last_heartbeat = time.time()

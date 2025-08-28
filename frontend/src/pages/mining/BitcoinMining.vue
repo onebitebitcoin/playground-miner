@@ -27,13 +27,14 @@
         <BlockGrid :blocks="blocks" :limit="60" />
       </div>
 
-      <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
+      <!-- 최신 블록: 데스크톱에서만 이 위치에 표시 -->
+      <div class="hidden md:block bg-white rounded-lg shadow-sm border border-slate-200 p-4">
         <h3 class="font-semibold mb-3">최신 블록</h3>
         <div v-if="broadcastMsg" class="mb-2 text-sm p-2 rounded border border-indigo-200 bg-indigo-50 text-indigo-700">
           {{ broadcastMsg }}
         </div>
 
-        <!-- Mobile: card list -->
+        <!-- Mobile: card list (숨김) -->
         <div class="space-y-2 md:hidden">
           <div
             v-for="b in blocks"
@@ -159,6 +160,44 @@
             <span :class="{'font-semibold text-slate-900': p === miner}">{{ p }}<span v-if="p === miner" class="text-xs text-slate-500"> (나)</span></span>
           </li>
         </ul>
+      </div>
+    </div>
+
+    <!-- 모바일 전용: 페이지 맨 아래에 최신 블록 배치 -->
+    <div class="md:hidden bg-white rounded-lg shadow-sm border border-slate-200 p-4">
+      <h3 class="font-semibold mb-3">최신 블록</h3>
+      <div v-if="broadcastMsg" class="mb-2 text-sm p-2 rounded border border-indigo-200 bg-indigo-50 text-indigo-700">
+        {{ broadcastMsg }}
+      </div>
+      <div class="space-y-2">
+        <div
+          v-for="b in blocks"
+          :key="b.height"
+          class="p-3 rounded border border-slate-200 bg-slate-50"
+        >
+          <div class="flex items-center justify-between text-sm">
+            <div class="font-semibold">#{{ b.height }}</div>
+            <div class="text-slate-500">{{ new Date(b.timestamp).toLocaleString() }}</div>
+          </div>
+          <div class="mt-2 grid grid-cols-2 gap-2 text-sm">
+            <div>
+              <div class="text-slate-500">난이도</div>
+              <div class="tabular-nums">{{ b.difficulty }}</div>
+            </div>
+            <div>
+              <div class="text-slate-500">Nonce</div>
+              <div class="tabular-nums">{{ b.nonce }}</div>
+            </div>
+            <div class="col-span-2 flex items-center gap-2">
+              <div class="text-slate-500">보상</div>
+              <span class="inline-flex items-center gap-1 font-medium"><CoinIcon /> <span class="tabular-nums">{{ b.reward || 0 }}</span></span>
+            </div>
+            <div class="col-span-2">
+              <div class="text-slate-500">채굴자</div>
+              <div class="truncate">{{ b.miner }}</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -317,3 +356,5 @@ onBeforeUnmount(() => {
 
 <style scoped>
 </style>
+
+<!-- -->
