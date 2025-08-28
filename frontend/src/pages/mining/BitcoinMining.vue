@@ -75,26 +75,34 @@
             </div>
           </div>
 
-          <button
-            class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-slate-400 disabled:to-slate-500 text-white rounded-xl px-6 py-4 font-semibold text-lg shadow-lg hover:shadow-xl transition-all duration-200 disabled:cursor-not-allowed"
-            :disabled="miningState === 'mining'"
-            @click="tryMine"
-          >
-            <span v-if="miningState === 'mining'" class="flex items-center justify-center gap-2">
-              <svg class="animate-spin w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" stroke-width="3" stroke-dasharray="31.416" stroke-dashoffset="31.416" class="animate-spin" style="animation: spin 1s linear infinite;" />
-              </svg>
-              채굴 중...
-            </span>
-            <span v-else>채굴 시도하기</span>
-          </button>
+          <!-- Mining Button and Animation Side by Side -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <button
+              class="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-slate-400 disabled:to-slate-500 text-white rounded-xl px-6 py-4 font-semibold text-lg shadow-lg hover:shadow-xl transition-all duration-200 disabled:cursor-not-allowed"
+              :disabled="miningState === 'mining'"
+              @click="tryMine"
+            >
+              <span v-if="miningState === 'mining'" class="flex items-center justify-center gap-2">
+                <svg class="animate-spin w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" stroke-width="3" stroke-dasharray="31.416" stroke-dashoffset="31.416" class="animate-spin" style="animation: spin 1s linear infinite;" />
+                </svg>
+                채굴 중...
+              </span>
+              <span v-else>채굴 시도하기</span>
+            </button>
+            
+            <!-- Mining Animation Card -->
+            <div class="bg-gradient-to-br from-slate-700 to-slate-800 rounded-xl p-4 flex items-center justify-center">
+              <MiningAnim :state="miningState" />
+            </div>
+          </div>
 
-          <div v-if="lastAttempt" class="mt-4 text-center">
+          <div v-if="lastAttempt" class="text-center mb-4">
             <span class="text-sm text-slate-600">마지막 시도값:</span>
             <span class="font-mono text-lg font-bold text-slate-800 ml-2">{{ lastAttempt }}</span>
           </div>
 
-          <div v-if="message" class="mt-4 p-4 rounded-xl" :class="messageType === 'ok' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-yellow-50 text-yellow-700 border border-yellow-200'">
+          <div v-if="message" class="p-4 rounded-xl" :class="messageType === 'ok' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-yellow-50 text-yellow-700 border border-yellow-200'">
             {{ message }}
           </div>
         </div>
