@@ -77,6 +77,26 @@ if [ -f "$BACKEND_DIR/requirements.txt" ]; then
   echo "Running migrations..."
   python manage.py migrate --noinput
 
+  echo "Collecting static files (best-effort)..."
+  # collectstatic may be skipped if STATIC_ROOT isn't configured; ignore failures
+  python manage.py collectstatic --noinput || true
+
+  echo "Copying staticfiles and media to deploy directory (if present)..."
+  sudo mkdir -p "$FRONTEND_DEPLOY_DIR/staticfiles"
+  if [ -d "$BACKEND_DIR/staticfiles" ]; then
+    sudo cp -r "$BACKEND_DIR/staticfiles/"* "$FRONTEND_DEPLOY_DIR/staticfiles/" 2>/dev/null || true
+  fi
+  if [ -d "$ROOT_DIR/staticfiles" ]; then
+    sudo cp -r "$ROOT_DIR/staticfiles/"* "$FRONTEND_DEPLOY_DIR/staticfiles/" 2>/dev/null || true
+  fi
+  sudo mkdir -p "$FRONTEND_DEPLOY_DIR/media"
+  if [ -d "$ROOT_DIR/media" ]; then
+    sudo cp -r "$ROOT_DIR/media/"* "$FRONTEND_DEPLOY_DIR/media/" 2>/dev/null || true
+  fi
+  # Ensure permissions are consistent after copying
+  sudo chown -R www-data:www-data "$FRONTEND_DEPLOY_DIR"/
+  sudo chmod -R 755 "$FRONTEND_DEPLOY_DIR"/
+
   # Optional: create a superuser automatically (disabled by default)
   # python manage.py shell -c "\
   # from django.contrib.auth import get_user_model; U=get_user_model(); \
