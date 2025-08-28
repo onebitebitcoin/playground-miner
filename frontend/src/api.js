@@ -1,4 +1,5 @@
-const BASE_URL = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8002'
+// Use same-origin by default in production, override with VITE_API_BASE for local dev
+const BASE_URL = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
 
 export async function fetchStatus() {
   const res = await fetch(`${BASE_URL}/api/status`, { headers: { 'Accept': 'application/json' } })
