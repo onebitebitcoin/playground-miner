@@ -13,7 +13,7 @@ set -euo pipefail
 # - Backend (Django) runs via systemd + gunicorn on 127.0.0.1:$BACKEND_PORT.
 # - Frontend (Vite) is built and served by Nginx from /var/www/$PROJECT_NAME.
 
-PROJECT_NAME="playground-miner"
+PROJECT_NAME="playground"
 ROOT_DIR=$(pwd)
 BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
@@ -206,4 +206,3 @@ echo "Nginx: site -> $NGINX_CONF (server_name: $SERVER_NAME)"
 echo "Logs: journalctl -u $SERVICE_NAME -f, /var/log/${PROJECT_NAME}-gunicorn.log"
 echo ""
 echo "Tips: set SERVER_NAME env var and add DNS A record; configure TLS via certbot if desired."
-
