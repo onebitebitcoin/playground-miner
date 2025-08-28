@@ -183,7 +183,8 @@ def init_reset_view(request):
         return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
     # Simple protection using env token
     import os
-    expected = os.environ.get('INIT_TOKEN') or os.environ.get('ADMIN_TOKEN')
+    # Default password is '0000' unless overridden by INIT_TOKEN/ADMIN_TOKEN
+    expected = os.environ.get('INIT_TOKEN') or os.environ.get('ADMIN_TOKEN') or '0000'
     try:
         payload = json.loads(request.body.decode('utf-8'))
     except Exception:

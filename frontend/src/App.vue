@@ -81,10 +81,8 @@ if (!localStorage.getItem('nickname')) {
 }
 
 async function onInitReset() {
-  const token = window.prompt('초기화 토큰을 입력하세요 (서버 INIT_TOKEN)')
-  if (!token) return
   try {
-    const res = await apiInitReset(token)
+    const res = await apiInitReset('0000')
     if (res && res.ok) {
       alert('초기화 완료')
       // Optional: reload page state

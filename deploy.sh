@@ -140,6 +140,7 @@ WorkingDirectory=$BACKEND_DIR
 Environment="PATH=$BACKEND_DIR/venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONPATH=$BACKEND_DIR"
 Environment="DJANGO_SETTINGS_MODULE=playground_server.settings"
+Environment="INIT_TOKEN=0000"
 ExecStart=$BACKEND_DIR/venv/bin/gunicorn \
   --workers ${GUNICORN_WORKERS:-2} \
   --worker-class uvicorn.workers.UvicornWorker \
