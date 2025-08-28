@@ -3,11 +3,23 @@ const BASE_URL = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
 
 export async function fetchStatus() {
   const res = await fetch(`${BASE_URL}/api/status`, { headers: { 'Accept': 'application/json' } })
+  if (!res.ok) throw new Error(`status ${res.status}`)
+  const ct = (res.headers.get('content-type') || '').toLowerCase()
+  if (!ct.includes('application/json')) {
+    const body = await res.text()
+    throw new Error(`non-json response: ${res.status} ${ct} ${body.slice(0,120)}`)
+  }
   return res.json()
 }
 
 export async function fetchBlocks() {
   const res = await fetch(`${BASE_URL}/api/blocks`, { headers: { 'Accept': 'application/json' } })
+  if (!res.ok) throw new Error(`blocks ${res.status}`)
+  const ct = (res.headers.get('content-type') || '').toLowerCase()
+  if (!ct.includes('application/json')) {
+    const body = await res.text()
+    throw new Error(`non-json response: ${res.status} ${ct} ${body.slice(0,120)}`)
+  }
   return res.json()
 }
 
@@ -21,6 +33,9 @@ export async function postMine({ miner, nonce }) {
       },
       body: JSON.stringify({ miner, nonce })
     })
+    if (!res.ok) return { ok: false, error: `서버 오류(${res.status})` }
+    const ct = (res.headers.get('content-type') || '').toLowerCase()
+    if (!ct.includes('application/json')) return { ok: false, error: '서버 응답 형식 오류' }
     return await res.json()
   } catch (e) {
     return { ok: false, error: '요청 실패(네트워크)' }
