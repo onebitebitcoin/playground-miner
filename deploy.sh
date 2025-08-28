@@ -140,7 +140,14 @@ WorkingDirectory=$BACKEND_DIR
 Environment="PATH=$BACKEND_DIR/venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONPATH=$BACKEND_DIR"
 Environment="DJANGO_SETTINGS_MODULE=playground_server.settings"
-ExecStart=$BACKEND_DIR/venv/bin/gunicorn --workers 3 --bind 127.0.0.1:$BACKEND_PORT playground_server.wsgi:application
+ExecStart=$BACKEND_DIR/venv/bin/gunicorn \
+  --workers ${GUNICORN_WORKERS:-3} \
+  --worker-class gthread \
+  --threads ${GUNICORN_THREADS:-8} \
+  --timeout ${GUNICORN_TIMEOUT:-60} \
+  --keep-alive ${GUNICORN_KEEPALIVE:-5} \
+  --bind 127.0.0.1:$BACKEND_PORT \
+  playground_server.wsgi:application
 ExecReload=/bin/kill -s HUP \$MAINPID
 KillMode=mixed
 TimeoutStopSec=5
