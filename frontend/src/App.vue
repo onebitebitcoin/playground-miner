@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50" :class="{ compact: density === 'compact' }">
+  <div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
     <!-- Modern top header with brand and nav -->
     <header class="sticky top-0 z-20 bg-white/90 backdrop-blur-sm shadow-sm border-b border-blue-100">
       <div class="container max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -8,8 +8,8 @@
             <span class="text-lg">⛏️</span>
           </div>
           <div>
-            <h1 class="text-xl md:text-2xl font-bold text-slate-800">Playground Miner</h1>
-            <p class="text-xs text-slate-500 hidden md:block">비트코인 채굴 시뮬레이션</p>
+            <h1 class="text-xl md:text-2xl font-bold text-slate-800">비트코인 채굴 놀이터</h1>
+            <p class="text-xs text-slate-500 hidden md:block">재미있게 배우는 채굴 시뮬레이션</p>
           </div>
         </div>
         <nav class="hidden md:flex items-center gap-3">
@@ -20,11 +20,6 @@
             :class="state.active === item.key ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-600 hover:bg-blue-50 hover:text-blue-600'"
             @click="onSelect(item.key)"
           >{{ item.label }}</button>
-          <div class="h-6 w-px bg-slate-200 mx-2" />
-          <button
-            class="px-4 py-2 text-sm font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all duration-200"
-            @click="toggleDensity"
-          >{{ density === 'compact' ? 'Compact' : 'Comfort' }}</button>
           <button
             class="ml-1 px-4 py-2 text-sm font-medium rounded-lg border-2 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 transition-all duration-200"
             @click="showResetDialog"
@@ -50,10 +45,6 @@
             :class="state.active === item.key ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-600 hover:bg-blue-50 border border-slate-200'"
             @click="onSelect(item.key); mobileMenuOpen = false"
           >{{ item.label }}</button>
-          <button
-            class="px-4 py-2 text-sm font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
-            @click="toggleDensity"
-          >{{ density === 'compact' ? 'Compact' : 'Comfort' }}</button>
           <button
             class="px-4 py-2 text-sm font-medium rounded-lg border-2 border-red-200 text-red-600 hover:bg-red-50"
             @click="showResetDialog"
@@ -104,7 +95,7 @@ const state = inject('appState')
 
 const menuItems = [
   { key: 'mining', label: '비트코인 채굴' },
-  { key: 'coming', label: '다른 게임 (준비중)' },
+  // { key: 'coming', label: '다른 게임 (준비중)' }, // Hidden for now
 ]
 
 const componentsMap = {
@@ -159,12 +150,6 @@ async function confirmReset() {
   }
 }
 
-// Density state
-const density = vueRef(localStorage.getItem('density') || 'compact')
-function toggleDensity() {
-  density.value = density.value === 'compact' ? 'comfort' : 'compact'
-  localStorage.setItem('density', density.value)
-}
 </script>
 
 <style scoped>

@@ -10,7 +10,7 @@ from .broadcast import broadcaster
 
 
 MAX_NONCE = 100000
-DIFFICULTY_BASE = 10000
+DIFFICULTY_BASE = 5000
 
 _guest_counter = 0
 _guest_lock = threading.Lock()

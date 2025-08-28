@@ -1,7 +1,8 @@
 <template>
   <div class="space-y-6">
-    <!-- Network Status Cards - Mobile First -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <!-- Network Status Cards with Mining Animation - Featured Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+      <!-- Status Cards -->
       <div class="bg-white rounded-2xl shadow-lg border border-blue-100 p-6 hover:shadow-xl transition-all duration-300">
         <div class="flex items-center justify-between mb-2">
           <div class="text-slate-500 text-sm font-medium">블록 높이</div>
@@ -28,6 +29,19 @@
           </div>
         </div>
         <div class="text-3xl font-bold text-slate-800 tabular-nums">{{ currentReward }}</div>
+      </div>
+      
+      <!-- Featured Mining Animation -->
+      <div class="bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl shadow-lg p-6 text-white hover:shadow-xl transition-all duration-300">
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-blue-100 text-sm font-medium">채굴 상태</div>
+          <div class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+            <span class="text-white text-xl">⛏️</span>
+          </div>
+        </div>
+        <div class="h-16 flex items-center justify-center">
+          <MiningAnim :state="miningState" />
+        </div>
       </div>
     </div>
 
@@ -85,10 +99,6 @@
           </div>
         </div>
 
-        <!-- Mining Animation -->
-        <div class="bg-white rounded-2xl shadow-lg border border-blue-100 p-6 mb-6">
-          <MiningAnim :state="miningState" />
-        </div>
 
         <!-- Rewards Section -->
         <div class="bg-white rounded-2xl shadow-lg border border-yellow-100 p-6 mb-6">
