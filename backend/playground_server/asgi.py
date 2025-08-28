@@ -6,9 +6,6 @@ from pathlib import Path
 from django.core.asgi import get_asgi_application
 from django.db.models import Max
 
-from blocks.models import Block
-from blocks.broadcast import broadcaster
-
 
 django_asgi_app = get_asgi_application()
 
@@ -17,6 +14,8 @@ _ws_guest_lock = threading.Lock()
 
 
 def current_status():
+    # Import lazily after Django setup to avoid AppRegistryNotReady
+    from blocks.models import Block
     height = Block.objects.aggregate(m=Max('height'))['m'] or 0
     # Keep logic in sync with views
     DIFFICULTY_BASE = 10000
@@ -46,6 +45,8 @@ async def ws_stream_app(scope, receive, send):
         nickname = f"guest {_ws_guest_counter}"
 
     # Subscribe to broadcaster
+    # Import broadcaster lazily
+    from blocks.broadcast import broadcaster
     q = broadcaster.add_listener({ 'nickname': nickname })
     # Notify peers
     broadcaster.publish({ 'type': 'peers', 'peers': broadcaster.peers() })
@@ -55,6 +56,7 @@ async def ws_stream_app(scope, receive, send):
 
     try:
         # Initial snapshot
+        from blocks.models import Block
         blocks_snapshot = list(Block.objects.order_by('-height').values('height','nonce','miner','difficulty','reward','timestamp')[:200])
         await send_json({
             'type': 'snapshot',
@@ -97,4 +99,3 @@ async def application(scope, receive, send):
         return await ws_stream_app(scope, receive, send)
     # Fallback to Django for HTTP
     return await django_asgi_app(scope, receive, send)
-

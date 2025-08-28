@@ -169,6 +169,13 @@ sudo systemctl restart "$SERVICE_NAME" || true
 sleep 3
 if sudo systemctl is-active --quiet "$SERVICE_NAME"; then
   echo "✅ Backend service is active"
+  # Quick health check
+  if curl -fsS "http://127.0.0.1:$BACKEND_PORT/api/status" >/dev/null 2>&1; then
+    echo "✅ Backend health check passed"
+  else
+    echo "⚠️ Backend health check failed; recent logs:"
+    sudo journalctl -u "$SERVICE_NAME" -n 50 --no-pager || true
+  fi
 else
   echo "⚠️ Backend service failed to start; attempting manual gunicorn start"
   cd "$BACKEND_DIR"
