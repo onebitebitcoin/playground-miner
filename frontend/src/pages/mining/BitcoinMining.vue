@@ -1,7 +1,7 @@
 <template>
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <div class="lg:col-span-2 space-y-4">
-      <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
+      <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-5 card transition-base">
         <h3 class="font-semibold mb-2">네트워크 상태</h3>
         <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
           <div class="p-3 bg-slate-50 rounded">
@@ -23,51 +23,52 @@
       </div>
 
       <!-- 블록 스택(최신이 왼쪽) -->
-      <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
+      <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-5 card transition-base">
         <BlockGrid :blocks="blocks" :limit="60" />
       </div>
 
       <!-- 최신 블록: 데스크톱에서만 이 위치에 표시 -->
-      <div class="hidden md:block bg-white rounded-lg shadow-sm border border-slate-200 p-4">
+      <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-5 card transition-base">
         <h3 class="font-semibold mb-3">최신 블록</h3>
         <div v-if="broadcastMsg" class="mb-2 text-sm p-2 rounded border border-indigo-200 bg-indigo-50 text-indigo-700">
           {{ broadcastMsg }}
         </div>
 
-        <!-- Mobile: card list (숨김) -->
-        <div class="space-y-2 md:hidden">
+        <!-- Simple modern card list for all viewports -->
+        <TransitionGroup name="list" tag="div" class="space-y-2">
           <div
             v-for="b in blocks"
             :key="b.height"
-            class="p-3 rounded border border-slate-200 bg-slate-50"
+            class="p-3 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 transition-base"
+            :class="{ 'block-highlight': highlighted.has(b.height) }"
           >
             <div class="flex items-center justify-between text-sm">
               <div class="font-semibold">#{{ b.height }}</div>
-              <div class="text-slate-500">{{ new Date(b.timestamp).toLocaleString() }}</div>
+              <div class="text-slate-500 dark:text-slate-300">{{ new Date(b.timestamp).toLocaleString() }}</div>
             </div>
             <div class="mt-2 grid grid-cols-2 gap-2 text-sm">
               <div>
-                <div class="text-slate-500">난이도</div>
+                <div class="text-slate-500 dark:text-slate-300">난이도</div>
                 <div class="tabular-nums">{{ b.difficulty }}</div>
               </div>
               <div>
-                <div class="text-slate-500">Nonce</div>
+                <div class="text-slate-500 dark:text-slate-300">Nonce</div>
                 <div class="tabular-nums">{{ b.nonce }}</div>
               </div>
               <div class="col-span-2 flex items-center gap-2">
-                <div class="text-slate-500">보상</div>
+                <div class="text-slate-500 dark:text-slate-300">보상</div>
                 <span class="inline-flex items-center gap-1 font-medium"><CoinIcon /> <span class="tabular-nums">{{ b.reward || 0 }}</span></span>
               </div>
               <div class="col-span-2">
-                <div class="text-slate-500">채굴자</div>
+                <div class="text-slate-500 dark:text-slate-300">채굴자</div>
                 <div class="truncate">{{ b.miner }}</div>
               </div>
             </div>
           </div>
-        </div>
+        </TransitionGroup>
 
-        <!-- Desktop: table -->
-        <div class="hidden md:block overflow-auto max-h-96">
+        <!-- Table view hidden to keep UI simple -->
+        <div class="hidden">
           <table class="min-w-full text-sm">
             <thead class="text-left text-slate-500">
               <tr>
@@ -97,7 +98,7 @@
     </div>
 
     <div class="space-y-4">
-      <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-4 space-y-3">
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 space-y-3">
         <h3 class="font-semibold">채굴 시도</h3>
         <label class="block text-sm">
           닉네임
@@ -126,11 +127,11 @@
         </div>
       </div>
 
-      <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
+      <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-5 card transition-base">
         <MiningAnim :state="miningState" />
       </div>
 
-      <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
+      <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-5 card transition-base">
         <h3 class="font-semibold mb-2">보상 현황</h3>
         <div class="mb-2 text-sm text-slate-700">
           내 보상:
@@ -151,7 +152,7 @@
         </ul>
       </div>
 
-      <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
         <h3 class="font-semibold mb-2">접속 중인 게스트</h3>
         <div v-if="peers.length === 0" class="text-sm text-slate-500">현재 접속자가 없습니다.</div>
         <ul v-else class="text-sm space-y-1 max-h-64 overflow-auto">
@@ -164,7 +165,7 @@
     </div>
 
     <!-- 모바일 전용: 페이지 맨 아래에 최신 블록 배치 -->
-    <div class="md:hidden bg-white rounded-lg shadow-sm border border-slate-200 p-4">
+    <div v-if="false" class="md:hidden bg-white rounded-xl shadow-sm border border-slate-200 p-5">
       <h3 class="font-semibold mb-3">최신 블록</h3>
       <div v-if="broadcastMsg" class="mb-2 text-sm p-2 rounded border border-indigo-200 bg-indigo-50 text-indigo-700">
         {{ broadcastMsg }}
@@ -224,6 +225,7 @@ const broadcastMsg = ref('')
 const peers = ref([])
 let pollTimer = null
 const savedNick = localStorage.getItem('nickname') || ''
+const highlighted = new Set()
 
 function startPolling() {
   if (pollTimer) return
@@ -282,6 +284,10 @@ function setBlocksSortedUnique(list) {
 
 function addOrUpdateBlock(block) {
   setBlocksSortedUnique([block, ...blocks.value])
+  try {
+    highlighted.add(block.height)
+    setTimeout(() => highlighted.delete(block.height), 1200)
+  } catch (_) {}
 }
 
 async function tryMine() {

@@ -5,3 +5,18 @@
 /* 약간의 페이지 기본 스타일 */
 html, body, #app { height: 100%; }
 
+/* Simple utility for smoother UI */
+.transition-base { @apply transition-colors transition-opacity duration-200; }
+
+/* Card density helpers (compact on desktop only) */
+@media (min-width: 768px) {
+  .compact .card { padding: 0.75rem !important; }
+}
+
+/* TransitionGroup animations for lists */
+.list-enter-active, .list-leave-active { transition: all 220ms ease; }
+.list-enter-from, .list-leave-to { opacity: 0; transform: translateY(6px); }
+
+/* Flash highlight for new blocks */
+@keyframes flashHighlight { from { background-color: rgb(240 253 244); } to { background-color: transparent; } }
+.block-highlight { animation: flashHighlight 1.2s ease-out; }
