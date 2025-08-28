@@ -141,13 +141,12 @@ Environment="PATH=$BACKEND_DIR/venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONPATH=$BACKEND_DIR"
 Environment="DJANGO_SETTINGS_MODULE=playground_server.settings"
 ExecStart=$BACKEND_DIR/venv/bin/gunicorn \
-  --workers ${GUNICORN_WORKERS:-3} \
-  --worker-class gthread \
-  --threads ${GUNICORN_THREADS:-8} \
+  --workers ${GUNICORN_WORKERS:-2} \
+  --worker-class uvicorn.workers.UvicornWorker \
   --timeout ${GUNICORN_TIMEOUT:-60} \
   --keep-alive ${GUNICORN_KEEPALIVE:-5} \
   --bind 127.0.0.1:$BACKEND_PORT \
-  playground_server.wsgi:application
+  playground_server.asgi:application
 ExecReload=/bin/kill -s HUP \$MAINPID
 KillMode=mixed
 TimeoutStopSec=5
@@ -257,6 +256,20 @@ server {
         proxy_cache_bypass \$http_upgrade;
         proxy_buffering off;
         proxy_read_timeout 3600s;
+    }
+
+    # WebSocket proxy for real-time events
+    location /ws/ {
+        proxy_pass http://127.0.0.1:$BACKEND_PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 1d;
+        proxy_send_timeout 1d;
     }
 
     # Static & media (if present)

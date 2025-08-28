@@ -38,3 +38,19 @@ export function connectBlockStream(onMessage) {
   }
   return es
 }
+
+export function connectEvents(onMessage) {
+  // Try WebSocket first
+  try {
+    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    const wsUrl = `${proto}://${window.location.host}/ws/stream`
+    const ws = new WebSocket(wsUrl)
+    ws.onmessage = (e) => {
+      try { onMessage(JSON.parse(e.data)) } catch (_) {}
+    }
+    return { kind: 'ws', socket: ws }
+  } catch (_) {}
+  // Fallback to SSE
+  const es = connectBlockStream(onMessage)
+  return { kind: 'sse', socket: es }
+}

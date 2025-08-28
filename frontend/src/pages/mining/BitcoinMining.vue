@@ -205,7 +205,7 @@
 
 <script setup>
 import { onMounted, onBeforeUnmount, reactive, ref, computed } from 'vue'
-import { fetchStatus, fetchBlocks, postMine, connectBlockStream } from '../../api'
+import { fetchStatus, fetchBlocks, postMine, connectEvents, connectBlockStream } from '../../api'
 import MiningAnim from '../../components/MiningAnim.vue'
 import BlockGrid from '../../components/BlockGrid.vue'
 import CoinIcon from '../../components/CoinIcon.vue'
@@ -219,6 +219,7 @@ const miningState = ref('idle') // 'idle' | 'mining' | 'success' | 'fail'
 let stopMining = false
 const miner = ref('guest')
 let es = null
+let wsWrapper = null
 const broadcastMsg = ref('')
 const peers = ref([])
 let pollTimer = null
@@ -343,7 +344,21 @@ onMounted(async () => {
   const b = await fetchBlocks()
   applyBlocks(b.blocks)
 
-  es = connectBlockStream((payload) => {
+  // Prefer WebSocket if available, else SSE
+  try {
+    wsWrapper = connectEvents((payload) => handleMessage(payload))
+    if (wsWrapper.kind === 'ws') {
+      // Stop polling when WS is open (handled in onopen)
+      try { wsWrapper.socket.onopen = () => stopPolling() } catch (_) {}
+    } else if (wsWrapper.kind === 'sse') {
+      es = wsWrapper.socket
+    }
+  } catch (_) {
+    // Fallback to SSE if WS creation failed synchronously
+    es = connectBlockStream((payload) => handleMessage(payload))
+  }
+
+  function handleMessage(payload) {
     if (payload.type === 'snapshot') {
       applyBlocks(payload.blocks)
       applyStatus(payload.status)
@@ -375,7 +390,20 @@ onMounted(async () => {
     } else if (payload.type === 'peers') {
       if (Array.isArray(payload.peers)) peers.value = payload.peers
     }
-  })
+  }
+
+  // SSE 오류 시 폴링으로 폴백, 연결되면 중지
+  if (es) {
+    try {
+      es.onerror = () => startPolling()
+      es.onopen = () => stopPolling()
+    } catch (_) {}
+  } else if (wsWrapper && wsWrapper.kind === 'ws') {
+    try {
+      wsWrapper.socket.onerror = () => startPolling()
+      wsWrapper.socket.onclose = () => startPolling()
+    } catch (_) {}
+  }
 
   // SSE 오류 시 폴링으로 폴백, 연결되면 중지
   try {
@@ -387,6 +415,9 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   stopMining = true
   if (es) es.close()
+  if (wsWrapper && wsWrapper.kind === 'ws') {
+    try { wsWrapper.socket.close() } catch (_) {}
+  }
   stopPolling()
 })
 </script>
