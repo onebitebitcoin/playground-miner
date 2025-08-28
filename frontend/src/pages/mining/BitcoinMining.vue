@@ -303,7 +303,8 @@ async function tryMine() {
 }
 
 function applyStatus(s) {
-  status.height = s.height
+  // 보장: 블록 높이는 단조 증가(이전 값보다 낮아지지 않음)
+  status.height = Math.max(status.height, s.height)
   status.difficulty = s.difficulty
   if ('reward' in s) status.reward = s.reward
 }
@@ -334,6 +335,10 @@ onMounted(async () => {
       // 새 블록 추가
       addOrUpdateBlock(payload.block)
       applyStatus(payload.status)
+      // 추가 안전장치: 이벤트의 블록 높이로 현재 높이 상향
+      if (payload.block && typeof payload.block.height === 'number') {
+        status.height = Math.max(status.height, payload.block.height)
+      }
       // 브로드캐스트 공지 표시
       const who = payload.block?.miner || '알 수 없음'
       const h = payload.block?.height
