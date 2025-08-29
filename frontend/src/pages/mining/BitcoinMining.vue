@@ -528,6 +528,7 @@ onMounted(async () => {
         
         peers.value = payload.peers
         previousPeerCount.value = newPeerCount
+      }
     }
   }
 
@@ -543,12 +544,6 @@ onMounted(async () => {
       wsWrapper.socket.onclose = () => startPolling()
     } catch (_) {}
   }
-
-  // SSE 오류 시 폴링으로 폴백, 연결되면 중지
-  try {
-    es.onerror = () => startPolling()
-    es.onopen = () => stopPolling()
-  } catch (_) {}
 })
 
 onBeforeUnmount(() => {
