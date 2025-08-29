@@ -37,7 +37,7 @@
         >
           <span class="text-green-600 text-lg">👥</span>
           <div>
-            <div class="font-bold text-slate-800">{{ peers.length }}</div>
+            <div class="font-bold text-slate-800">{{ totalPeerCount }}</div>
             <div class="text-xs text-slate-500">접속자</div>
           </div>
         </button>
@@ -249,6 +249,34 @@
         </div>
       </div>
     </div>
+    <!-- Notification Overlay -->
+    <div class="fixed top-4 right-4 z-50 space-y-2">
+      <TransitionGroup name="notification" tag="div">
+        <div
+          v-for="notification in notifications"
+          :key="notification.id"
+          class="bg-white border border-green-200 rounded-lg shadow-lg p-4 max-w-sm"
+        >
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <span class="text-green-600 text-lg">👋</span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-medium text-slate-800">새 사용자 입장</div>
+              <div class="text-sm text-slate-500 truncate">{{ notification.user }}님이 입장했습니다</div>
+            </div>
+            <button
+              @click="removeNotification(notification.id)"
+              class="text-slate-400 hover:text-slate-600 p-1"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </TransitionGroup>
+    </div>
   </div>
 </template>
 
@@ -276,6 +304,9 @@ const savedNick = localStorage.getItem('nickname') || ''
 const highlighted = new Set()
 const showBlocksModal = ref(false)
 const showPeersModal = ref(false)
+const previousPeerCount = ref(0)
+const notifications = ref([])
+const notificationId = ref(0)
 
 function startPolling() {
   if (pollTimer) return
@@ -319,8 +350,39 @@ const myReward = computed(() => {
 // 현재 블록 보상: 서버 상태 값 사용
 const currentReward = computed(() => status.reward ?? 0)
 
+// 자신을 포함한 전체 접속자 수
+const totalPeerCount = computed(() => {
+  const peerCount = peers.value.length
+  // 자신이 peers 목록에 없다면 +1 추가
+  const includesSelf = peers.value.includes(miner.value)
+  return includesSelf ? peerCount : peerCount + 1
+})
+
 function difficultyOk(val) {
   return val <= status.difficulty
+}
+
+function showUserJoinNotification(username) {
+  const id = ++notificationId.value
+  const notification = {
+    id,
+    user: username || '알 수 없는 사용자',
+    timestamp: Date.now()
+  }
+  
+  notifications.value.push(notification)
+  
+  // 5초 후 자동 제거
+  setTimeout(() => {
+    removeNotification(id)
+  }, 5000)
+}
+
+function removeNotification(id) {
+  const index = notifications.value.findIndex(n => n.id === id)
+  if (index > -1) {
+    notifications.value.splice(index, 1)
+  }
 }
 
 function setBlocksSortedUnique(list) {
@@ -402,9 +464,12 @@ onMounted(async () => {
   const b = await fetchBlocks()
   applyBlocks(b.blocks)
 
+  // Always connect without nickname to ensure guest connection
+  console.log('Connecting to SSE stream...') // Debug log
+  
   // Prefer WebSocket if available, else SSE
   try {
-    wsWrapper = connectEvents((payload) => handleMessage(payload), savedNick || miner.value)
+    wsWrapper = connectEvents((payload) => handleMessage(payload), null) // Don't pass nickname
     if (wsWrapper.kind === 'ws') {
       // Stop polling when WS is open (handled in onopen)
       try { wsWrapper.socket.onopen = () => stopPolling() } catch (_) {}
@@ -413,10 +478,11 @@ onMounted(async () => {
     }
   } catch (_) {
     // Fallback to SSE if WS creation failed synchronously
-    es = connectBlockStream((payload) => handleMessage(payload), savedNick || miner.value)
+    es = connectBlockStream((payload) => handleMessage(payload), null) // Don't pass nickname
   }
 
   function handleMessage(payload) {
+    console.log('SSE Message received:', payload) // Debug log
     if (payload.type === 'snapshot') {
       applyBlocks(payload.blocks)
       applyStatus(payload.status)
@@ -425,6 +491,7 @@ onMounted(async () => {
         miner.value = payload.me.nickname
       }
       if (Array.isArray(payload.peers)) {
+        console.log('Setting peers from snapshot:', payload.peers) // Debug log
         peers.value = payload.peers
       }
       // 실시간 연결 정상화 시 폴링 중지
@@ -446,7 +513,21 @@ onMounted(async () => {
     } else if (payload.type === 'status') {
       applyStatus(payload.status)
     } else if (payload.type === 'peers') {
-      if (Array.isArray(payload.peers)) peers.value = payload.peers
+      console.log('Updating peers:', payload.peers) // Debug log
+      if (Array.isArray(payload.peers)) {
+        const newPeerCount = payload.peers.length
+        const oldPeerCount = previousPeerCount.value
+        
+        // 새 사용자 연결 알림
+        if (newPeerCount > oldPeerCount && oldPeerCount > 0) {
+          const newUsers = payload.peers.filter(p => !peers.value.includes(p))
+          if (newUsers.length > 0) {
+            showUserJoinNotification(newUsers[0]) // 첫 번째 새 사용자만 알림
+          }
+        }
+        
+        peers.value = payload.peers
+        previousPeerCount.value = newPeerCount
     }
   }
 
