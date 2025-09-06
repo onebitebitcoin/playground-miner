@@ -6,8 +6,11 @@
 
 # Environment files
 .env
-.env.*
-*.env
+.env.local
+.env.*.local
+# Keep development and production env files in repo
+# .env.development
+# .env.production
 
 # Python
 __pycache__/
@@ -33,6 +36,9 @@ staticfiles/
 media/
 db.sqlite3
 db.sqlite3-journal
+# SQLite sidecar files
+db.sqlite3-shm
+db.sqlite3-wal
 
 # Tests / Coverage / Type checking
 .coverage
@@ -55,4 +61,3 @@ pnpm-debug.log*
 # Logs
 logs/
 *.log
-

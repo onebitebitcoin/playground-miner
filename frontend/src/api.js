@@ -72,6 +72,15 @@ export function connectEvents(onMessage, nickname) {
   return { kind: 'sse', socket: es }
 }
 
+export async function apiCheckNickname(nickname) {
+  const res = await fetch(`${BASE_URL}/api/check_nick?nickname=${encodeURIComponent(nickname)}`, {
+    method: 'GET',
+    headers: { 'Accept': 'application/json' }
+  })
+  if (!res.ok) throw new Error(`check ${res.status}`)
+  return res.json()
+}
+
 export async function apiRegisterNickname(nickname) {
   const res = await fetch(`${BASE_URL}/api/register_nick`, {
     method: 'POST',
