@@ -6,7 +6,7 @@
     </div>
 
     <!-- Transaction Simulator -->
-    <div class="bg-white rounded-lg border border-slate-200 p-6">
+    <div class="bg-white rounded-lg border border-slate-200 p-4 sm:p-6">
       <div class="flex items-center gap-3 mb-4">
         <div class="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
           <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -16,7 +16,7 @@
         <h2 class="text-lg font-semibold text-slate-800">거래 시뮬레이션</h2>
       </div>
 
-      <div class="grid md:grid-cols-2 gap-6">
+      <div class="grid lg:grid-cols-2 gap-4 lg:gap-6">
         <div class="space-y-4">
 
           <div>
@@ -24,7 +24,7 @@
             <select 
               v-model="recipientCount" 
               @change="updateRecipientInputs"
-              class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500 outline-none"
+              class="w-full modern-select"
             >
               <option :value="1">1개 (단일 주소)</option>
               <option :value="2">2개</option>
@@ -33,14 +33,14 @@
           </div>
 
           <!-- Recipient inputs -->
-          <div v-for="(recipient, index) in recipients" :key="index" class="space-y-3 p-4 bg-blue-50 rounded-lg border border-blue-100">
-            <h4 class="text-sm font-medium text-blue-800">받는 사람 {{ index + 1 }}</h4>
+          <div v-for="(recipient, index) in recipients" :key="index" class="space-y-3 p-3 sm:p-4 bg-blue-50 rounded-lg border border-blue-100">
+            <h4 class="text-xs sm:text-sm font-medium text-blue-800">받는 사람 {{ index + 1 }}</h4>
             
             <div>
-              <label class="block text-xs text-blue-600 mb-1">지갑 선택</label>
+              <label class="block text-[10px] sm:text-xs text-blue-600 mb-1">지갑 선택</label>
               <select 
                 v-model="recipient.walletAddress" 
-                class="w-full px-3 py-2 text-sm border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                class="w-full modern-select text-sm"
               >
                 <option 
                   v-for="(wallet, address) in wallets" 
@@ -53,14 +53,14 @@
             </div>
             
             <div v-if="recipient.walletAddress">
-              <label class="block text-xs text-blue-600 mb-1">선택된 주소</label>
-              <div class="text-xs text-blue-700 bg-white px-2 py-1 rounded border font-mono">
+              <label class="block text-[10px] sm:text-xs text-blue-600 mb-1">선택된 주소</label>
+              <div class="text-[10px] sm:text-xs text-blue-700 bg-white px-2 py-1 rounded border font-mono">
                 {{ recipient.walletAddress.slice(0, 20) }}...{{ recipient.walletAddress.slice(-10) }}
               </div>
             </div>
             
             <div>
-              <label class="block text-xs text-blue-600 mb-1">보낼 금액 (BTC)</label>
+              <label class="block text-[10px] sm:text-xs text-blue-600 mb-1">보낼 금액 (BTC)</label>
               <input 
                 v-model.number="recipient.amount" 
                 type="number" 
@@ -75,7 +75,7 @@
           <button 
             @click="simulateTransaction" 
             :disabled="!canSendTransaction || !!transactionStatus"
-            class="w-full px-4 py-3 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
+            class="w-full px-4 py-2 sm:py-3 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors text-sm sm:text-base"
           >
             <span v-if="transactionStatus" class="flex items-center justify-center gap-2">
               <div class="w-4 h-4 animate-spin border-2 border-current border-t-transparent rounded-full"></div>
@@ -84,19 +84,19 @@
             <span v-else>거래 시뮬레이션</span>
           </button>
           
-          <div v-if="transactionError" class="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          <div v-if="transactionError" class="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs sm:text-sm">
             {{ transactionError }}
           </div>
         </div>
 
         <div class="space-y-4">
           <!-- Moved full Wallet Status block here -->
-          <div class="bg-white rounded-lg border border-slate-200 p-6">
+          <div class="bg-white rounded-lg border border-slate-200 p-4 sm:p-6">
             <div class="flex items-center justify-between mb-4">
               <h2 class="text-lg font-semibold text-slate-800">내 지갑 상태</h2>
               <button 
                 @click="generateInitialUTXOs" 
-                class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors"
+                class="px-3 sm:px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs sm:text-sm font-medium transition-colors"
               >
                 새로 시작
               </button>

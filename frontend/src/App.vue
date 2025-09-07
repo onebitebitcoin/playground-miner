@@ -2,13 +2,13 @@
   <div class="min-h-screen bg-white">
     <!-- Clean header -->
     <header class="border-b border-gray-100 bg-white">
-      <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="h-8 w-8 rounded-lg bg-orange-500 text-white flex items-center justify-center">
             <span class="text-sm font-medium">₿</span>
           </div>
           <div>
-            <h1 class="text-lg font-semibold text-slate-800">한입 비트코인 놀이터</h1>
+            <h1 class="text-base sm:text-lg font-semibold text-slate-800">한입 비트코인 놀이터</h1>
           </div>
         </div>
         
@@ -21,22 +21,22 @@
         </div>
         
         <!-- Header buttons -->
-        <div v-if="state.active !== 'nick'" class="flex items-center gap-2">
+        <div v-if="state.active !== 'nick'" class="flex items-center gap-1 sm:gap-2">
           <button 
             class="md:hidden p-2 hover:bg-gray-50 rounded-lg"
             @click="mobileMenuOpen = !mobileMenuOpen"
           >
-            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
           <button
             v-if="currentNickname"
-            class="px-3 py-1.5 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+            class="hidden sm:inline-flex px-3 py-1.5 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
             @click="changeNickname"
           >닉네임 변경</button>
           <button
-            class="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+            class="px-2 py-1.5 sm:px-3 text-xs sm:text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
             @click="showResetDialog"
           >초기화</button>
         </div>
@@ -91,7 +91,7 @@
           </div>
         </div>
         
-        <div class="p-6">
+        <div class="p-4 sm:p-6">
           <component :is="currentComponent" />
         </div>
       </main>
@@ -99,7 +99,7 @@
 
     <!-- Reset Dialog -->
     <div v-if="resetDialogOpen" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-      <div class="bg-white rounded-xl shadow-lg max-w-md w-full p-6">
+      <div class="bg-white rounded-xl shadow-lg max-w-md w-full mx-4 p-4 sm:p-6">
         <h3 class="text-lg font-semibold text-gray-900 mb-3">초기화 확인</h3>
         <p class="text-gray-600 mb-4">모든 블록 데이터가 삭제됩니다. 계속하시려면 비밀번호를 입력해주세요.</p>
         <input 
