@@ -47,7 +47,7 @@
                   :key="address" 
                   :value="address"
                 >
-                  {{ wallet.name }} ({{ wallet.utxos.length }}개 UTXO, {{ getWalletBalance(wallet) }} BTC)
+                  {{ formatWalletOption(wallet) }}
                 </option>
               </ModernSelect>
             </div>
@@ -456,7 +456,7 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted, onUnmounted } from 'vue'
 import ModernSelect from '../components/ModernSelect.vue'
 
 // Reactive data
@@ -469,6 +469,9 @@ const recipientCount = ref(1)
 const recipients = ref([{ walletAddress: '', amount: 1 }])
 const transactionError = ref('')
 const expandedWallets = ref(new Set())
+
+// Responsive screen width tracking
+const screenWidth = ref(window.innerWidth)
 
 // Animation states
 const transactionStatus = ref('')
@@ -620,6 +623,32 @@ function updateRecipientInputs() {
 // Get wallet balance
 function getWalletBalance(wallet) {
   return wallet.utxos.reduce((sum, utxo) => sum + utxo.amount, 0)
+}
+
+// Computed: Check if mobile
+const isMobile = computed(() => screenWidth.value < 640) // sm breakpoint
+
+// Format wallet option text for mobile compatibility  
+function formatWalletOption(wallet) {
+  const balance = getWalletBalance(wallet)
+  const utxoCount = wallet.utxos.length
+  
+  if (isMobile.value) {
+    // Mobile: compact format with intelligent truncation
+    let displayName = wallet.name
+    if (wallet.name.length > 8) {
+      // Keep more characters for common names
+      if (wallet.name.startsWith('satoshi') || wallet.name.startsWith('nakamoto')) {
+        displayName = wallet.name.length > 10 ? wallet.name.slice(0, 8) + '...' : wallet.name
+      } else {
+        displayName = wallet.name.slice(0, 6) + '...'
+      }
+    }
+    return `${displayName} (${utxoCount}, ${balance})`
+  } else {
+    // Desktop: full format
+    return `${wallet.name} (${utxoCount}개 UTXO, ${balance} BTC)`
+  }
 }
 
 // Create default wallets
@@ -1006,6 +1035,20 @@ function toggleWalletDetails(address) {
     expandedWallets.value.add(address)
   }
 }
+
+// Responsive screen width management
+function handleResize() {
+  screenWidth.value = window.innerWidth
+}
+
+// Lifecycle hooks
+onMounted(() => {
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+})
 
 // Initialize with some UTXOs
 generateInitialUTXOs()

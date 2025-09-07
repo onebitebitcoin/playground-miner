@@ -65,4 +65,24 @@ select::-ms-expand {
 select:focus {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
 }
+
+/* Option text overflow prevention */
+select option {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Mobile-specific option styling */
+@media (max-width: 640px) {
+  select {
+    font-size: 12px !important;
+  }
+  
+  select option {
+    font-size: 12px;
+    padding: 8px 4px;
+  }
+}
 </style>
