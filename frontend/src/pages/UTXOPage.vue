@@ -21,15 +21,15 @@
 
           <div>
             <label class="block text-sm font-medium text-slate-700 mb-2">받는 주소 개수</label>
-            <select 
+            <ModernSelect 
               v-model="recipientCount" 
-              @change="updateRecipientInputs"
-              class="w-full modern-select"
+              @update:modelValue="updateRecipientInputs"
+              variant="default"
             >
               <option :value="1">1개 (단일 주소)</option>
               <option :value="2">2개</option>
               <option :value="3">3개</option>
-            </select>
+            </ModernSelect>
           </div>
 
           <!-- Recipient inputs -->
@@ -38,9 +38,9 @@
             
             <div>
               <label class="block text-[10px] sm:text-xs text-blue-600 mb-1">지갑 선택</label>
-              <select 
-                v-model="recipient.walletAddress" 
-                class="w-full modern-select text-sm"
+              <ModernSelect 
+                v-model="recipient.walletAddress"
+                variant="blue"
               >
                 <option 
                   v-for="(wallet, address) in wallets" 
@@ -49,7 +49,7 @@
                 >
                   {{ wallet.name }} ({{ wallet.utxos.length }}개 UTXO, {{ getWalletBalance(wallet) }} BTC)
                 </option>
-              </select>
+              </ModernSelect>
             </div>
             
             <div v-if="recipient.walletAddress">
@@ -457,6 +457,7 @@
 
 <script setup>
 import { ref, computed, reactive } from 'vue'
+import ModernSelect from '../components/ModernSelect.vue'
 
 // Reactive data
 const myUTXOs = ref([])
