@@ -77,7 +77,7 @@
       <!-- Mobile Menu Overlay -->
       <div v-if="mobileMenuOpen" class="fixed inset-0 z-30 md:hidden">
         <div class="absolute inset-0 bg-black/50" @click="mobileMenuOpen = false"></div>
-        <div class="relative">
+        <div class="relative h-full">
           <Sidebar
             :items="menuItems"
             :active="currentRouteName"
