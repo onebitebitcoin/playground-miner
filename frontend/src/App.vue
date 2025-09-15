@@ -2,7 +2,7 @@
   <div class="min-h-screen bg-gray-50">
     <!-- Clean header -->
     <header class="border-b border-gray-200 bg-white shadow-sm">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+      <div class="w-full px-2 sm:px-4 py-3 sm:py-4 flex items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="h-8 w-8 rounded-lg bg-gray-900 text-white flex items-center justify-center">
             <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -10,20 +10,22 @@
             </svg>
           </div>
           <div>
-            <h1 class="text-base sm:text-lg font-semibold text-gray-900">비트코인 놀이터</h1>
+            <h1 class="text-base sm:text-lg font-semibold text-gray-900">한입 비트코인 놀이터</h1>
           </div>
         </div>
         
-        <!-- User info -->
-        <div v-if="currentNickname && !isNicknameSetup" class="hidden sm:flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-lg">
-          <div class="h-6 w-6 rounded-full bg-gray-600 text-white flex items-center justify-center text-xs font-medium">
-            {{ currentNickname.charAt(0).toUpperCase() }}
+        <!-- Right side: User info + Header buttons -->
+        <div v-if="!isNicknameSetup" class="flex items-center gap-2 sm:gap-4">
+          <!-- User info -->
+          <div v-if="currentNickname" class="hidden sm:flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-lg">
+            <div class="h-6 w-6 rounded-full bg-gray-600 text-white flex items-center justify-center text-xs font-medium">
+              {{ currentNickname.charAt(0).toUpperCase() }}
+            </div>
+            <span class="text-sm text-gray-700">{{ currentNickname }}</span>
           </div>
-          <span class="text-sm text-gray-700">{{ currentNickname }}</span>
-        </div>
-        
-        <!-- Header buttons -->
-        <div v-if="!isNicknameSetup" class="flex items-center gap-1 sm:gap-2">
+
+          <!-- Header buttons -->
+          <div class="flex items-center gap-1 sm:gap-2">
           <button
             class="md:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
             @click="mobileMenuOpen = !mobileMenuOpen"
@@ -51,6 +53,7 @@
             </svg>
             초기화
           </button>
+          </div>
         </div>
       </div>
     </header>

@@ -1,5 +1,5 @@
 <template>
-  <aside class="w-64 bg-white border-r border-gray-200 px-6 py-8">
+  <aside class="w-64 h-full bg-white border-r border-gray-200 px-6 py-8">
     <nav class="space-y-1">
       <button
         v-for="item in items"
