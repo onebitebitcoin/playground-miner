@@ -60,14 +60,18 @@ check_dependencies() {
     fi
     
     # Backend 가상환경 및 의존성 확인
-    if [ ! -d "backend/venv" ]; then
+    echo -e "${YELLOW}🔧 Backend 가상환경 및 의존성 확인 중...${NC}"
+    cd backend
+
+    if [ ! -d "venv" ]; then
         echo -e "${YELLOW}🔧 Backend 가상환경 생성 중...${NC}"
-        cd backend
         python3 -m venv venv
-        source venv/bin/activate
-        pip install -r requirements.txt
-        cd ..
     fi
+
+    # 가상환경 활성화 후 의존성 설치
+    source venv/bin/activate
+    pip install -r requirements.txt > /dev/null 2>&1
+    cd ..
     
     echo -e "${GREEN}✅ 의존성 확인 완료${NC}"
 }
@@ -93,14 +97,17 @@ main() {
     # 가상환경 활성화 후 Django 서버 실행
     if [ -f "venv/bin/activate" ]; then
         source venv/bin/activate
+
+        # Django 마이그레이션 실행
+        echo -e "${YELLOW}📊 데이터베이스 마이그레이션 중...${NC}"
+        python3 manage.py migrate --run-syncdb >/dev/null 2>&1 || true
+
+        # Django 서버 백그라운드 실행
+        nohup python3 manage.py runserver 0.0.0.0:8000 > ../backend.log 2>&1 &
+    else
+        echo -e "${RED}❌ 가상환경을 찾을 수 없습니다.${NC}"
+        exit 1
     fi
-    
-    # Django 마이그레이션 실행
-    echo -e "${YELLOW}📊 데이터베이스 마이그레이션 중...${NC}"
-    python manage.py migrate --run-syncdb >/dev/null 2>&1 || true
-    
-    # Django 서버 백그라운드 실행
-    nohup python manage.py runserver 0.0.0.0:8000 > ../backend.log 2>&1 &
     BACKEND_PID=$!
     cd ..
     

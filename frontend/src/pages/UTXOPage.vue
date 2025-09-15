@@ -661,19 +661,19 @@ function formatWalletOption(wallet) {
 
 // Create default wallets
 function createDefaultWallets() {
-  // Create Satoshi wallet
+  // Create 사토시 wallet
   const satoshiAddress = generateSegwitAddress()
   wallets[satoshiAddress] = {
-    name: 'Satoshi',
+    name: '사토시',
     address: satoshiAddress,
     utxos: [],
     balance: 0
   }
-  
-  // Create Nakamoto wallet  
+
+  // Create 나카모토 wallet
   const nakamotoAddress = generateSegwitAddress()
   wallets[nakamotoAddress] = {
-    name: 'Nakamoto',
+    name: '나카모토',
     address: nakamotoAddress,
     utxos: [],
     balance: 0
@@ -697,7 +697,7 @@ function generateInitialUTXOs() {
   // Create default wallets first
   createDefaultWallets()
   
-  // Set default recipient to first wallet (Satoshi)
+  // Set default recipient to first wallet (사토시)
   setTimeout(() => {
     const firstWallet = Object.keys(wallets)[0]
     if (firstWallet && recipients.value[0]) {

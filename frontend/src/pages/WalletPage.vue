@@ -216,13 +216,41 @@
               <div class="bg-green-50 p-4 rounded-lg">
                 <h4 class="font-medium text-green-800 mb-3">개별 니모닉 추가</h4>
                 <div class="space-y-3">
-                  <textarea v-model="manualPoolMnemonic"
-                            placeholder="12개의 영어 단어를 공백으로 구분하여 입력"
-                            class="w-full h-20 px-3 py-2 border border-green-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none resize-none"
-                            :class="{ 'border-red-300': manualPoolError }"></textarea>
+                  <!-- Individual word inputs -->
+                  <div class="grid grid-cols-3 gap-2">
+                    <div v-for="i in 12" :key="i" class="relative">
+                      <label :for="`admin-word-${i}`" class="block text-xs font-medium text-green-600 mb-1">
+                        {{ i }}
+                      </label>
+                      <input
+                        :id="`admin-word-${i}`"
+                        v-model="adminMnemonicWords[i-1]"
+                        @input="updateAdminManualMnemonic"
+                        @paste="handleAdminPaste($event, i-1)"
+                        type="text"
+                        :placeholder="`단어 ${i}`"
+                        class="w-full px-2 py-2 text-sm border border-green-200 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                        :class="{ 'border-red-300': manualPoolError }"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- Alternative textarea input -->
+                  <div class="border-t border-green-200 pt-3">
+                    <label class="block text-sm font-medium text-green-700 mb-2">
+                      또는 한번에 입력:
+                    </label>
+                    <textarea v-model="manualPoolMnemonicText"
+                              @input="updateAdminFromTextarea"
+                              placeholder="12개의 영어 단어를 공백으로 구분하여 입력"
+                              class="w-full h-16 px-3 py-2 text-sm border border-green-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none resize-none"
+                              :class="{ 'border-red-300': manualPoolError }"></textarea>
+                  </div>
+
                   <div v-if="manualPoolError" class="text-sm text-red-600">{{ manualPoolError }}</div>
+
                   <button @click="addManualMnemonicToPool"
-                          :disabled="loading || !manualPoolMnemonic.trim()"
+                          :disabled="loading || !isValidAdminMnemonicInput"
                           class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
                     {{ loading ? '추가 중...' : '풀에 추가' }}
                   </button>
@@ -315,6 +343,8 @@ const errorMessage = ref('')
 const showAdminPanel = ref(false)
 const mnemonicCount = ref(10)
 const manualPoolMnemonic = ref('')
+const manualPoolMnemonicText = ref('')
+const adminMnemonicWords = ref(Array(12).fill(''))
 const manualPoolError = ref('')
 
 // Admin state
@@ -334,6 +364,12 @@ const availableMnemonicsCount = computed(() => {
 const isValidMnemonicInput = computed(() => {
   const words = mnemonicWords.value.filter(w => w.trim().length > 0)
   return words.length === 12 || (manualMnemonicText.value.trim().split(/\s+/).length === 12)
+})
+
+// Computed for valid admin mnemonic input
+const isValidAdminMnemonicInput = computed(() => {
+  const words = adminMnemonicWords.value.filter(w => w.trim().length > 0)
+  return words.length === 12 || (manualPoolMnemonicText.value.trim().split(/\s+/).length === 12)
 })
 
 // Get current username
@@ -443,6 +479,38 @@ const handlePaste = (event, startIndex) => {
     }
 
     updateManualMnemonic()
+  }
+}
+
+// Admin panel input handling functions
+const updateAdminManualMnemonic = () => {
+  const words = adminMnemonicWords.value.filter(w => w.trim().length > 0)
+  manualPoolMnemonic.value = words.join(' ')
+  manualPoolMnemonicText.value = adminMnemonicWords.value.join(' ').trim()
+}
+
+const updateAdminFromTextarea = () => {
+  const words = manualPoolMnemonicText.value.trim().split(/\s+/).filter(w => w.length > 0)
+
+  for (let i = 0; i < 12; i++) {
+    adminMnemonicWords.value[i] = words[i] || ''
+  }
+
+  manualPoolMnemonic.value = words.slice(0, 12).join(' ')
+}
+
+const handleAdminPaste = (event, startIndex) => {
+  const pasteData = event.clipboardData.getData('text')
+  const words = pasteData.trim().split(/\s+/)
+
+  if (words.length >= 12) {
+    event.preventDefault()
+
+    for (let i = 0; i < 12; i++) {
+      adminMnemonicWords.value[i] = words[i] || ''
+    }
+
+    updateAdminManualMnemonic()
   }
 }
 
@@ -574,7 +642,9 @@ const addMnemonicPool = async () => {
 
 const addManualMnemonicToPool = async () => {
   manualPoolError.value = ''
-  const error = validateMnemonic(manualPoolMnemonic.value)
+
+  const finalMnemonic = manualPoolMnemonicText.value.trim() || adminMnemonicWords.value.join(' ').trim()
+  const error = validateMnemonic(finalMnemonic)
   if (error) {
     manualPoolError.value = error
     return
@@ -583,10 +653,15 @@ const addManualMnemonicToPool = async () => {
   loading.value = true
   try {
     const poolUsername = `manual_pool_${Date.now()}`
-    const response = await apiSaveMnemonic(manualPoolMnemonic.value, poolUsername)
+    const response = await apiSaveMnemonic(finalMnemonic, poolUsername)
     if (response.success) {
       showSuccessMessage('니모닉이 풀에 추가되었습니다')
+
+      // Clear all inputs
       manualPoolMnemonic.value = ''
+      manualPoolMnemonicText.value = ''
+      adminMnemonicWords.value = Array(12).fill('')
+
       await loadAdminData()
     } else {
       manualPoolError.value = response.error || '풀 추가에 실패했습니다'
