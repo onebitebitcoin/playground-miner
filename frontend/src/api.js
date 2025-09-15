@@ -100,3 +100,61 @@ export async function apiInitReset(token) {
   if (!res.ok) throw new Error(`init ${res.status}`)
   return res.json()
 }
+
+// Mnemonic API functions
+export async function apiRequestMnemonic() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/mnemonic/request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, mnemonic: data.mnemonic, id: data.id, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiGenerateMnemonic() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/mnemonic/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, mnemonic: data.mnemonic, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiSaveMnemonic(mnemonic, username) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/mnemonic/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ mnemonic, username })
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, id: data.id, message: data.message, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiGetAdminMnemonics(username) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/mnemonic/admin?username=${encodeURIComponent(username)}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, mnemonics: data.mnemonics, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}

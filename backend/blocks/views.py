@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models import Max
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from .models import Block, Nickname
+from .models import Block, Nickname, Mnemonic
 from .broadcast import broadcaster
 
 
@@ -202,3 +202,131 @@ def init_reset_view(request):
     broadcaster.publish({'type': 'status', 'status': current_status()})
     broadcaster.publish({'type': 'peers', 'peers': broadcaster.peers()})
     return JsonResponse({'ok': True, 'status': current_status()})
+
+
+# Mnemonic API views
+@csrf_exempt
+def request_mnemonic_view(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+
+    # Find an unassigned mnemonic
+    mnemonic_obj = Mnemonic.objects.filter(is_assigned=False).first()
+    if not mnemonic_obj:
+        return JsonResponse({'ok': False, 'error': '사용 가능한 니모닉이 없습니다'}, status=200)
+
+    # Mark as assigned
+    mnemonic_obj.is_assigned = True
+    mnemonic_obj.save()
+
+    return JsonResponse({
+        'ok': True,
+        'mnemonic': mnemonic_obj.mnemonic,
+        'id': mnemonic_obj.id
+    })
+
+
+@csrf_exempt
+def generate_mnemonic_view(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+
+    import random
+
+    # BIP39 word list sample (limited for demo)
+    bip39_words = [
+        'abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb', 'abstract',
+        'absurd', 'abuse', 'access', 'accident', 'account', 'accuse', 'achieve', 'acid',
+        'acoustic', 'acquire', 'across', 'act', 'action', 'actor', 'actress', 'actual',
+        'adapt', 'add', 'addict', 'address', 'adjust', 'admit', 'adult', 'advance',
+        'advice', 'aerobic', 'affair', 'afford', 'afraid', 'again', 'agent', 'agree',
+        'ahead', 'aim', 'air', 'airport', 'aisle', 'alarm', 'album', 'alcohol',
+        'alert', 'alien', 'all', 'alley', 'allow', 'almost', 'alone', 'alpha',
+        'already', 'also', 'alter', 'always', 'amateur', 'amazing', 'among', 'amount',
+        'amused', 'analyst', 'anchor', 'ancient', 'anger', 'angle', 'angry', 'animal',
+        'ankle', 'announce', 'annual', 'another', 'answer', 'antenna', 'antique', 'anxiety',
+        'any', 'apart', 'apology', 'appear', 'apple', 'approve', 'april', 'arch',
+        'arctic', 'area', 'arena', 'argue', 'arm', 'armed', 'armor', 'army',
+        'around', 'arrange', 'arrest', 'arrive', 'arrow', 'art', 'article', 'artist',
+        'artwork', 'ask', 'aspect', 'assault', 'asset', 'assist', 'assume', 'asthma',
+        'athlete', 'atom', 'attack', 'attend', 'attitude', 'attract', 'auction', 'audit',
+        'august', 'aunt', 'author', 'auto', 'autumn', 'average', 'avocado', 'avoid',
+        'awake', 'aware', 'away', 'awesome', 'awful', 'awkward', 'axis', 'baby',
+        'bachelor', 'bacon', 'badge', 'bag', 'balance', 'balcony', 'ball', 'bamboo',
+        'banana', 'banner', 'bar', 'barely', 'bargain', 'barrel', 'base', 'basic',
+        'basket', 'battle', 'beach', 'bean', 'beauty', 'because', 'become', 'beef',
+        'before', 'begin', 'behave', 'behind', 'believe', 'below', 'belt', 'bench',
+        'benefit', 'best', 'betray', 'better', 'between', 'beyond', 'bicycle', 'bid',
+        'bike', 'bind', 'biology', 'bird', 'birth', 'bitter', 'black', 'blade',
+        'blame', 'blanket', 'blast', 'bleak', 'bless', 'blind', 'blood', 'blossom',
+        'blow', 'blue', 'blur', 'blush', 'board', 'boat', 'body', 'boil',
+        'bomb', 'bone', 'bonus', 'book', 'boost', 'border', 'boring', 'borrow',
+        'boss', 'bottom', 'bounce', 'box', 'boy', 'bracket', 'brain', 'brand',
+        'brass', 'brave', 'bread', 'breeze', 'brick', 'bridge', 'brief', 'bright',
+        'bring', 'brisk', 'broccoli', 'broken', 'bronze', 'broom', 'brother', 'brown',
+        'brush', 'bubble', 'buddy', 'budget', 'buffalo', 'build', 'bulb', 'bulk',
+        'bullet', 'bundle', 'bunker', 'burden', 'burger', 'burst', 'bus', 'business',
+        'busy', 'butter', 'buyer', 'buzz', 'cabbage', 'cabin', 'cable', 'cactus'
+    ]
+
+    # Generate 12 random words
+    mnemonic_words = random.sample(bip39_words, 12)
+    mnemonic = ' '.join(mnemonic_words)
+
+    return JsonResponse({
+        'ok': True,
+        'mnemonic': mnemonic
+    })
+
+
+@csrf_exempt
+def save_mnemonic_view(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+        mnemonic = payload.get('mnemonic', '').strip()
+        username = payload.get('username', '').strip()[:64]
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    if not mnemonic or not username:
+        return JsonResponse({'ok': False, 'error': 'Mnemonic and username required'}, status=400)
+
+    # Validate mnemonic (12 words)
+    words = mnemonic.split()
+    if len(words) != 12:
+        return JsonResponse({'ok': False, 'error': 'Mnemonic must contain exactly 12 words'}, status=400)
+
+    # Save mnemonic
+    mnemonic_obj = Mnemonic.objects.create(
+        username=username,
+        mnemonic=mnemonic,
+        is_assigned=False
+    )
+
+    return JsonResponse({
+        'ok': True,
+        'id': mnemonic_obj.id,
+        'message': 'Mnemonic saved successfully'
+    })
+
+
+@csrf_exempt
+def admin_mnemonics_view(request):
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+
+    # Simple admin check (in real app, use proper authentication)
+    username = request.GET.get('username', '')
+    if username != 'admin':
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+
+    mnemonics = Mnemonic.objects.all().order_by('-created_at')
+    mnemonic_list = [m.as_dict() for m in mnemonics]
+
+    return JsonResponse({
+        'ok': True,
+        'mnemonics': mnemonic_list
+    })

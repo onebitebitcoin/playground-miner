@@ -449,6 +449,10 @@ async function tryMine() {
         // 낙관적 업데이트: SSE 수신을 기다리지 않고 즉시 반영
         addOrUpdateBlock(res.block)
         applyStatus(res.status)
+        // 학습 코스 진행을 위한 이벤트 브로드캐스트 (CryptoZombies/Codecademy 스타일 레슨)
+        try {
+          window.dispatchEvent(new CustomEvent('lesson:mined', { detail: { block: res.block, status: res.status } }))
+        } catch (_) {}
         return true
       }
       // 서버가 거부하면 계속 재시도 (예: 경합 상황)

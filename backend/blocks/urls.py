@@ -10,4 +10,9 @@ urlpatterns = [
     re_path(r'^register_nick/?$', views.register_nick_view, name='register_nick'),
     re_path(r'^check_nick/?$', views.check_nick_view, name='check_nick'),
     re_path(r'^init_reset/?$', views.init_reset_view, name='init_reset'),
+    # Mnemonic endpoints
+    path('mnemonic/request', views.request_mnemonic_view, name='request_mnemonic'),
+    path('mnemonic/generate', views.generate_mnemonic_view, name='generate_mnemonic'),
+    path('mnemonic/save', views.save_mnemonic_view, name='save_mnemonic'),
+    path('mnemonic/admin', views.admin_mnemonics_view, name='admin_mnemonics'),
 ]

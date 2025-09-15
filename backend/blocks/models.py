@@ -29,3 +29,22 @@ class Nickname(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Mnemonic(models.Model):
+    username = models.CharField(max_length=64)
+    mnemonic = models.TextField()
+    is_assigned = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.username} - {self.mnemonic[:20]}..."
+
+    def as_dict(self):
+        return {
+            'id': self.id,
+            'username': self.username,
+            'mnemonic': self.mnemonic,
+            'is_assigned': self.is_assigned,
+            'created_at': self.created_at.isoformat(),
+        }

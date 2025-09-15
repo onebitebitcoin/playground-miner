@@ -38,13 +38,14 @@
             
             <div>
               <label class="block text-[10px] sm:text-xs text-blue-600 mb-1">지갑 선택</label>
-              <ModernSelect 
+              <ModernSelect
                 v-model="recipient.walletAddress"
                 variant="blue"
+                class="text-xs sm:text-sm"
               >
-                <option 
-                  v-for="(wallet, address) in wallets" 
-                  :key="address" 
+                <option
+                  v-for="(wallet, address) in wallets"
+                  :key="address"
                   :value="address"
                 >
                   {{ formatWalletOption(wallet) }}
@@ -54,8 +55,9 @@
             
             <div v-if="recipient.walletAddress">
               <label class="block text-[10px] sm:text-xs text-blue-600 mb-1">선택된 주소</label>
-              <div class="text-[10px] sm:text-xs text-blue-700 bg-white px-2 py-1 rounded border font-mono">
-                {{ recipient.walletAddress.slice(0, 20) }}...{{ recipient.walletAddress.slice(-10) }}
+              <div class="text-[10px] sm:text-xs text-blue-700 bg-white px-2 py-1 rounded border font-mono break-all">
+                <span class="sm:hidden">{{ recipient.walletAddress.slice(0, 15) }}...{{ recipient.walletAddress.slice(-8) }}</span>
+                <span class="hidden sm:inline">{{ recipient.walletAddress.slice(0, 20) }}...{{ recipient.walletAddress.slice(-10) }}</span>
               </div>
             </div>
             
@@ -349,52 +351,58 @@
         <div v-if="Object.keys(wallets).length === 0" class="text-center py-8 text-slate-500">
           아직 받는 사람 지갑이 없습니다. 거래를 시뮬레이션하면 지갑이 생성됩니다.
         </div>
-        <div 
-          v-for="(wallet, address) in wallets" 
+        <div
+          v-for="(wallet, address) in wallets"
           :key="address"
-          class="border border-slate-200 rounded-lg p-4 hover:shadow-sm transition-shadow"
+          class="border border-slate-200 rounded-lg p-3 sm:p-4 hover:shadow-sm transition-shadow"
         >
-          <div class="flex items-center justify-between mb-3">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-medium">
+          <div class="space-y-3">
+            <!-- Mobile-first layout: stacked on small screens -->
+            <div class="flex items-start gap-3">
+              <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs sm:text-sm font-medium flex-shrink-0">
                 {{ wallet.name.charAt(0).toUpperCase() }}
               </div>
-              <div>
-                <div class="font-medium text-slate-800">{{ wallet.name }}</div>
-                <div class="text-sm text-slate-500 font-mono">{{ address.slice(0, 20) }}...{{ address.slice(-10) }}</div>
+              <div class="flex-1 min-w-0">
+                <div class="font-medium text-slate-800 text-sm sm:text-base">{{ wallet.name }}</div>
+                <!-- Mobile-responsive address display -->
+                <div class="text-xs sm:text-sm text-slate-500 font-mono break-all">
+                  <span class="sm:hidden">{{ address.slice(0, 12) }}...{{ address.slice(-8) }}</span>
+                  <span class="hidden sm:inline">{{ address.slice(0, 20) }}...{{ address.slice(-10) }}</span>
+                </div>
+              </div>
+              <div class="text-right flex-shrink-0">
+                <div class="text-base sm:text-lg font-bold text-slate-800">{{ wallet.balance }} BTC</div>
+                <div class="text-xs sm:text-sm text-slate-500">{{ wallet.utxos.length }}개 UTXO</div>
               </div>
             </div>
-            <div class="text-right">
-              <div class="text-lg font-bold text-slate-800">{{ wallet.balance }} BTC</div>
-              <div class="text-sm text-slate-500">{{ wallet.utxos.length }}개 UTXO</div>
-            </div>
+
+            <!-- Full-width button on mobile -->
+            <button
+              @click="toggleWalletDetails(address)"
+              class="w-full px-3 py-2 text-xs sm:text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors font-medium"
+            >
+              <span class="sm:hidden">UTXO 보기 ({{ wallet.utxos.length }})</span>
+              <span class="hidden sm:inline">UTXO 보기 ({{ wallet.utxos.length }}개)</span>
+            </button>
           </div>
-          
-          <button 
-            @click="toggleWalletDetails(address)"
-            class="w-full px-3 py-2 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors font-medium"
-          >
-            UTXO 보기 ({{ wallet.utxos.length }}개)
-          </button>
           
           <div v-if="expandedWallets.has(address)" class="mt-3 space-y-2 max-h-48 overflow-y-auto">
             <div class="bg-blue-50 rounded-lg p-3 border border-blue-100">
-              <h4 class="text-sm font-semibold text-blue-800 mb-2">보유 UTXO 목록</h4>
-              <div v-if="wallet.utxos.length === 0" class="text-center py-4 text-blue-600 text-sm">
+              <h4 class="text-xs sm:text-sm font-semibold text-blue-800 mb-2">보유 UTXO 목록</h4>
+              <div v-if="wallet.utxos.length === 0" class="text-center py-4 text-blue-600 text-xs sm:text-sm">
                 보유한 UTXO가 없습니다.
               </div>
               <div class="space-y-2">
-                <div 
-                  v-for="utxo in wallet.utxos" 
+                <div
+                  v-for="utxo in wallet.utxos"
                   :key="utxo.id"
-                  class="bg-white rounded-lg p-3 border border-blue-100"
+                  class="bg-white rounded-lg p-2 sm:p-3 border border-blue-100"
                 >
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <div class="text-sm font-medium text-slate-800">{{ utxo.amount }} BTC</div>
-                    </div>
+                  <!-- Mobile-friendly UTXO layout -->
+                  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
+                    <div class="text-xs sm:text-sm font-medium text-slate-800">{{ utxo.amount }} BTC</div>
                     <div class="text-xs text-slate-500">
-                      <div>{{ utxo.confirmations }}회 확인 · {{ getTimeAgo(utxo.createdAt) }}</div>
+                      <div class="break-words">{{ utxo.confirmations }}회 확인 · {{ getTimeAgo(utxo.createdAt) }}</div>
                     </div>
                   </div>
                 </div>
@@ -709,6 +717,11 @@ function generateInitialUTXOs() {
       createdAt: Date.now()
     })
   }
+
+  // 학습 코스 진행 이벤트: 초기 UTXO 생성 완료 통지
+  try {
+    window.dispatchEvent(new CustomEvent('lesson:utxo_reset', { detail: { utxoCount: myUTXOs.value.length } }))
+  } catch (_) {}
 }
 
 // Create or get wallet
@@ -1010,6 +1023,12 @@ async function simulateTransaction() {
   // Complete visualization
   updateVisualizationStep(3, false, true)
   
+  // 학습 코스 진행 이벤트: 거래 생성 완료 통지
+  try {
+    const outSummary = transaction.outputs.map(o => ({ amount: o.amount, isChange: !!o.isChange }))
+    window.dispatchEvent(new CustomEvent('lesson:utxo_tx', { detail: { id: txId, outputs: outSummary, inputs: selected.map(s => s.amount) } }))
+  } catch (_) {}
+
   // Reset form and status
   // No fee needed; keep recipient default to the first wallet
   recipients.value = [{ walletAddress: '', amount: 1 }]
