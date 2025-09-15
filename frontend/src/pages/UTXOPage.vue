@@ -233,7 +233,7 @@
     <!-- Current Wallet Status removed (moved into simulator panel above) -->
 
     <!-- Transaction Visualization -->
-    <div v-if="showVisualization" class="bg-white rounded-lg border border-slate-200 p-6 mb-6">
+    <div v-if="showVisualization" class="bg-white rounded-lg border border-slate-200 p-4 sm:p-6 mb-6">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold text-slate-800">거래 시각화</h2>
         <button @click="showVisualization = false" class="text-slate-500 hover:text-slate-700">
@@ -242,12 +242,12 @@
           </svg>
         </button>
       </div>
-      
-      <div class="relative bg-slate-50 rounded-lg p-8 min-h-96">
+
+      <div class="relative bg-slate-50 rounded-lg p-4 sm:p-8 min-h-64 sm:min-h-96">
         <!-- Transaction Flow Container -->
-        <div class="flex items-center justify-between h-full">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between h-full gap-6 lg:gap-0">
           <!-- Input Side -->
-          <div class="flex-1 space-y-4">
+          <div class="flex-1 space-y-4 order-1 lg:order-none">
             <h3 class="text-sm font-semibold text-slate-600 text-center mb-6">입력 (Inputs)</h3>
             <div class="space-y-3">
               <div 
@@ -274,33 +274,33 @@
           </div>
           
           <!-- Center Flow Animation -->
-          <div class="flex-shrink-0 px-8 relative">
+          <div class="flex-shrink-0 px-2 sm:px-8 relative order-2 lg:order-none">
             <div class="flex flex-col items-center">
               <!-- Transaction Box (ID removed by request) -->
-              <div class="bg-blue-500 text-white rounded-lg p-4 mb-4 shadow-lg transform transition-all duration-1000"
+              <div class="bg-blue-500 text-white rounded-lg p-3 sm:p-4 mb-4 shadow-lg transform transition-all duration-1000"
                    :class="{ 'scale-110 shadow-xl': visualizationData.isProcessing }">
                 <div class="text-center">
-                  <div class="text-sm font-semibold">거래</div>
+                  <div class="text-xs sm:text-sm font-semibold">거래</div>
                 </div>
               </div>
-              
+
               <!-- Flow Animation -->
-              <div v-if="visualizationData.showFlow" class="relative w-32 h-4">
+              <div v-if="visualizationData.showFlow" class="relative w-16 sm:w-32 h-4 lg:rotate-0 rotate-90">
                 <div class="absolute top-1/2 left-0 w-full h-0.5 bg-blue-200 transform -translate-y-1/2"></div>
-                <div class="absolute top-1/2 left-0 w-4 h-4 bg-blue-500 rounded-full transform -translate-y-1/2 animate-pulse"
+                <div class="absolute top-1/2 left-0 w-3 sm:w-4 h-3 sm:h-4 bg-blue-500 rounded-full transform -translate-y-1/2 animate-pulse"
                      style="animation: flowRight 2s infinite linear"></div>
               </div>
-              
+
               <!-- Fee Display -->
               <div class="mt-4 text-center">
                 <div class="text-xs text-slate-500">수수료</div>
-                <div class="text-sm font-medium text-orange-600">{{ visualizationData.fee != null ? visualizationData.fee : 0 }} BTC</div>
+                <div class="text-xs sm:text-sm font-medium text-orange-600">{{ visualizationData.fee != null ? visualizationData.fee : 0 }} BTC</div>
               </div>
             </div>
           </div>
           
           <!-- Output Side -->
-          <div class="flex-1 space-y-4">
+          <div class="flex-1 space-y-4 order-3 lg:order-none">
             <h3 class="text-sm font-semibold text-slate-600 text-center mb-6">출력 (Outputs)</h3>
             <div class="space-y-3">
               <div 

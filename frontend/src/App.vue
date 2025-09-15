@@ -27,14 +27,6 @@
           <!-- Header buttons -->
           <div class="flex items-center gap-1 sm:gap-2">
           <button
-            class="md:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            @click="mobileMenuOpen = !mobileMenuOpen"
-          >
-            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <button
             v-if="currentNickname"
             class="hidden sm:inline-flex px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
             @click="logout"
@@ -74,18 +66,6 @@
         />
       </div>
 
-      <!-- Mobile Menu Overlay -->
-      <div v-if="mobileMenuOpen" class="fixed inset-0 z-30 md:hidden">
-        <div class="absolute inset-0 bg-black/50" @click="mobileMenuOpen = false"></div>
-        <div class="relative h-full">
-          <Sidebar
-            :items="menuItems"
-            :active="currentRouteName"
-            @select="onMenuSelect"
-            @click="mobileMenuOpen = false"
-          />
-        </div>
-      </div>
 
       <!-- Main Content -->
       <main class="flex-1 overflow-auto bg-gray-50">
