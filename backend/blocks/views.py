@@ -210,20 +210,28 @@ def request_mnemonic_view(request):
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
 
-    # Find an unassigned mnemonic
-    mnemonic_obj = Mnemonic.objects.filter(is_assigned=False).first()
-    if not mnemonic_obj:
-        return JsonResponse({'ok': False, 'error': '사용 가능한 니모닉이 없습니다'}, status=200)
+    try:
+        # Find an unassigned mnemonic
+        mnemonic_obj = Mnemonic.objects.filter(is_assigned=False).first()
+        if not mnemonic_obj:
+            return JsonResponse({'ok': False, 'error': '사용 가능한 니모닉이 없습니다'}, status=200)
 
-    # Mark as assigned
-    mnemonic_obj.is_assigned = True
-    mnemonic_obj.save()
+        # Mark as assigned
+        mnemonic_obj.is_assigned = True
+        mnemonic_obj.save()
 
-    return JsonResponse({
-        'ok': True,
-        'mnemonic': mnemonic_obj.mnemonic,
-        'id': mnemonic_obj.id
-    })
+        # Return decrypted mnemonic
+        return JsonResponse({
+            'ok': True,
+            'mnemonic': mnemonic_obj.get_mnemonic(),
+            'id': mnemonic_obj.id
+        })
+
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error in request_mnemonic_view: {e}")
+        return JsonResponse({'ok': False, 'error': '니모닉 요청 처리 중 오류가 발생했습니다'}, status=500)
 
 
 @csrf_exempt
@@ -299,18 +307,25 @@ def save_mnemonic_view(request):
     if len(words) != 12:
         return JsonResponse({'ok': False, 'error': 'Mnemonic must contain exactly 12 words'}, status=400)
 
-    # Save mnemonic
-    mnemonic_obj = Mnemonic.objects.create(
-        username=username,
-        mnemonic=mnemonic,
-        is_assigned=False
-    )
+    try:
+        # Save mnemonic - it will be encrypted automatically by the model
+        mnemonic_obj = Mnemonic.objects.create(
+            username=username,
+            mnemonic=mnemonic,  # This will be encrypted by the model's save method
+            is_assigned=False
+        )
 
-    return JsonResponse({
-        'ok': True,
-        'id': mnemonic_obj.id,
-        'message': 'Mnemonic saved successfully'
-    })
+        return JsonResponse({
+            'ok': True,
+            'id': mnemonic_obj.id,
+            'message': 'Mnemonic saved and encrypted successfully'
+        })
+
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error saving mnemonic for user {username}: {e}")
+        return JsonResponse({'ok': False, 'error': '니모닉 저장 중 오류가 발생했습니다'}, status=500)
 
 
 @csrf_exempt

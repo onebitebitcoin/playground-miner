@@ -1,2 +1,4 @@
 Django>=4.2,<5.0
 uvicorn[standard]>=0.30
+cryptography>=45.0.7
+python-decouple>=3.8
