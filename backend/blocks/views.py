@@ -348,8 +348,21 @@ def admin_mnemonics_view(request):
 
 
 def is_admin(request):
-    """Check if user has admin privileges"""
-    username = request.GET.get('username', '') if request.method == 'GET' else request.POST.get('username', '')
+    """Check if user has admin privileges (supports JSON POST bodies)."""
+    if request.method == 'GET':
+        username = request.GET.get('username', '')
+    else:
+        # Try form-encoded first
+        username = request.POST.get('username', '')
+        # If missing and JSON body is used, parse it
+        if not username:
+            try:
+                content_type = (request.META.get('CONTENT_TYPE') or '').lower()
+                if 'application/json' in content_type:
+                    data = json.loads(request.body.decode('utf-8') or '{}')
+                    username = data.get('username', '')
+            except Exception:
+                username = ''
     return username == 'admin'
 
 
