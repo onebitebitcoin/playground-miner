@@ -130,6 +130,22 @@ fi
 
 echo "=== systemd: Backend service ==="
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+# Ensure persistent secrets directory and encryption key
+SECRETS_DIR="/etc/${PROJECT_NAME}"
+sudo mkdir -p "$SECRETS_DIR"
+KEY_FILE="$SECRETS_DIR/mnemonic.key"
+if [ ! -f "$KEY_FILE" ]; then
+  echo "Generating persistent MNEMONIC_ENCRYPTION_KEY..."
+  KEY=$(python - <<'PY'
+from cryptography.fernet import Fernet
+print(Fernet.generate_key().decode())
+PY
+)
+  echo "$KEY" | sudo tee "$KEY_FILE" >/dev/null
+  sudo chmod 600 "$KEY_FILE"
+else
+  KEY=$(sudo cat "$KEY_FILE")
+fi
 sudo tee "$SERVICE_FILE" >/dev/null <<EOF
 [Unit]
 Description=$PROJECT_NAME Django Backend
@@ -144,6 +160,7 @@ Environment="PATH=$BACKEND_DIR/venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONPATH=$BACKEND_DIR"
 Environment="DJANGO_SETTINGS_MODULE=playground_server.settings"
 Environment="ALLOWED_HOSTS=${SERVER_NAME},localhost,127.0.0.1"
+Environment="MNEMONIC_ENCRYPTION_KEY=$KEY"
 Environment="INIT_TOKEN=0000"
 ExecStart=$BACKEND_DIR/venv/bin/gunicorn \
   --workers ${GUNICORN_WORKERS:-2} \

@@ -1,8 +1,8 @@
-const CACHE_NAME = 'bitcoin-playground-v1';
+const CACHE_NAME = 'bitcoin-playground-v2';
+// Cache only stable, guaranteed assets. Vite outputs hashed assets under /assets,
+// which change per build; caching them here would cause 404 on install.
 const urlsToCache = [
   '/',
-  '/static/js/bundle.js',
-  '/static/css/main.css',
   '/manifest.json'
 ];
 
