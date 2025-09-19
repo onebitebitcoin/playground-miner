@@ -8,7 +8,7 @@
       </div>
 
       <!-- Input Section -->
-      <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-6">
         <h2 class="text-xl font-semibold text-gray-900 mb-4">송금 금액 입력</h2>
         <div class="mb-4">
           <label for="amount" class="block text-sm font-medium text-gray-700 mb-2">
@@ -63,17 +63,17 @@
         <h2 class="text-xl font-semibold text-gray-900">수수료 비교 결과</h2>
 
         <!-- Option Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           <div
             v-for="(result, index) in sortedResults"
             :key="result.id"
             :class="[
-              'bg-white rounded-lg shadow-md p-6 border-2 transition-all',
+              'bg-white rounded-lg shadow-md p-4 sm:p-6 border-2 transition-all',
               index === 0 ? 'border-green-500 ring-2 ring-green-200' : 'border-gray-200'
             ]"
           >
             <div class="flex items-center justify-between mb-4">
-              <h3 class="text-lg font-semibold text-gray-900">{{ result.title }}</h3>
+              <h3 class="text-base sm:text-lg font-semibold text-gray-900">{{ result.title }}</h3>
               <div v-if="index === 0" class="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-medium">
                 최적
               </div>
@@ -84,47 +84,70 @@
                 <div class="font-medium">{{ result.description }}</div>
               </div>
 
-              <!-- Exchange Fee Details -->
-              <div v-if="result.exchanges && result.exchanges.length > 0" class="bg-gray-50 p-3 rounded-lg">
-                <div class="text-xs font-medium text-gray-700 mb-2">거래소별 수수료율</div>
-                <div class="space-y-1">
-                  <div v-for="exchange in result.exchanges" :key="exchange.name" class="text-xs">
-                    <div class="flex justify-between">
-                      <span class="text-gray-600">{{ exchange.name }}:</span>
-                      <span class="font-medium">{{ exchange.rate }}%</span>
-                    </div>
-                    <div v-if="exchange.note && exchange.note !== ''" class="text-xs text-orange-600 font-medium mt-0.5">
-                      ⚠️ {{ exchange.note }}
+              <!-- Mobile: toggle to show details -->
+              <div class="md:hidden">
+                <button
+                  class="mt-1 mb-2 text-xs px-2 py-1 rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  @click="toggleDetails(result.id)"
+                >
+                  {{ detailsOpenById[result.id] ? '상세 접기' : '상세 보기' }}
+                </button>
+              </div>
+
+              <!-- Details wrapper: always visible on md+, toggled on mobile -->
+              <div v-show="!isMobile || detailsOpenById[result.id]">
+                <!-- Exchange Fee Details -->
+                <div v-if="result.exchanges && result.exchanges.length > 0" class="bg-gray-50 p-3 rounded-lg">
+                  <div class="text-xs font-medium text-gray-700 mb-2">거래소별 수수료율</div>
+                  <div class="space-y-1">
+                    <div v-for="exchange in result.exchanges" :key="exchange.name" class="text-xs">
+                      <div class="flex justify-between">
+                        <span class="text-gray-600">{{ exchange.name }}:</span>
+                        <span class="font-medium">{{ exchange.rate }}%</span>
+                      </div>
+                      <div v-if="exchange.note && exchange.note !== ''" class="text-xs text-orange-600 font-medium mt-0.5">
+                        ⚠️ {{ exchange.note }}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <!-- Withdrawal Fee Details -->
-              <div v-if="result.withdrawalFees && result.withdrawalFees.length > 0" class="bg-blue-50 p-3 rounded-lg">
-                <div class="text-xs font-medium text-gray-700 mb-2">출금 수수료</div>
-                <div class="space-y-1">
-                  <div v-for="fee in result.withdrawalFees" :key="fee.name" class="text-xs">
-                    <div class="flex justify-between">
-                      <span class="text-gray-600">{{ fee.name }}:</span>
-                      <span class="font-medium">{{ fee.amount }} BTC</span>
-                    </div>
-                    <div class="flex justify-between text-gray-500">
-                      <span></span>
-                      <span>({{ formatPrice(fee.amountKrw) }}원)</span>
+                <!-- Withdrawal Fee Details -->
+                <div v-if="result.withdrawalFees && result.withdrawalFees.length > 0" class="bg-blue-50 p-3 rounded-lg">
+                  <div class="text-xs font-medium text-gray-700 mb-2">출금 수수료</div>
+                  <div class="space-y-1">
+                    <div v-for="fee in result.withdrawalFees" :key="fee.name" class="text-xs">
+                      <div class="flex justify-between">
+                        <span class="text-gray-600">{{ fee.name }}:</span>
+                        <span class="font-medium">{{ fee.amount }} BTC</span>
+                      </div>
+                      <div class="flex justify-between text-gray-500">
+                        <span></span>
+                        <span>({{ formatPrice(fee.amountKrw) }}원)</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <!-- Lightning Service Details -->
-              <div v-if="result.lightningServices && result.lightningServices.length > 0" class="bg-yellow-50 p-3 rounded-lg">
-                <div class="text-xs font-medium text-gray-700 mb-2">라이트닝 서비스</div>
-                <div class="space-y-1">
-                  <div v-for="service in result.lightningServices" :key="service.name" class="text-xs">
-                    <div class="flex justify-between">
-                      <span class="text-gray-600">{{ service.name }}:</span>
-                      <span class="font-medium">{{ service.rate }}%</span>
+                <!-- Lightning Service Details -->
+                <div v-if="result.lightningServices && result.lightningServices.length > 0" class="bg-yellow-50 p-3 rounded-lg">
+                  <div class="text-xs font-medium text-gray-700 mb-2">{{ getLightningHeader(result.lightningServices) }}</div>
+                  <div class="space-y-1">
+                    <div v-for="service in result.lightningServices" :key="service.name" class="text-xs">
+                      <div class="flex justify-between items-center">
+                        <span class="text-gray-600">
+                          <template v-if="getServiceUrl(service.name)">
+                            <a :href="getServiceUrl(service.name)" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-800">
+                              {{ service.name }}
+                            </a>
+                            <span aria-hidden="true">:</span>
+                          </template>
+                          <template v-else>
+                            {{ service.name }}:
+                          </template>
+                        </span>
+                        <span class="font-medium">{{ service.rate }}%</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -205,6 +228,8 @@ const bitcoinPrice = ref(null)
 const isLoading = ref(false)
 const error = ref(null)
 const results = ref([])
+const isMobile = ref(false)
+const detailsOpenById = ref({})
 
 // Quick amount presets
 const quickAmounts = ref([
@@ -259,6 +284,22 @@ const maxSavings = computed(() => {
 // Methods
 const formatPrice = (price) => {
   return new Intl.NumberFormat('ko-KR').format(Math.round(price))
+}
+
+const getLightningHeader = (services) => {
+  if (!services || services.length === 0) return '라이트닝 서비스'
+  const names = services.map(s => (s?.name || '')).join(' ').toLowerCase()
+  if (names.includes('boltz') || names.includes('coinos')) {
+    return '라이트닝 & 온체인 출금'
+  }
+  return '라이트닝 서비스'
+}
+
+const getServiceUrl = (name) => {
+  const n = (name || '').toLowerCase()
+  if (n.includes('boltz')) return 'https://boltz.exchange'
+  if (n.includes('coinos')) return 'https://coinos.io'
+  return null
 }
 
 const getPlaceholder = () => {
@@ -363,7 +404,7 @@ const calculateFees = () => {
       }
     ],
     withdrawalFees: [{
-      name: 'OKX 온체인',
+      name: 'OKX 온체인 개인지갑',
       amount: withdrawalFees.value.okx_onchain,
       amountKrw: withdrawalFees.value.okx_onchain * bitcoinPrice.value
     }],
@@ -393,7 +434,7 @@ const calculateFees = () => {
       }
     ],
     withdrawalFees: [{
-      name: '바이낸스 온체인',
+      name: '바이낸스 온체인 개인지갑',
       amount: withdrawalFees.value.binance_onchain,
       amountKrw: withdrawalFees.value.binance_onchain * bitcoinPrice.value
     }],
@@ -549,10 +590,26 @@ const calculateFees = () => {
   })
 
   results.value = newResults
+  // Initialize detail toggle states for new results on mobile
+  if (isMobile.value) {
+    const map = {}
+    for (const r of newResults) map[r.id] = false
+    detailsOpenById.value = map
+  }
+}
+
+const toggleDetails = (id) => {
+  detailsOpenById.value[id] = !detailsOpenById.value[id]
 }
 
 // Initialize data
 onMounted(async () => {
+  // Detect mobile viewport
+  const mq = window.matchMedia('(max-width: 767px)')
+  const updateMobile = () => { isMobile.value = mq.matches }
+  updateMobile()
+  try { mq.addEventListener('change', updateMobile) } catch (_) { mq.addListener(updateMobile) }
+
   await fetchBitcoinPrice()
   await loadData()
 

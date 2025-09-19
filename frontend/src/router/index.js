@@ -56,7 +56,7 @@ const routes = [
     path: '/admin',
     name: 'admin',
     component: AdminPage,
-    meta: { requiresNickname: true }
+    meta: { requiresNickname: true, requiresAdmin: true }
   }
 ]
 
@@ -68,9 +68,13 @@ const router = createRouter({
 // Navigation guard to handle nickname requirement
 router.beforeEach((to, from, next) => {
   const nickname = localStorage.getItem('nickname')
+  const isAdmin = nickname === 'admin' && localStorage.getItem('isAdmin') === 'true'
 
   if (to.meta.requiresNickname && !nickname) {
     next('/nickname')
+  } else if (to.meta.requiresAdmin && !isAdmin) {
+    // Prevent non-admin access to admin route
+    next('/mining')
   } else if (to.meta.requiresNoNickname && nickname) {
     next('/mining')
   } else {

@@ -77,6 +77,9 @@ if [ -f "$BACKEND_DIR/requirements.txt" ]; then
   echo "Running migrations..."
   python manage.py migrate --noinput
 
+  echo "Seeding initial data (fees, services, mnemonics) if empty..."
+  python init_defaults.py || true
+
   echo "Collecting static files (best-effort)..."
   # collectstatic may be skipped if STATIC_ROOT isn't configured; ignore failures
   python manage.py collectstatic --noinput || true
