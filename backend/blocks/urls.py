@@ -15,4 +15,13 @@ urlpatterns = [
     path('mnemonic/generate', views.generate_mnemonic_view, name='generate_mnemonic'),
     path('mnemonic/save', views.save_mnemonic_view, name='save_mnemonic'),
     path('mnemonic/admin', views.admin_mnemonics_view, name='admin_mnemonics'),
+    # Exchange rate endpoints
+    path('exchange-rates', views.exchange_rates_view, name='exchange_rates'),
+    path('exchange-rates/admin', views.admin_exchange_rates_view, name='admin_exchange_rates'),
+    # Withdrawal fee endpoints
+    path('withdrawal-fees', views.withdrawal_fees_view, name='withdrawal_fees'),
+    path('withdrawal-fees/admin', views.admin_withdrawal_fees_view, name='admin_withdrawal_fees'),
+    # Lightning service endpoints
+    path('lightning-services', views.lightning_services_view, name='lightning_services'),
+    path('lightning-services/admin', views.admin_lightning_services_view, name='admin_lightning_services'),
 ]

@@ -3,6 +3,8 @@ import Learn from '../pages/learn/Learn.vue'
 import BitcoinMining from '../pages/mining/BitcoinMining.vue'
 import UTXOPage from '../pages/UTXOPage.vue'
 import WalletPage from '../pages/WalletPage.vue'
+import FeePage from '../pages/FeePage.vue'
+import AdminPage from '../pages/AdminPage.vue'
 import NicknameSetup from '../pages/NicknameSetup.vue'
 
 const routes = [
@@ -42,6 +44,18 @@ const routes = [
     path: '/wallet',
     name: 'wallet',
     component: WalletPage,
+    meta: { requiresNickname: true }
+  },
+  {
+    path: '/fee',
+    name: 'fee',
+    component: FeePage,
+    meta: { requiresNickname: true }
+  },
+  {
+    path: '/admin',
+    name: 'admin',
+    component: AdminPage,
     meta: { requiresNickname: true }
   }
 ]

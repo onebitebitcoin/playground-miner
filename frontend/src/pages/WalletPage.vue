@@ -6,14 +6,6 @@
       <p class="text-gray-600">니모닉을 관리하고 새로운 지갑을 생성하세요</p>
     </div>
 
-    <!-- Admin Button (only for admin user) -->
-    <div v-if="isAdmin" class="mb-6">
-      <button @click="showAdminPanel = true"
-              class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
-        관리자 패널 열기
-      </button>
-    </div>
-
     <!-- Main Content -->
     <div class="grid md:grid-cols-2 gap-6">
       <!-- Step 1: Request Existing Mnemonic -->
@@ -170,159 +162,17 @@
     <div v-if="errorMessage" class="fixed bottom-4 right-4 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg">
       {{ errorMessage }}
     </div>
-
-    <!-- Admin Panel Modal -->
-    <div v-if="showAdminPanel" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div class="bg-white rounded-xl shadow-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
-        <!-- Admin Panel Header -->
-        <div class="flex justify-between items-center p-6 border-b">
-          <h2 class="text-xl font-semibold text-gray-900">관리자 패널</h2>
-          <button @click="showAdminPanel = false" class="text-gray-500 hover:text-gray-700">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <!-- Admin Panel Content -->
-        <div class="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-          <div class="grid md:grid-cols-2 gap-6">
-            <!-- Mnemonic Pool Management -->
-            <div class="space-y-4">
-              <h3 class="text-lg font-semibold text-gray-900">니모닉 풀 관리</h3>
-
-              <!-- Add Multiple Mnemonics -->
-              <div class="bg-blue-50 p-4 rounded-lg">
-                <h4 class="font-medium text-blue-800 mb-3">니모닉 풀 추가</h4>
-                <div class="space-y-3">
-                  <div class="flex gap-2">
-                    <input v-model="mnemonicCount"
-                           type="number"
-                           min="1"
-                           max="50"
-                           placeholder="생성할 개수"
-                           class="flex-1 px-3 py-2 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                    <button @click="addMnemonicPool"
-                            :disabled="loading || !mnemonicCount || mnemonicCount < 1"
-                            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                      {{ loading ? '생성 중...' : '풀 추가' }}
-                    </button>
-                  </div>
-                  <p class="text-sm text-blue-600">자동으로 생성된 니모닉을 풀에 추가합니다</p>
-                </div>
-              </div>
-
-              <!-- Manual Mnemonic Add -->
-              <div class="bg-green-50 p-4 rounded-lg">
-                <h4 class="font-medium text-green-800 mb-3">개별 니모닉 추가</h4>
-                <div class="space-y-3">
-                  <!-- Individual word inputs -->
-                  <div class="grid grid-cols-3 gap-2">
-                    <div v-for="i in 12" :key="i" class="relative">
-                      <label :for="`admin-word-${i}`" class="block text-xs font-medium text-green-600 mb-1">
-                        {{ i }}
-                      </label>
-                      <input
-                        :id="`admin-word-${i}`"
-                        v-model="adminMnemonicWords[i-1]"
-                        @input="updateAdminManualMnemonic"
-                        @paste="handleAdminPaste($event, i-1)"
-                        type="text"
-                        :placeholder="`단어 ${i}`"
-                        class="w-full px-2 py-2 text-sm border border-green-200 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                        :class="{ 'border-red-300': manualPoolError }"
-                      />
-                    </div>
-                  </div>
-
-                  <!-- Alternative textarea input -->
-                  <div class="border-t border-green-200 pt-3">
-                    <label class="block text-sm font-medium text-green-700 mb-2">
-                      또는 한번에 입력:
-                    </label>
-                    <textarea v-model="manualPoolMnemonicText"
-                              @input="updateAdminFromTextarea"
-                              placeholder="12개의 영어 단어를 공백으로 구분하여 입력"
-                              class="w-full h-16 px-3 py-2 text-sm border border-green-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none resize-none"
-                              :class="{ 'border-red-300': manualPoolError }"></textarea>
-                  </div>
-
-                  <div v-if="manualPoolError" class="text-sm text-red-600">{{ manualPoolError }}</div>
-
-                  <button @click="addManualMnemonicToPool"
-                          :disabled="loading || !isValidAdminMnemonicInput"
-                          class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
-                    {{ loading ? '추가 중...' : '풀에 추가' }}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Stored Mnemonics List -->
-            <div class="space-y-4">
-              <div class="flex justify-between items-center">
-                <h3 class="text-lg font-semibold text-gray-900">저장된 니모닉 목록</h3>
-                <button @click="loadAdminData"
-                        :disabled="loading"
-                        class="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50">
-                  새로고침
-                </button>
-              </div>
-
-              <div class="bg-gray-50 p-4 rounded-lg max-h-96 overflow-y-auto">
-                <div v-if="adminMnemonics.length === 0" class="text-gray-500 text-center py-8">
-                  저장된 니모닉이 없습니다
-                </div>
-                <div v-else class="space-y-2">
-                  <div v-for="mnemonic in adminMnemonics" :key="mnemonic.id"
-                       class="flex justify-between items-center p-3 bg-white rounded border">
-                    <div class="flex-1">
-                      <div class="flex items-center gap-2">
-                        <span class="font-medium">{{ mnemonic.username }}</span>
-                        <span v-if="mnemonic.is_assigned"
-                              class="px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded">
-                          할당됨
-                        </span>
-                        <span v-else
-                              class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">
-                          사용가능
-                        </span>
-                      </div>
-                      <span class="text-sm text-gray-500">{{ formatDate(mnemonic.created_at) }}</span>
-                    </div>
-                    <button @click="showMnemonicInAdmin(mnemonic.mnemonic)"
-                            class="text-sm text-blue-600 hover:text-blue-800">
-                      보기
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Pool Statistics -->
-              <div class="bg-yellow-50 p-4 rounded-lg">
-                <h4 class="font-medium text-yellow-800 mb-2">통계</h4>
-                <div class="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span class="text-yellow-700">전체 니모닉:</span>
-                    <span class="font-medium ml-1">{{ adminMnemonics.length }}</span>
-                  </div>
-                  <div>
-                    <span class="text-yellow-700">사용 가능:</span>
-                    <span class="font-medium ml-1">{{ availableMnemonicsCount }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import QRCode from 'qrcode'
+import {
+  apiRequestMnemonic,
+  apiGenerateMnemonic,
+  apiSaveMnemonic
+} from '../api'
 
 // State
 const loading = ref(false)
@@ -339,118 +189,40 @@ const qrCodeContainer = ref(null)
 const successMessage = ref('')
 const errorMessage = ref('')
 
-// Admin panel state
-const showAdminPanel = ref(false)
-const mnemonicCount = ref(10)
-const manualPoolMnemonic = ref('')
-const manualPoolMnemonicText = ref('')
-const adminMnemonicWords = ref(Array(12).fill(''))
-const manualPoolError = ref('')
-
-// Admin state
-const isAdmin = computed(() => {
-  const nickname = localStorage.getItem('nickname')
-  const adminStatus = localStorage.getItem('isAdmin')
-  return nickname === 'admin' && adminStatus === 'true'
-})
-const adminMnemonics = ref([])
-
-// Computed for available mnemonics count
-const availableMnemonicsCount = computed(() => {
-  return adminMnemonics.value.filter(m => !m.is_assigned).length
-})
-
 // Computed for valid mnemonic input
 const isValidMnemonicInput = computed(() => {
   const words = mnemonicWords.value.filter(w => w.trim().length > 0)
   return words.length === 12 || (manualMnemonicText.value.trim().split(/\s+/).length === 12)
 })
 
-// Computed for valid admin mnemonic input
-const isValidAdminMnemonicInput = computed(() => {
-  const words = adminMnemonicWords.value.filter(w => w.trim().length > 0)
-  return words.length === 12 || (manualPoolMnemonicText.value.trim().split(/\s+/).length === 12)
-})
-
-// Get current username
+// Utility functions
 const getCurrentUsername = () => {
   return localStorage.getItem('nickname') || 'anonymous'
 }
-
-import {
-  apiRequestMnemonic,
-  apiGenerateMnemonic,
-  apiSaveMnemonic,
-  apiGetAdminMnemonics
-} from '../api'
 
 // Mnemonic validation
 const validateMnemonic = (mnemonic) => {
   const words = mnemonic.trim().split(/\s+/)
   if (words.length !== 12) {
-    return '정확히 12개의 단어를 입력해야 합니다'
+    return '니모닉은 정확히 12개의 단어로 구성되어야 합니다'
   }
 
-  const englishWordPattern = /^[a-zA-Z]+$/
-  for (let word of words) {
-    if (!englishWordPattern.test(word)) {
-      return '모든 단어는 영어로 입력해야 합니다'
+  for (const word of words) {
+    if (!/^[a-z]+$/.test(word)) {
+      return '모든 단어는 영어 소문자여야 합니다'
     }
   }
 
   return null
 }
 
-// Actions
-const requestExistingMnemonic = async () => {
-  loading.value = true
-  try {
-    const response = await apiRequestMnemonic()
-    if (response.success) {
-      assignedMnemonic.value = response.mnemonic
-      showSuccessMessage('기존 니모닉이 할당되었습니다')
-    } else {
-      showErrorMessage(response.error || '니모닉 요청에 실패했습니다')
-    }
-  } catch (error) {
-    showErrorMessage('네트워크 오류가 발생했습니다')
-  } finally {
-    loading.value = false
-  }
-}
-
-const generateNewMnemonic = async () => {
-  loading.value = true
-  try {
-    const response = await apiGenerateMnemonic()
-    if (response.success) {
-      newMnemonic.value = response.mnemonic
-      const username = getCurrentUsername()
-      const saveResponse = await apiSaveMnemonic(response.mnemonic, username)
-      if (saveResponse.success) {
-        showSuccessMessage('새 니모닉이 생성되고 저장되었습니다')
-      } else {
-        showErrorMessage(saveResponse.error || '니모닉 저장에 실패했습니다')
-      }
-    } else {
-      showErrorMessage(response.error || '니모닉 생성에 실패했습니다')
-    }
-  } catch (error) {
-    showErrorMessage('네트워크 오류가 발생했습니다')
-  } finally {
-    loading.value = false
-  }
-}
-
-// Mode switching function
+// Generation mode switching
 const switchGenerationMode = (mode) => {
   generationMode.value = mode
-  // Clear the new mnemonic display when switching modes
-  newMnemonic.value = ''
   mnemonicError.value = ''
 }
 
-// Input handling functions
+// Manual mnemonic input handling
 const updateManualMnemonic = () => {
   const words = mnemonicWords.value.filter(w => w.trim().length > 0)
   manualMnemonic.value = words.join(' ')
@@ -468,49 +240,52 @@ const updateFromTextarea = () => {
 }
 
 const handlePaste = (event, startIndex) => {
-  const pasteData = event.clipboardData.getData('text')
-  const words = pasteData.trim().split(/\s+/)
-
-  if (words.length >= 12) {
-    event.preventDefault()
-
-    for (let i = 0; i < 12; i++) {
-      mnemonicWords.value[i] = words[i] || ''
-    }
-
-    updateManualMnemonic()
-  }
-}
-
-// Admin panel input handling functions
-const updateAdminManualMnemonic = () => {
-  const words = adminMnemonicWords.value.filter(w => w.trim().length > 0)
-  manualPoolMnemonic.value = words.join(' ')
-  manualPoolMnemonicText.value = adminMnemonicWords.value.join(' ').trim()
-}
-
-const updateAdminFromTextarea = () => {
-  const words = manualPoolMnemonicText.value.trim().split(/\s+/).filter(w => w.length > 0)
+  event.preventDefault()
+  const pastedText = (event.clipboardData || window.clipboardData).getData('text')
+  const words = pastedText.trim().split(/\s+/).filter(w => w.length > 0)
 
   for (let i = 0; i < 12; i++) {
-    adminMnemonicWords.value[i] = words[i] || ''
+    mnemonicWords.value[i] = words[i] || ''
   }
 
-  manualPoolMnemonic.value = words.slice(0, 12).join(' ')
+  updateManualMnemonic()
 }
 
-const handleAdminPaste = (event, startIndex) => {
-  const pasteData = event.clipboardData.getData('text')
-  const words = pasteData.trim().split(/\s+/)
+// API functions
+const requestExistingMnemonic = async () => {
+  loading.value = true
+  try {
+    const username = getCurrentUsername()
+    const response = await apiRequestMnemonic(username)
 
-  if (words.length >= 12) {
-    event.preventDefault()
-
-    for (let i = 0; i < 12; i++) {
-      adminMnemonicWords.value[i] = words[i] || ''
+    if (response.ok && response.mnemonic) {
+      assignedMnemonic.value = response.mnemonic
+      showSuccessMessage('기존 니모닉이 할당되었습니다')
+    } else {
+      showErrorMessage(response.error || '사용 가능한 니모닉이 없습니다')
     }
+  } catch (error) {
+    showErrorMessage('네트워크 오류가 발생했습니다')
+  } finally {
+    loading.value = false
+  }
+}
 
-    updateAdminManualMnemonic()
+const generateNewMnemonic = async () => {
+  loading.value = true
+  try {
+    const response = await apiGenerateMnemonic()
+
+    if (response.ok && response.mnemonic) {
+      newMnemonic.value = response.mnemonic
+      showSuccessMessage('새 니모닉이 생성되었습니다')
+    } else {
+      showErrorMessage('니모닉 생성에 실패했습니다')
+    }
+  } catch (error) {
+    showErrorMessage('네트워크 오류가 발생했습니다')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -527,33 +302,38 @@ const saveManualMnemonic = async () => {
   loading.value = true
   try {
     const username = getCurrentUsername()
-    const response = await apiSaveMnemonic(finalMnemonic, username)
-    if (response.success) {
+    const response = await apiSaveMnemonic(username, finalMnemonic)
+
+    if (response.ok) {
       newMnemonic.value = finalMnemonic
+      showSuccessMessage('니모닉이 저장되었습니다')
+
+      // Clear inputs
       mnemonicWords.value = Array(12).fill('')
       manualMnemonicText.value = ''
       manualMnemonic.value = ''
-      showSuccessMessage(response.message || '니모닉이 저장되었습니다')
     } else {
-      showErrorMessage(response.error || '니모닉 저장에 실패했습니다')
+      mnemonicError.value = response.error || '니모닉 저장에 실패했습니다'
     }
   } catch (error) {
-    showErrorMessage('네트워크 오류가 발생했습니다')
+    mnemonicError.value = '네트워크 오류가 발생했습니다'
   } finally {
     loading.value = false
   }
 }
 
+// QR Code functionality
 const showQRCode = async (mnemonic) => {
   currentMnemonic.value = mnemonic
   showQR.value = true
 
   await nextTick()
+
   if (qrCodeContainer.value) {
     qrCodeContainer.value.innerHTML = ''
+
     try {
-      const canvas = document.createElement('canvas')
-      await QRCode.toCanvas(canvas, mnemonic, {
+      const canvas = await QRCode.toCanvas(mnemonic, {
         width: 200,
         margin: 2,
         color: {
@@ -564,7 +344,7 @@ const showQRCode = async (mnemonic) => {
       qrCodeContainer.value.appendChild(canvas)
     } catch (error) {
       const placeholder = document.createElement('div')
-      placeholder.className = 'w-48 h-48 bg-gray-200 flex items-center justify-center text-gray-500 text-sm'
+      placeholder.className = 'text-red-500 text-center p-4'
       placeholder.textContent = 'QR 코드 생성 실패'
       qrCodeContainer.value.appendChild(placeholder)
     }
@@ -577,107 +357,6 @@ const copyToClipboard = async (text) => {
     showSuccessMessage('클립보드에 복사되었습니다')
   } catch (error) {
     showErrorMessage('복사에 실패했습니다')
-  }
-}
-
-const loadAdminData = async () => {
-  if (!isAdmin.value) return
-
-  loading.value = true
-  try {
-    const username = getCurrentUsername()
-    const response = await apiGetAdminMnemonics(username)
-    if (response.success) {
-      adminMnemonics.value = response.mnemonics
-    } else {
-      showErrorMessage(response.error || '관리자 데이터 로드에 실패했습니다')
-    }
-  } catch (error) {
-    showErrorMessage('네트워크 오류가 발생했습니다')
-  } finally {
-    loading.value = false
-  }
-}
-
-const showMnemonicInAdmin = (mnemonic) => {
-  alert(`니모닉: ${mnemonic}`)
-}
-
-// Admin panel functions
-const addMnemonicPool = async () => {
-  const count = parseInt(mnemonicCount.value)
-  if (!count || count < 1 || count > 50) {
-    showErrorMessage('1-50 사이의 숫자를 입력하세요')
-    return
-  }
-
-  loading.value = true
-  try {
-    let successCount = 0
-    const poolUsername = `pool_${Date.now()}`
-
-    for (let i = 0; i < count; i++) {
-      const response = await apiGenerateMnemonic()
-      if (response.success) {
-        const saveResponse = await apiSaveMnemonic(response.mnemonic, `${poolUsername}_${i + 1}`)
-        if (saveResponse.success) {
-          successCount++
-        }
-      }
-    }
-
-    if (successCount > 0) {
-      showSuccessMessage(`${successCount}개의 니모닉이 풀에 추가되었습니다`)
-      await loadAdminData()
-      mnemonicCount.value = 10
-    } else {
-      showErrorMessage('니모닉 풀 추가에 실패했습니다')
-    }
-  } catch (error) {
-    showErrorMessage('네트워크 오류가 발생했습니다')
-  } finally {
-    loading.value = false
-  }
-}
-
-const addManualMnemonicToPool = async () => {
-  manualPoolError.value = ''
-
-  const finalMnemonic = manualPoolMnemonicText.value.trim() || adminMnemonicWords.value.join(' ').trim()
-  const error = validateMnemonic(finalMnemonic)
-  if (error) {
-    manualPoolError.value = error
-    return
-  }
-
-  loading.value = true
-  try {
-    const poolUsername = `manual_pool_${Date.now()}`
-    const response = await apiSaveMnemonic(finalMnemonic, poolUsername)
-    if (response.success) {
-      showSuccessMessage('니모닉이 풀에 추가되었습니다')
-
-      // Clear all inputs
-      manualPoolMnemonic.value = ''
-      manualPoolMnemonicText.value = ''
-      adminMnemonicWords.value = Array(12).fill('')
-
-      await loadAdminData()
-    } else {
-      manualPoolError.value = response.error || '풀 추가에 실패했습니다'
-    }
-  } catch (error) {
-    manualPoolError.value = '네트워크 오류가 발생했습니다'
-  } finally {
-    loading.value = false
-  }
-}
-
-const formatDate = (dateString) => {
-  try {
-    return new Date(dateString).toLocaleString('ko-KR')
-  } catch {
-    return dateString
   }
 }
 
@@ -695,18 +374,4 @@ const showErrorMessage = (message) => {
     errorMessage.value = ''
   }, 3000)
 }
-
-// Load admin data on mount if admin
-onMounted(() => {
-  if (isAdmin.value) {
-    loadAdminData()
-  }
-})
-
-// Watch for admin panel open to refresh data
-watch(showAdminPanel, (newValue) => {
-  if (newValue && isAdmin.value) {
-    loadAdminData()
-  }
-})
 </script>

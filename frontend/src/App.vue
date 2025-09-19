@@ -135,11 +135,23 @@ import { apiInitReset } from './api'
 const router = useRouter()
 const route = useRoute()
 
-const menuItems = [
-  { key: 'mining', label: '비트코인 채굴' },
-  { key: 'utxo', label: 'UTXO' },
-  { key: 'wallet', label: '지갑' },
-]
+const menuItems = computed(() => {
+  const items = [
+    { key: 'mining', label: '비트코인 채굴' },
+    { key: 'utxo', label: 'UTXO' },
+    { key: 'wallet', label: '지갑' },
+    { key: 'fee', label: '수수료 계산' },
+  ]
+
+  // Add admin menu only for admin users
+  const nickname = localStorage.getItem('nickname')
+  const adminStatus = localStorage.getItem('isAdmin')
+  if (nickname === 'admin' && adminStatus === 'true') {
+    items.push({ key: 'admin', label: '관리자' })
+  }
+
+  return items
+})
 
 // Computed properties for routing
 const currentRouteName = computed(() => route.name || 'mining')

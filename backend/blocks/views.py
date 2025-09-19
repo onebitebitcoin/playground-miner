@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models import Max
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from .models import Block, Nickname, Mnemonic
+from .models import Block, Nickname, Mnemonic, ExchangeRate, WithdrawalFee, LightningService
 from .broadcast import broadcaster
 
 
@@ -345,3 +345,241 @@ def admin_mnemonics_view(request):
         'ok': True,
         'mnemonics': mnemonic_list
     })
+
+
+def is_admin(request):
+    """Check if user has admin privileges"""
+    username = request.GET.get('username', '') if request.method == 'GET' else request.POST.get('username', '')
+    return username == 'admin'
+
+
+@csrf_exempt
+def exchange_rates_view(request):
+    """Get all exchange rates"""
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+
+    rates = ExchangeRate.objects.all()
+    rates_list = [rate.as_dict() for rate in rates]
+
+    return JsonResponse({
+        'ok': True,
+        'rates': rates_list
+    })
+
+
+@csrf_exempt
+def admin_exchange_rates_view(request):
+    """Admin endpoint to manage exchange rates"""
+    if not is_admin(request):
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+
+    if request.method == 'GET':
+        # Get all exchange rates for admin panel
+        rates = ExchangeRate.objects.all()
+        rates_list = [rate.as_dict() for rate in rates]
+        return JsonResponse({
+            'ok': True,
+            'rates': rates_list
+        })
+
+    elif request.method == 'POST':
+        # Update exchange rate
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+        exchange = data.get('exchange')
+        fee_rate = data.get('fee_rate')
+        is_event = data.get('is_event', False)
+        description = data.get('description', '')
+
+        if not exchange or fee_rate is None:
+            return JsonResponse({'ok': False, 'error': 'Exchange and fee_rate required'}, status=400)
+
+        try:
+            fee_rate = float(fee_rate)
+            if fee_rate < 0 or fee_rate > 100:
+                return JsonResponse({'ok': False, 'error': 'Fee rate must be between 0 and 100'}, status=400)
+        except (ValueError, TypeError):
+            return JsonResponse({'ok': False, 'error': 'Invalid fee rate'}, status=400)
+
+        try:
+            # Update or create exchange rate
+            exchange_rate, created = ExchangeRate.objects.update_or_create(
+                exchange=exchange,
+                defaults={
+                    'fee_rate': fee_rate,
+                    'is_event': is_event,
+                    'description': description
+                }
+            )
+
+            return JsonResponse({
+                'ok': True,
+                'rate': exchange_rate.as_dict(),
+                'created': created
+            })
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error updating exchange rate {exchange}: {e}")
+            return JsonResponse({'ok': False, 'error': '수수료 업데이트 중 오류가 발생했습니다'}, status=500)
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def withdrawal_fees_view(request):
+    """Get all withdrawal fees"""
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+
+    fees = WithdrawalFee.objects.all()
+    fees_list = [fee.as_dict() for fee in fees]
+
+    return JsonResponse({
+        'ok': True,
+        'fees': fees_list
+    })
+
+
+@csrf_exempt
+def lightning_services_view(request):
+    """Get all lightning services"""
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+
+    services = LightningService.objects.all()
+    services_list = [service.as_dict() for service in services]
+
+    return JsonResponse({
+        'ok': True,
+        'services': services_list
+    })
+
+
+@csrf_exempt
+def admin_withdrawal_fees_view(request):
+    """Admin endpoint to manage withdrawal fees"""
+    if not is_admin(request):
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+
+    if request.method == 'GET':
+        # Get all withdrawal fees for admin panel
+        fees = WithdrawalFee.objects.all()
+        fees_list = [fee.as_dict() for fee in fees]
+        return JsonResponse({
+            'ok': True,
+            'fees': fees_list
+        })
+
+    elif request.method == 'POST':
+        # Update withdrawal fee
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+        exchange = data.get('exchange')
+        withdrawal_type = data.get('withdrawal_type')
+        fee_btc = data.get('fee_btc')
+        description = data.get('description', '')
+
+        if not exchange or not withdrawal_type or fee_btc is None:
+            return JsonResponse({'ok': False, 'error': 'Exchange, withdrawal_type, and fee_btc required'}, status=400)
+
+        try:
+            fee_btc = float(fee_btc)
+            if fee_btc < 0:
+                return JsonResponse({'ok': False, 'error': 'Fee must be non-negative'}, status=400)
+        except (ValueError, TypeError):
+            return JsonResponse({'ok': False, 'error': 'Invalid fee amount'}, status=400)
+
+        try:
+            # Update or create withdrawal fee
+            withdrawal_fee, created = WithdrawalFee.objects.update_or_create(
+                exchange=exchange,
+                withdrawal_type=withdrawal_type,
+                defaults={
+                    'fee_btc': fee_btc,
+                    'description': description
+                }
+            )
+
+            return JsonResponse({
+                'ok': True,
+                'fee': withdrawal_fee.as_dict(),
+                'created': created
+            })
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error updating withdrawal fee {exchange}-{withdrawal_type}: {e}")
+            return JsonResponse({'ok': False, 'error': '출금 수수료 업데이트 중 오류가 발생했습니다'}, status=500)
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def admin_lightning_services_view(request):
+    """Admin endpoint to manage lightning services"""
+    if not is_admin(request):
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+
+    if request.method == 'GET':
+        # Get all lightning services for admin panel
+        services = LightningService.objects.all()
+        services_list = [service.as_dict() for service in services]
+        return JsonResponse({
+            'ok': True,
+            'services': services_list
+        })
+
+    elif request.method == 'POST':
+        # Update lightning service
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+        service = data.get('service')
+        fee_rate = data.get('fee_rate')
+        description = data.get('description', '')
+
+        if not service or fee_rate is None:
+            return JsonResponse({'ok': False, 'error': 'Service and fee_rate required'}, status=400)
+
+        try:
+            fee_rate = float(fee_rate)
+            if fee_rate < 0 or fee_rate > 100:
+                return JsonResponse({'ok': False, 'error': 'Fee rate must be between 0 and 100'}, status=400)
+        except (ValueError, TypeError):
+            return JsonResponse({'ok': False, 'error': 'Invalid fee rate'}, status=400)
+
+        try:
+            # Update or create lightning service
+            lightning_service, created = LightningService.objects.update_or_create(
+                service=service,
+                defaults={
+                    'fee_rate': fee_rate,
+                    'description': description
+                }
+            )
+
+            return JsonResponse({
+                'ok': True,
+                'service': lightning_service.as_dict(),
+                'created': created
+            })
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error updating lightning service {service}: {e}")
+            return JsonResponse({'ok': False, 'error': '라이트닝 서비스 업데이트 중 오류가 발생했습니다'}, status=500)
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)

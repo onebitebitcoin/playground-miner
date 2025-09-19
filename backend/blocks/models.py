@@ -90,3 +90,105 @@ class Mnemonic(models.Model):
             'is_assigned': self.is_assigned,
             'created_at': self.created_at.isoformat(),
         }
+
+
+class ExchangeRate(models.Model):
+    """Exchange fee rates for different trading platforms"""
+    EXCHANGE_CHOICES = [
+        ('upbit_btc', '업비트 비트코인'),
+        ('upbit_usdt', '업비트 USDT'),
+        ('bithumb', '빗썸'),
+        ('okx', 'OKX'),
+        ('binance', '바이낸스'),
+    ]
+
+    exchange = models.CharField(max_length=20, choices=EXCHANGE_CHOICES, unique=True)
+    fee_rate = models.DecimalField(max_digits=6, decimal_places=4)  # Support up to 99.9999%
+    is_event = models.BooleanField(default=False)  # Mark if this is a temporary event rate
+    description = models.TextField(blank=True, null=True)  # Additional notes
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['exchange']
+
+    def __str__(self):
+        event_indicator = " (이벤트)" if self.is_event else ""
+        return f"{self.get_exchange_display()}: {self.fee_rate}%{event_indicator}"
+
+    def as_dict(self):
+        return {
+            'exchange': self.exchange,
+            'exchange_name': self.get_exchange_display(),
+            'fee_rate': float(self.fee_rate),
+            'is_event': self.is_event,
+            'description': self.description,
+            'updated_at': self.updated_at.isoformat(),
+        }
+
+
+class WithdrawalFee(models.Model):
+    """Withdrawal fees for different exchanges and methods"""
+    EXCHANGE_CHOICES = [
+        ('okx', 'OKX'),
+        ('binance', '바이낸스'),
+    ]
+
+    WITHDRAWAL_TYPE_CHOICES = [
+        ('onchain', '온체인'),
+        ('lightning', '라이트닝'),
+    ]
+
+    exchange = models.CharField(max_length=20, choices=EXCHANGE_CHOICES)
+    withdrawal_type = models.CharField(max_length=20, choices=WITHDRAWAL_TYPE_CHOICES)
+    fee_btc = models.DecimalField(max_digits=10, decimal_places=8)  # Fee in BTC
+    description = models.TextField(blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('exchange', 'withdrawal_type')
+        ordering = ['exchange', 'withdrawal_type']
+
+    def __str__(self):
+        return f"{self.get_exchange_display()} {self.get_withdrawal_type_display()}: {self.fee_btc} BTC"
+
+    def as_dict(self):
+        return {
+            'exchange': self.exchange,
+            'exchange_name': self.get_exchange_display(),
+            'withdrawal_type': self.withdrawal_type,
+            'withdrawal_type_name': self.get_withdrawal_type_display(),
+            'fee_btc': float(self.fee_btc),
+            'description': self.description,
+            'updated_at': self.updated_at.isoformat(),
+        }
+
+
+class LightningService(models.Model):
+    """Lightning network service fees"""
+    SERVICE_CHOICES = [
+        ('boltz', 'Boltz Exchange'),
+        ('coinos', 'Coinos'),
+    ]
+
+    service = models.CharField(max_length=20, choices=SERVICE_CHOICES, unique=True)
+    fee_rate = models.DecimalField(max_digits=6, decimal_places=4)  # Fee rate as percentage
+    description = models.TextField(blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['service']
+
+    def __str__(self):
+        return f"{self.get_service_display()}: {self.fee_rate}%"
+
+    def as_dict(self):
+        return {
+            'service': self.service,
+            'service_name': self.get_service_display(),
+            'fee_rate': float(self.fee_rate),
+            'description': self.description,
+            'updated_at': self.updated_at.isoformat(),
+        }

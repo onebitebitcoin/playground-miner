@@ -158,3 +158,161 @@ export async function apiGetAdminMnemonics(username) {
     return { success: false, error: '네트워크 오류' }
   }
 }
+
+// Exchange rates API functions
+export async function apiGetExchangeRates() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/exchange-rates`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, rates: data.rates, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiGetAdminExchangeRates(username) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/exchange-rates/admin?username=${encodeURIComponent(username)}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, rates: data.rates, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiUpdateExchangeRate(username, exchange, feeRate, isEvent, description) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/exchange-rates/admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        username,
+        exchange,
+        fee_rate: feeRate,
+        is_event: isEvent,
+        description
+      })
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, rate: data.rate, created: data.created, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+// Withdrawal Fees API
+export async function apiGetWithdrawalFees() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/withdrawal-fees`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, fees: data.fees, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiGetAdminWithdrawalFees(username) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/withdrawal-fees/admin?username=${encodeURIComponent(username)}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, fees: data.fees, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiUpdateWithdrawalFee(username, exchange, withdrawalType, feeBtc, description) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/withdrawal-fees/admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        username,
+        exchange,
+        withdrawal_type: withdrawalType,
+        fee_btc: feeBtc,
+        description
+      })
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, fee: data.fee, created: data.created, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+// Lightning Services API
+export async function apiGetLightningServices() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/lightning-services`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, services: data.services, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiGetAdminLightningServices(username) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/lightning-services/admin?username=${encodeURIComponent(username)}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, services: data.services, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiUpdateLightningService(username, service, feeRate, description) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/lightning-services/admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        username,
+        service,
+        fee_rate: feeRate,
+        description
+      })
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, service: data.service, created: data.created, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
