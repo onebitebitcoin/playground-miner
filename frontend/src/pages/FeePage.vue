@@ -389,8 +389,105 @@ const calculateFees = () => {
   const amount = getActualAmount()
   const newResults = []
 
-  // Scenarios ending in onchain personal wallet
-  // 1. 업비트 → OKX → 온체인 개인지갑
+  // Scenarios with direct BTC transfer from Korean exchanges to international exchanges
+  // 1. 업비트 BTC → 바이낸스 → 온체인 개인지갑
+  newResults.push({
+    id: 'upbit-btc-binance-onchain',
+    title: '업비트 BTC → 바이낸스 → 온체인 개인지갑',
+    description: '업비트 비트코인 직접 송금 → 바이낸스 → 온체인 개인지갑 출금',
+    exchanges: [
+      {
+        name: '업비트 (BTC)',
+        rate: feeRates.value.upbit_btc,
+        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : ''
+      }
+    ],
+    withdrawalFees: [
+      {
+        name: '업비트 BTC 송금',
+        amount: btcTransferFee,
+        amountKrw: btcTransferFee * bitcoinPrice.value
+      },
+      {
+        name: '바이낸스 온체인 개인지갑',
+        amount: withdrawalFees.value.binance_onchain,
+        amountKrw: withdrawalFees.value.binance_onchain * bitcoinPrice.value
+      }
+    ],
+    tradingFee: amount * (feeRates.value.upbit_btc / 100),
+    transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.binance_onchain * bitcoinPrice.value,
+    lightningFee: 0,
+    totalFee: 0,
+    actualAmount: 0,
+    feeRate: 0
+  })
+
+  // 2. 업비트 BTC → OKX → 온체인 개인지갑
+  newResults.push({
+    id: 'upbit-btc-okx-onchain',
+    title: '업비트 BTC → OKX → 온체인 개인지갑',
+    description: '업비트 비트코인 직접 송금 → OKX → 온체인 개인지갑 출금',
+    exchanges: [
+      {
+        name: '업비트 (BTC)',
+        rate: feeRates.value.upbit_btc,
+        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : ''
+      }
+    ],
+    withdrawalFees: [
+      {
+        name: '업비트 BTC 송금',
+        amount: btcTransferFee,
+        amountKrw: btcTransferFee * bitcoinPrice.value
+      },
+      {
+        name: 'OKX 온체인 개인지갑',
+        amount: withdrawalFees.value.okx_onchain,
+        amountKrw: withdrawalFees.value.okx_onchain * bitcoinPrice.value
+      }
+    ],
+    tradingFee: amount * (feeRates.value.upbit_btc / 100),
+    transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.okx_onchain * bitcoinPrice.value,
+    lightningFee: 0,
+    totalFee: 0,
+    actualAmount: 0,
+    feeRate: 0
+  })
+
+  // 3. 바이낸스 BTC → OKX → 온체인 개인지갑
+  newResults.push({
+    id: 'binance-btc-okx-onchain',
+    title: '바이낸스 BTC → OKX → 온체인 개인지갑',
+    description: '바이낸스 비트코인 직접 송금 → OKX → 온체인 개인지갑 출금',
+    exchanges: [
+      {
+        name: '바이낸스 (BTC)',
+        rate: feeRates.value.binance,
+        note: exchangeRatesInfo.value.binance?.is_event ? '한시적 이벤트' : ''
+      }
+    ],
+    withdrawalFees: [
+      {
+        name: '바이낸스 BTC 송금',
+        amount: withdrawalFees.value.binance_onchain,
+        amountKrw: withdrawalFees.value.binance_onchain * bitcoinPrice.value
+      },
+      {
+        name: 'OKX 온체인 개인지갑',
+        amount: withdrawalFees.value.okx_onchain,
+        amountKrw: withdrawalFees.value.okx_onchain * bitcoinPrice.value
+      }
+    ],
+    tradingFee: amount * (feeRates.value.binance / 100),
+    transferFee: withdrawalFees.value.binance_onchain * bitcoinPrice.value + withdrawalFees.value.okx_onchain * bitcoinPrice.value,
+    lightningFee: 0,
+    totalFee: 0,
+    actualAmount: 0,
+    feeRate: 0
+  })
+
+  // Scenarios ending in onchain personal wallet via USDT
+  // 4. 업비트 → OKX → 온체인 개인지갑
   newResults.push({
     id: 'upbit-usdt-okx-onchain',
     title: '업비트 → OKX → 온체인 개인지갑',
@@ -420,7 +517,7 @@ const calculateFees = () => {
     feeRate: 0
   })
 
-  // 2. 업비트 → 바이낸스 → 온체인 개인지갑
+  // 5. 업비트 → 바이낸스 → 온체인 개인지갑
   newResults.push({
     id: 'upbit-usdt-binance-onchain',
     title: '업비트 → 바이낸스 → 온체인 개인지갑',
@@ -450,7 +547,153 @@ const calculateFees = () => {
     feeRate: 0
   })
 
-  // 3. 업비트 → OKX → Boltz → 온체인 개인지갑
+  // Direct BTC transfer scenarios with Lightning
+  // 6. 업비트 BTC → 바이낸스 → Boltz → 온체인 개인지갑
+  newResults.push({
+    id: 'upbit-btc-binance-lightning-boltz',
+    title: '업비트 BTC → 바이낸스 → Boltz → 온체인 개인지갑',
+    description: '업비트 비트코인 직접 송금 → 바이낸스 → 라이트닝 → Boltz → 온체인 개인지갑',
+    exchanges: [
+      {
+        name: '업비트 (BTC)',
+        rate: feeRates.value.upbit_btc,
+        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : ''
+      }
+    ],
+    withdrawalFees: [
+      {
+        name: '업비트 BTC 송금',
+        amount: btcTransferFee,
+        amountKrw: btcTransferFee * bitcoinPrice.value
+      },
+      {
+        name: '바이낸스 라이트닝',
+        amount: withdrawalFees.value.binance_lightning,
+        amountKrw: withdrawalFees.value.binance_lightning * bitcoinPrice.value
+      }
+    ],
+    lightningServices: [{
+      name: 'Boltz Exchange',
+      rate: lightningServices.value.boltz
+    }],
+    tradingFee: amount * (feeRates.value.upbit_btc / 100),
+    transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.binance_lightning * bitcoinPrice.value,
+    lightningFee: amount * (lightningServices.value.boltz / 100),
+    totalFee: 0,
+    actualAmount: 0,
+    feeRate: 0
+  })
+
+  // 7. 업비트 BTC → 바이낸스 → Coinos → 온체인 개인지갑
+  newResults.push({
+    id: 'upbit-btc-binance-lightning-coinos',
+    title: '업비트 BTC → 바이낸스 → Coinos → 온체인 개인지갑',
+    description: '업비트 비트코인 직접 송금 → 바이낸스 → 라이트닝 → Coinos → 온체인 개인지갑',
+    exchanges: [
+      {
+        name: '업비트 (BTC)',
+        rate: feeRates.value.upbit_btc,
+        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : ''
+      }
+    ],
+    withdrawalFees: [
+      {
+        name: '업비트 BTC 송금',
+        amount: btcTransferFee,
+        amountKrw: btcTransferFee * bitcoinPrice.value
+      },
+      {
+        name: '바이낸스 라이트닝',
+        amount: withdrawalFees.value.binance_lightning,
+        amountKrw: withdrawalFees.value.binance_lightning * bitcoinPrice.value
+      }
+    ],
+    lightningServices: [{
+      name: 'Coinos',
+      rate: lightningServices.value.coinos
+    }],
+    tradingFee: amount * (feeRates.value.upbit_btc / 100),
+    transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.binance_lightning * bitcoinPrice.value,
+    lightningFee: amount * (lightningServices.value.coinos / 100),
+    totalFee: 0,
+    actualAmount: 0,
+    feeRate: 0
+  })
+
+  // 8. 업비트 BTC → OKX → Boltz → 온체인 개인지갑
+  newResults.push({
+    id: 'upbit-btc-okx-lightning-boltz',
+    title: '업비트 BTC → OKX → Boltz → 온체인 개인지갑',
+    description: '업비트 비트코인 직접 송금 → OKX → 라이트닝 → Boltz → 온체인 개인지갑',
+    exchanges: [
+      {
+        name: '업비트 (BTC)',
+        rate: feeRates.value.upbit_btc,
+        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : ''
+      }
+    ],
+    withdrawalFees: [
+      {
+        name: '업비트 BTC 송금',
+        amount: btcTransferFee,
+        amountKrw: btcTransferFee * bitcoinPrice.value
+      },
+      {
+        name: 'OKX 라이트닝',
+        amount: withdrawalFees.value.okx_lightning,
+        amountKrw: withdrawalFees.value.okx_lightning * bitcoinPrice.value
+      }
+    ],
+    lightningServices: [{
+      name: 'Boltz Exchange',
+      rate: lightningServices.value.boltz
+    }],
+    tradingFee: amount * (feeRates.value.upbit_btc / 100),
+    transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.okx_lightning * bitcoinPrice.value,
+    lightningFee: amount * (lightningServices.value.boltz / 100),
+    totalFee: 0,
+    actualAmount: 0,
+    feeRate: 0
+  })
+
+  // 9. 업비트 BTC → OKX → Coinos → 온체인 개인지갑
+  newResults.push({
+    id: 'upbit-btc-okx-lightning-coinos',
+    title: '업비트 BTC → OKX → Coinos → 온체인 개인지갑',
+    description: '업비트 비트코인 직접 송금 → OKX → 라이트닝 → Coinos → 온체인 개인지갑',
+    exchanges: [
+      {
+        name: '업비트 (BTC)',
+        rate: feeRates.value.upbit_btc,
+        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : ''
+      }
+    ],
+    withdrawalFees: [
+      {
+        name: '업비트 BTC 송금',
+        amount: btcTransferFee,
+        amountKrw: btcTransferFee * bitcoinPrice.value
+      },
+      {
+        name: 'OKX 라이트닝',
+        amount: withdrawalFees.value.okx_lightning,
+        amountKrw: withdrawalFees.value.okx_lightning * bitcoinPrice.value
+      }
+    ],
+    lightningServices: [{
+      name: 'Coinos',
+      rate: lightningServices.value.coinos
+    }],
+    tradingFee: amount * (feeRates.value.upbit_btc / 100),
+    transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.okx_lightning * bitcoinPrice.value,
+    lightningFee: amount * (lightningServices.value.coinos / 100),
+    totalFee: 0,
+    actualAmount: 0,
+    feeRate: 0
+  })
+
+  // USDT Lightning scenarios
+  // 10. 업비트 → OKX → Boltz → 온체인 개인지갑
   newResults.push({
     id: 'upbit-usdt-okx-lightning-boltz',
     title: '업비트 → OKX → Boltz → 온체인 개인지갑',
@@ -484,7 +727,7 @@ const calculateFees = () => {
     feeRate: 0
   })
 
-  // 4. 업비트 → OKX → Coinos → 온체인 개인지갑
+  // 11. 업비트 → OKX → Coinos → 온체인 개인지갑
   newResults.push({
     id: 'upbit-usdt-okx-lightning-coinos',
     title: '업비트 → OKX → Coinos → 온체인 개인지갑',
@@ -518,7 +761,7 @@ const calculateFees = () => {
     feeRate: 0
   })
 
-  // 5. 업비트 → 바이낸스 → Boltz → 온체인 개인지갑
+  // 12. 업비트 → 바이낸스 → Boltz → 온체인 개인지갑
   newResults.push({
     id: 'upbit-usdt-binance-lightning-boltz',
     title: '업비트 → 바이낸스 → Boltz → 온체인 개인지갑',
@@ -552,7 +795,7 @@ const calculateFees = () => {
     feeRate: 0
   })
 
-  // 6. 업비트 → 바이낸스 → Coinos → 온체인 개인지갑
+  // 13. 업비트 → 바이낸스 → Coinos → 온체인 개인지갑
   newResults.push({
     id: 'upbit-usdt-binance-lightning-coinos',
     title: '업비트 → 바이낸스 → Coinos → 온체인 개인지갑',
