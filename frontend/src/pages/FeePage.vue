@@ -87,25 +87,27 @@
               <!-- Mobile: toggle to show details -->
               <div class="md:hidden">
                 <button
-                  class="mt-1 mb-2 text-xs px-2 py-1 rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  class="mt-1 mb-2 text-sm px-3 py-2 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 w-full font-medium"
                   @click="toggleDetails(result.id)"
                 >
-                  {{ detailsOpenById[result.id] ? '상세 접기' : '상세 보기' }}
+                  {{ detailsOpenById[result.id] ? '📋 상세 수수료 접기' : '📋 상세 수수료 보기' }}
                 </button>
               </div>
 
               <!-- Details wrapper: always visible on md+, toggled on mobile -->
               <div v-show="!isMobile || detailsOpenById[result.id]">
                 <!-- Exchange Fee Details -->
-                <div v-if="result.exchanges && result.exchanges.length > 0" class="bg-gray-50 p-3 rounded-lg">
-                  <div class="text-xs font-medium text-gray-700 mb-2">거래소별 수수료율</div>
-                  <div class="space-y-1">
-                    <div v-for="exchange in result.exchanges" :key="exchange.name" class="text-xs">
-                      <div class="flex justify-between">
-                        <span class="text-gray-600">{{ exchange.name }}:</span>
-                        <span class="font-medium">{{ exchange.rate }}%</span>
+                <div v-if="result.exchanges && result.exchanges.length > 0" class="bg-gray-50 p-3 rounded-lg mb-3">
+                  <div class="text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                    🏪 거래소별 수수료율
+                  </div>
+                  <div class="space-y-2">
+                    <div v-for="exchange in result.exchanges" :key="exchange.name" class="text-sm">
+                      <div class="flex justify-between items-center">
+                        <span class="text-gray-700 font-medium">{{ exchange.name }}:</span>
+                        <span class="font-bold text-blue-600">{{ exchange.rate }}%</span>
                       </div>
-                      <div v-if="exchange.note && exchange.note !== ''" class="text-xs text-orange-600 font-medium mt-0.5">
+                      <div v-if="exchange.note && exchange.note !== ''" class="text-xs text-orange-600 font-medium mt-1 bg-orange-50 px-2 py-1 rounded">
                         ⚠️ {{ exchange.note }}
                       </div>
                     </div>
@@ -113,40 +115,42 @@
                 </div>
 
                 <!-- Withdrawal Fee Details -->
-                <div v-if="result.withdrawalFees && result.withdrawalFees.length > 0" class="bg-blue-50 p-3 rounded-lg">
-                  <div class="text-xs font-medium text-gray-700 mb-2">출금 수수료</div>
-                  <div class="space-y-1">
-                    <div v-for="fee in result.withdrawalFees" :key="fee.name" class="text-xs">
-                      <div class="flex justify-between">
-                        <span class="text-gray-600">{{ fee.name }}:</span>
-                        <span class="font-medium">{{ fee.amount }} BTC</span>
-                      </div>
-                      <div class="flex justify-between text-gray-500">
-                        <span></span>
-                        <span>({{ formatPrice(fee.amountKrw) }}원)</span>
+                <div v-if="result.withdrawalFees && result.withdrawalFees.length > 0" class="bg-blue-50 p-3 rounded-lg mb-3">
+                  <div class="text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                    💸 출금 수수료
+                  </div>
+                  <div class="space-y-2">
+                    <div v-for="fee in result.withdrawalFees" :key="fee.name" class="text-sm">
+                      <div class="flex justify-between items-center">
+                        <span class="text-gray-700 font-medium">{{ fee.name }}:</span>
+                        <div class="text-right">
+                          <div class="font-bold text-blue-600">{{ fee.amount }} BTC</div>
+                          <div class="text-xs text-gray-600">({{ formatPrice(fee.amountKrw) }}원)</div>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 <!-- Lightning Service Details -->
-                <div v-if="result.lightningServices && result.lightningServices.length > 0" class="bg-yellow-50 p-3 rounded-lg">
-                  <div class="text-xs font-medium text-gray-700 mb-2">{{ getLightningHeader(result.lightningServices) }}</div>
-                  <div class="space-y-1">
-                    <div v-for="service in result.lightningServices" :key="service.name" class="text-xs">
+                <div v-if="result.lightningServices && result.lightningServices.length > 0" class="bg-yellow-50 p-3 rounded-lg mb-3">
+                  <div class="text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                    ⚡ {{ getLightningHeader(result.lightningServices) }}
+                  </div>
+                  <div class="space-y-2">
+                    <div v-for="service in result.lightningServices" :key="service.name" class="text-sm">
                       <div class="flex justify-between items-center">
-                        <span class="text-gray-600">
+                        <span class="text-gray-700 font-medium">
                           <template v-if="getServiceUrl(service.name)">
-                            <a :href="getServiceUrl(service.name)" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-800">
+                            <a :href="getServiceUrl(service.name)" target="_blank" rel="noopener noreferrer" class="underline hover:text-blue-800 text-blue-600">
                               {{ service.name }}
-                            </a>
-                            <span aria-hidden="true">:</span>
+                            </a>:
                           </template>
                           <template v-else>
                             {{ service.name }}:
                           </template>
                         </span>
-                        <span class="font-medium">{{ service.rate }}%</span>
+                        <span class="font-bold text-yellow-600">{{ service.rate }}%</span>
                       </div>
                     </div>
                   </div>
@@ -154,30 +158,30 @@
               </div>
 
               <!-- Fee Breakdown -->
-              <div class="border-t pt-3">
-                <div class="text-sm">
-                  <div class="flex justify-between text-gray-600">
-                    <span>거래 수수료:</span>
-                    <span>{{ formatPrice(result.tradingFee) }}원</span>
+              <div class="border-t-2 border-gray-200 pt-4 mt-4">
+                <div class="space-y-2">
+                  <div class="flex justify-between text-gray-700 text-sm">
+                    <span class="font-medium">거래 수수료:</span>
+                    <span class="font-bold">{{ formatPrice(result.tradingFee) }}원</span>
                   </div>
-                  <div v-if="result.transferFee > 0" class="flex justify-between text-gray-600">
-                    <span>송금 수수료:</span>
-                    <span>{{ formatPrice(result.transferFee) }}원</span>
+                  <div v-if="result.transferFee > 0" class="flex justify-between text-gray-700 text-sm">
+                    <span class="font-medium">송금 수수료:</span>
+                    <span class="font-bold">{{ formatPrice(result.transferFee) }}원</span>
                   </div>
-                  <div v-if="result.lightningFee > 0" class="flex justify-between text-gray-600">
-                    <span>라이트닝 수수료:</span>
-                    <span>{{ formatPrice(result.lightningFee) }}원</span>
+                  <div v-if="result.lightningFee > 0" class="flex justify-between text-gray-700 text-sm">
+                    <span class="font-medium">라이트닝 수수료:</span>
+                    <span class="font-bold">{{ formatPrice(result.lightningFee) }}원</span>
                   </div>
-                  <div class="flex justify-between font-semibold text-gray-900 border-t pt-2 mt-2">
-                    <span>총 수수료:</span>
-                    <span>{{ formatPrice(result.totalFee) }}원</span>
+                  <div class="flex justify-between font-bold text-gray-900 border-t-2 border-gray-300 pt-3 mt-3 text-base">
+                    <span>💰 총 수수료:</span>
+                    <span class="text-red-600">{{ formatPrice(result.totalFee) }}원</span>
                   </div>
-                  <div class="flex justify-between text-sm text-green-600">
-                    <span>수령 가능 금액:</span>
+                  <div class="flex justify-between font-bold text-green-700 text-base bg-green-50 px-3 py-2 rounded-lg">
+                    <span>✅ 수령 가능 금액:</span>
                     <span>{{ formatPrice(result.actualAmount) }}원</span>
                   </div>
-                  <div class="text-center text-xs text-gray-500 mt-2">
-                    총 수수료율: {{ result.feeRate }}%
+                  <div class="text-center text-sm text-gray-600 mt-3 bg-gray-50 py-2 rounded-lg">
+                    📊 총 수수료율: <span class="font-bold">{{ result.feeRate }}%</span>
                   </div>
                 </div>
               </div>
