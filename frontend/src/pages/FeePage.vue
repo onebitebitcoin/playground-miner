@@ -62,6 +62,19 @@
       <div v-if="inputAmount && results.length > 0" class="space-y-6">
         <h2 class="text-xl font-semibold text-gray-900">수수료 비교 결과</h2>
 
+        <!-- Savings Information -->
+        <div v-if="maxSavings > 0" class="bg-green-50 border border-green-200 rounded-lg p-6">
+          <div class="flex items-center">
+            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+            </svg>
+            <div>
+              <h3 class="text-lg font-semibold text-green-800">절약 효과</h3>
+              <p class="text-green-700">최적 방법 선택 시 최대 {{ formatPrice(maxSavings) }}원을 절약할 수 있습니다!</p>
+            </div>
+          </div>
+        </div>
+
         <!-- Option Cards -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           <div
@@ -188,19 +201,6 @@
             </div>
           </div>
         </div>
-
-        <!-- Savings Information -->
-        <div v-if="maxSavings > 0" class="bg-green-50 border border-green-200 rounded-lg p-6">
-          <div class="flex items-center">
-            <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-            </svg>
-            <div>
-              <h3 class="text-lg font-semibold text-green-800">절약 효과</h3>
-              <p class="text-green-700">최적 방법 선택 시 최대 {{ formatPrice(maxSavings) }}원을 절약할 수 있습니다!</p>
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- Loading State -->
@@ -263,7 +263,7 @@ const withdrawalFees = ref({
 })
 
 const lightningServices = ref({
-  boltz: 0.1,
+  boltz: 0.5,
   coinos: 0.4
 })
 
@@ -454,23 +454,23 @@ const calculateFees = () => {
     feeRate: 0
   })
 
-  // 3. 바이낸스 BTC → OKX → 온체인 개인지갑
+  // 3. 빗썸 BTC → OKX → 온체인 개인지갑
   newResults.push({
-    id: 'binance-btc-okx-onchain',
-    title: '바이낸스 BTC → OKX → 온체인 개인지갑',
-    description: '바이낸스 비트코인 직접 송금 → OKX → 온체인 개인지갑 출금',
+    id: 'bithumb-btc-okx-onchain',
+    title: '빗썸 BTC → OKX → 온체인 개인지갑',
+    description: '빗썸 비트코인 직접 송금 → OKX → 온체인 개인지갑 출금',
     exchanges: [
       {
-        name: '바이낸스 (BTC)',
-        rate: feeRates.value.binance,
-        note: exchangeRatesInfo.value.binance?.is_event ? '한시적 이벤트' : ''
+        name: '빗썸 (BTC)',
+        rate: feeRates.value.bithumb,
+        note: exchangeRatesInfo.value.bithumb?.is_event ? '한시적 이벤트' : ''
       }
     ],
     withdrawalFees: [
       {
-        name: '바이낸스 BTC 송금',
-        amount: withdrawalFees.value.binance_onchain,
-        amountKrw: withdrawalFees.value.binance_onchain * bitcoinPrice.value
+        name: '빗썸 BTC 송금',
+        amount: btcTransferFee,
+        amountKrw: btcTransferFee * bitcoinPrice.value
       },
       {
         name: 'OKX 온체인 개인지갑',
@@ -478,8 +478,8 @@ const calculateFees = () => {
         amountKrw: withdrawalFees.value.okx_onchain * bitcoinPrice.value
       }
     ],
-    tradingFee: amount * (feeRates.value.binance / 100),
-    transferFee: withdrawalFees.value.binance_onchain * bitcoinPrice.value + withdrawalFees.value.okx_onchain * bitcoinPrice.value,
+    tradingFee: amount * (feeRates.value.bithumb / 100),
+    transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.okx_onchain * bitcoinPrice.value,
     lightningFee: 0,
     totalFee: 0,
     actualAmount: 0,

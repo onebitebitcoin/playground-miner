@@ -64,7 +64,7 @@ def seed_withdrawal_fees():
 
 def seed_lightning_services():
     defaults = [
-        { 'service': 'boltz',  'fee_rate': 0.1, 'description': 'Boltz 교환 수수료' },
+        { 'service': 'boltz',  'fee_rate': 0.5, 'description': 'Boltz 교환 수수료' },
         { 'service': 'coinos', 'fee_rate': 0.4, 'description': 'Coinos 수수료' },
     ]
     created = 0
