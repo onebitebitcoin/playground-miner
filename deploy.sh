@@ -143,6 +143,7 @@ WorkingDirectory=$BACKEND_DIR
 Environment="PATH=$BACKEND_DIR/venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONPATH=$BACKEND_DIR"
 Environment="DJANGO_SETTINGS_MODULE=playground_server.settings"
+Environment="ALLOWED_HOSTS=${SERVER_NAME},localhost,127.0.0.1"
 Environment="INIT_TOKEN=0000"
 ExecStart=$BACKEND_DIR/venv/bin/gunicorn \
   --workers ${GUNICORN_WORKERS:-2} \
