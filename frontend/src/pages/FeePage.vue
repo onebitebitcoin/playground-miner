@@ -60,7 +60,41 @@
 
       <!-- Results Section -->
       <div v-if="inputAmount && results.length > 0" class="space-y-6">
-        <h2 class="text-xl font-semibold text-gray-900">수수료 비교 결과</h2>
+        <div class="flex justify-between items-center">
+          <h2 class="text-xl font-semibold text-gray-900">수수료 비교 결과</h2>
+
+          <!-- View Mode Toggle -->
+          <div class="flex bg-gray-100 rounded-lg p-1">
+            <button
+              @click="viewMode = 'flow'"
+              :class="[
+                'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+                viewMode === 'flow'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              ]"
+            >
+              <svg class="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              흐름도
+            </button>
+            <button
+              @click="viewMode = 'cards'"
+              :class="[
+                'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+                viewMode === 'cards'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              ]"
+            >
+              <svg class="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              카드
+            </button>
+          </div>
+        </div>
 
         <!-- Savings Information -->
         <div v-if="maxSavings > 0" class="bg-green-50 border border-green-200 rounded-lg p-6">
@@ -75,20 +109,22 @@
           </div>
         </div>
 
-        <!-- Option Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <!-- Cards View -->
+        <div v-if="viewMode === 'cards'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           <div
             v-for="(result, index) in sortedResults"
             :key="result.id"
             :class="[
-              'bg-white rounded-2xl shadow-sm p-6 border transition-all hover:shadow-md',
-              index === 0 ? 'border-emerald-200 ring-2 ring-emerald-100 bg-emerald-50/30' : 'border-slate-200 hover:border-slate-300'
+              'bg-white rounded-lg shadow-sm p-6 border transition-all hover:shadow-md',
+              isOptimal(result)
+                ? 'border-emerald-200 ring-2 ring-emerald-100 bg-emerald-50/40'
+                : 'border-gray-200 hover:border-gray-300'
             ]"
           >
             <div class="flex items-start justify-between mb-5">
               <h3 class="text-lg font-semibold text-slate-900 leading-tight pr-2">{{ result.title }}</h3>
-              <div v-if="index === 0" class="bg-emerald-500 text-white px-3 py-1.5 rounded-full text-sm font-medium flex items-center gap-1.5 flex-shrink-0">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div v-if="isOptimal(result)" class="bg-emerald-600 text-white px-3 py-1.5 rounded-full text-sm font-medium flex items-center gap-1.5 flex-shrink-0 shadow-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                 </svg>
                 최적
@@ -127,33 +163,44 @@
                     <div v-for="exchange in result.exchanges" :key="exchange.name" class="text-sm">
                       <div class="flex justify-between items-center py-1">
                         <span class="text-slate-700 font-medium">{{ exchange.name }}</span>
-                        <span class="font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">{{ exchange.rate }}%</span>
+                        <span class="font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded-md">{{ exchange.rate }}%</span>
                       </div>
-                      <div v-if="exchange.note && exchange.note !== ''" class="text-xs text-amber-700 font-medium mt-1 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200 flex items-center gap-2">
-                        <svg class="w-3 h-3 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                        </svg>
-                        {{ exchange.note }}
+                      <div
+                        v-if="(exchange.note && exchange.note !== '') || (exchange.eventDetails && exchange.eventDetails !== '')"
+                        class="text-xs text-indigo-800 mt-2 bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-200"
+                      >
+                        <div class="font-semibold mb-1 flex items-center gap-2">
+                          <svg class="w-3 h-3 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          이벤트
+                        </div>
+                        <div class="whitespace-pre-line">
+                          <template v-if="exchange.note && exchange.note !== ''">{{ exchange.note }}</template>
+                          <template v-if="exchange.eventDetails && exchange.eventDetails !== ''">
+                            <span v-if="exchange.note && exchange.note !== ''"> — </span>{{ exchange.eventDetails }}
+                          </template>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 <!-- Withdrawal Fee Details -->
-                <div v-if="result.withdrawalFees && result.withdrawalFees.length > 0" class="bg-blue-50 p-4 rounded-xl mb-3 border border-blue-100">
-                  <div class="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                    <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div v-if="result.withdrawalFees && result.withdrawalFees.length > 0" class="bg-gray-50 p-4 rounded-lg mb-3 border border-gray-200">
+                  <div class="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
                     출금 수수료
                   </div>
                   <div class="space-y-3">
                     <div v-for="fee in result.withdrawalFees" :key="fee.name" class="text-sm">
-                      <div class="flex justify-between items-center py-2 px-3 bg-white rounded-lg border border-blue-100">
-                        <span class="text-slate-700 font-medium">{{ fee.name }}</span>
+                      <div class="flex justify-between items-center py-2 px-3 bg-white rounded-lg border border-gray-200">
+                        <span class="text-gray-700 font-medium">{{ fee.name }}</span>
                         <div class="text-right">
-                          <div class="font-bold text-blue-600">{{ fee.amount }} BTC</div>
-                          <div class="text-xs text-slate-500">({{ formatPrice(fee.amountKrw) }}원)</div>
+                          <div class="font-bold text-gray-900">{{ fee.amount }} BTC</div>
+                          <div class="text-xs text-gray-500">({{ formatPrice(fee.amountKrw) }}원)</div>
                         </div>
                       </div>
                     </div>
@@ -161,27 +208,39 @@
                 </div>
 
                 <!-- Lightning Service Details -->
-                <div v-if="result.lightningServices && result.lightningServices.length > 0" class="bg-amber-50 p-4 rounded-xl mb-3 border border-amber-100">
-                  <div class="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                    <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div v-if="result.lightningServices && result.lightningServices.length > 0" class="bg-gray-50 p-4 rounded-lg mb-3 border border-gray-200">
+                  <div class="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                     {{ getLightningHeader(result.lightningServices) }}
                   </div>
                   <div class="space-y-2">
                     <div v-for="service in result.lightningServices" :key="service.name" class="text-sm">
-                      <div class="flex justify-between items-center py-2 px-3 bg-white rounded-lg border border-amber-100">
-                        <span class="text-slate-700 font-medium">
-                          <template v-if="getServiceUrl(service.name)">
-                            <a :href="getServiceUrl(service.name)" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 underline decoration-2 underline-offset-2 transition-colors">
-                              {{ service.name }}
-                            </a>
-                          </template>
-                          <template v-else>
-                            {{ service.name }}
-                          </template>
-                        </span>
-                        <span class="font-bold text-amber-600 bg-amber-100 px-2 py-1 rounded-md">{{ service.rate }}%</span>
+                      <div class="flex justify-between items-center py-2 px-3 bg-white rounded-lg border border-gray-200">
+                        <div class="flex flex-col">
+                          <div class="flex items-center gap-2">
+                            <span class="text-gray-700 font-medium">
+                              <template v-if="getServiceUrl(service.name)">
+                                <a :href="getServiceUrl(service.name)" target="_blank" rel="noopener noreferrer" class="text-gray-900 hover:text-gray-700 underline decoration-2 underline-offset-2 transition-colors">
+                                  {{ service.name }}
+                                </a>
+                              </template>
+                              <template v-else>
+                                {{ service.name }}
+                              </template>
+                            </span>
+                            <span :class="[
+                              'text-xs px-2 py-1 rounded-md font-medium',
+                              service.isKyc
+                                ? 'bg-red-500 text-white'
+                                : 'bg-green-500 text-white'
+                            ]">
+                              {{ service.isKyc ? 'KYC' : 'non-KYC' }}
+                            </span>
+                          </div>
+                        </div>
+                        <span class="font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded-md">{{ service.rate }}%</span>
                       </div>
                     </div>
                   </div>
@@ -203,26 +262,26 @@
                     <span class="font-medium">라이트닝 수수료</span>
                     <span class="font-semibold">{{ formatPrice(result.lightningFee) }}원</span>
                   </div>
-                  <div class="flex justify-between items-center font-bold text-slate-900 border-t border-slate-200 pt-3 mt-3 text-base bg-slate-50 px-4 py-3 rounded-xl">
+                  <div class="flex justify-between items-center font-semibold text-rose-900 border border-rose-200 pt-3 mt-3 text-base bg-rose-50 px-4 py-3 rounded-lg">
                     <span class="flex items-center gap-2">
-                      <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg class="w-5 h-5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
                       </svg>
                       총 수수료
                     </span>
-                    <span class="text-red-600">{{ formatPrice(result.totalFee) }}원</span>
+                    <span class="text-rose-700 font-extrabold">{{ formatPrice(result.totalFee) }}원</span>
                   </div>
-                  <div class="flex justify-between items-center font-bold text-emerald-700 text-base bg-emerald-50 px-4 py-3 rounded-xl border border-emerald-200">
+                  <div class="flex justify-between items-center font-semibold text-sky-900 text-base bg-sky-50 px-4 py-3 rounded-lg border border-sky-200">
                     <span class="flex items-center gap-2">
-                      <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg class="w-5 h-5 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       수령 가능 금액
                     </span>
-                    <span>{{ formatPrice(result.actualAmount) }}원</span>
+                    <span class="text-sky-800 font-extrabold">{{ formatPrice(result.actualAmount) }}원</span>
                   </div>
-                  <div class="text-center text-sm text-slate-600 mt-3 bg-slate-100 py-3 rounded-xl flex items-center justify-center gap-2">
-                    <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div class="text-center text-sm text-gray-600 mt-3 bg-gray-100 py-3 rounded-lg flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
                     총 수수료율: <span class="font-bold">{{ result.feeRate }}%</span>
@@ -230,6 +289,218 @@
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+
+        <!-- Flow View -->
+        <div v-if="viewMode === 'flow'" class="space-y-8">
+          <div
+            v-for="(result, index) in sortedResults"
+            :key="result.id"
+            :class="[
+              'bg-white rounded-2xl shadow-lg p-6 border transition-all overflow-visible',
+              isOptimal(result) ? 'border-emerald-200 ring-2 ring-emerald-100 bg-emerald-50/30' : 'border-slate-200'
+            ]"
+          >
+            <!-- Header with ranking and total cost -->
+            <div class="flex items-center justify-between mb-6">
+              <div class="flex items-center gap-4">
+                <div v-if="isOptimal(result)" class="bg-emerald-600 text-white px-3 py-2 rounded-full text-sm font-bold flex items-center gap-2">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                  최적 #{{ index + 1 }}
+                </div>
+                <div v-else class="bg-gray-500 text-white px-3 py-2 rounded-full text-sm font-bold">
+                  #{{ index + 1 }}
+                </div>
+                <h3 class="text-lg font-bold text-gray-900">{{ result.title }}</h3>
+              </div>
+              <div class="text-right">
+                <div class="text-2xl font-bold text-red-600">{{ formatPrice(result.totalFee) }}원</div>
+                <div class="text-sm text-gray-500">총 수수료 ({{ result.feeRate }}%)</div>
+              </div>
+            </div>
+
+            <!-- Flow Diagram -->
+            <div class="relative overflow-x-auto overflow-y-visible">
+              <div class="flex items-center justify-between min-w-max gap-6 py-10 px-10">
+
+                <!-- Start: User Wallet -->
+                <div class="flex flex-col items-center">
+                  <div class="w-20 h-16 bg-gray-800 text-white rounded-lg flex flex-col items-center justify-center shadow">
+                    <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    <div class="text-xs font-medium">사용자</div>
+                  </div>
+                  <div class="text-xs text-gray-600 mt-2 text-center">
+                    {{ formatPrice(getActualAmount()) }}원
+                  </div>
+                </div>
+
+                <!-- Arrow 1 -->
+                <div class="flex flex-col items-center h-16 justify-center">
+                  <svg class="w-8 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                  <div class="text-xs text-gray-500 mt-1">원화구매</div>
+                </div>
+
+                <!-- Exchange 1 -->
+                <div class="flex flex-col items-center relative px-5 pt-5 pb-3">
+                  <component v-for="(exchange, exIndex) in result.exchanges.slice(0, 1)" :key="exIndex"
+                             :is="getExchangeUrl(exchange.name) ? 'a' : 'div'"
+                             :href="getExchangeUrl(exchange.name) || undefined"
+                             target="_blank" rel="noopener noreferrer"
+                             class="w-24 h-16 bg-white border border-gray-300 text-gray-800 rounded-lg flex flex-col items-center justify-center shadow relative block">
+
+                    <!-- Exchange icon -->
+                    <svg class="w-6 h-6 mb-1 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                    <div class="text-xs font-medium text-center leading-tight px-1">{{ exchange.name }}</div>
+
+                    <!-- Event badge (prevent navigation) -->
+                    <div v-if="exchange.note"
+                         @click.prevent.stop="showEventDetails(exchange.eventDetails)"
+                         class="absolute -top-3 -right-3 bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded-full font-medium shadow whitespace-nowrap cursor-pointer hover:bg-orange-600 transition-colors">
+                      이벤트
+                    </div>
+                  </component>
+                  <!-- Purchase label for first exchange -->
+                  <div v-if="getPurchaseLabelForExchange(result.exchanges[0]?.name)" class="text-[11px] text-gray-700 mt-1">
+                    {{ getPurchaseLabelForExchange(result.exchanges[0].name) }}
+                  </div>
+                  <div class="text-xs text-center mt-2 space-y-1">
+                    <div class="text-gray-900 font-medium">{{ formatPrice(getFirstTradingFee(result)) }}원</div>
+                    <div class="text-gray-500">거래수수료 ({{ result.exchanges[0].rate }}%)</div>
+                  </div>
+                </div>
+
+                <!-- Arrow 2 (if there's a second exchange or withdrawal) -->
+                <div v-if="result.exchanges.length > 1 || result.transferFee > 0" class="flex flex-col items-center h-16 justify-center">
+                  <svg class="w-8 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                  <div class="text-xs text-gray-500 mt-1">
+                    {{ result.exchanges.length > 1 ? 'USDT전송' : 'BTC출금' }}
+                  </div>
+                </div>
+
+                <!-- Exchange 2 or Withdrawal -->
+                <div v-if="result.exchanges.length > 1 || result.transferFee > 0" class="flex flex-col items-center relative px-5 pt-5 pb-3">
+                  <component v-if="result.exchanges.length > 1"
+                             :is="getExchangeUrl(result.exchanges[1].name) ? 'a' : 'div'"
+                             :href="getExchangeUrl(result.exchanges[1].name) || undefined"
+                             target="_blank" rel="noopener noreferrer"
+                             class="w-24 h-16 bg-white border border-gray-300 text-gray-800 rounded-lg flex flex-col items-center justify-center shadow relative block">
+
+                    <!-- Second exchange icon -->
+                    <svg class="w-6 h-6 mb-1 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7" />
+                    </svg>
+                    <div class="text-xs font-medium text-center leading-tight px-1">{{ result.exchanges[1].name }}</div>
+
+                    <!-- Event badge for second exchange (prevent navigation) -->
+                    <div v-if="result.exchanges[1].note"
+                         @click.prevent.stop="showEventDetails(result.exchanges[1].eventDetails)"
+                         class="absolute -top-3 -right-3 bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded-full font-medium shadow whitespace-nowrap cursor-pointer hover:bg-orange-600 transition-colors">
+                      이벤트
+                    </div>
+                  </component>
+                  <div v-else class="w-24 h-16 bg-gray-700 text-white rounded-lg flex flex-col items-center justify-center shadow">
+                    <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                    <div class="text-xs font-medium text-center leading-tight px-1">출금</div>
+                  </div>
+
+                  <!-- Purchase label for second exchange (if present) -->
+                  <div v-if="result.exchanges.length > 1 && getPurchaseLabelForExchange(result.exchanges[1]?.name)" class="text-[11px] text-gray-700 mt-1">
+                    {{ getPurchaseLabelForExchange(result.exchanges[1].name) }}
+                  </div>
+                  <div class="text-xs text-center mt-2 space-y-1">
+                    <div class="text-gray-900 font-medium">
+                      {{ formatPrice(result.exchanges.length > 1 ? getSecondTradingFee(result) : result.transferFee) }}원
+                    </div>
+                    <div class="text-gray-500">
+                      {{ result.exchanges.length > 1 ? `거래수수료 (${result.exchanges[1].rate}%)` : '출금수수료' }}
+                      <div v-if="getBtcWithdrawalFee(result)" class="text-xs text-gray-400 mt-0.5">
+                        ({{ getBtcWithdrawalFee(result) }} BTC)
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Arrow 3 (to Lightning if applicable) -->
+                <div v-if="result.lightningServices && result.lightningServices.length > 0" class="flex flex-col items-center h-16 justify-center">
+                  <svg class="w-8 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                  <div class="text-xs text-gray-500 mt-1">라이트닝</div>
+                </div>
+
+                <!-- Lightning Service -->
+                <div v-if="result.lightningServices && result.lightningServices.length > 0" class="flex flex-col items-center relative px-6 pt-5 pb-3">
+                  <component :is="getServiceUrl(result.lightningServices[0].name) ? 'a' : 'div'"
+                             :href="getServiceUrl(result.lightningServices[0].name) || undefined"
+                             target="_blank" rel="noopener noreferrer"
+                             class="w-24 h-16 bg-white border border-gray-300 text-gray-800 rounded-lg flex flex-col items-center justify-center shadow relative block">
+
+                    <!-- Lightning service icon -->
+                    <svg class="w-6 h-6 mb-1 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    <div class="text-xs font-medium text-center leading-tight px-1">{{ result.lightningServices[0].name }}</div>
+
+                    <!-- KYC badge -->
+                    <div class="absolute -top-3 -right-3 text-xs px-1.5 py-0.5 rounded-full font-medium shadow whitespace-nowrap"
+                         :class="result.lightningServices[0].isKyc
+                           ? 'bg-red-500 text-white'
+                           : 'bg-green-500 text-white'">
+                      {{ result.lightningServices[0].isKyc ? 'KYC' : 'non-KYC' }}
+                    </div>
+                  </component>
+                  <div class="text-xs text-center mt-2 space-y-1">
+                    <div class="text-gray-900 font-medium">{{ formatPrice(getLightningFee(result)) }}원</div>
+                    <div class="text-gray-500">온체인 전환 수수료 ({{ result.lightningServices[0].rate }}%)</div>
+                  </div>
+                </div>
+
+                <!-- Final Arrow -->
+                <div class="flex flex-col items-center h-16 justify-center">
+                  <svg class="w-8 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                  <div class="text-xs text-gray-500 mt-1">최종출금</div>
+                </div>
+
+                <!-- End: Personal Wallet -->
+                <div class="flex flex-col items-center">
+                  <div class="w-20 h-16 bg-gray-900 text-white rounded-lg flex flex-col items-center justify-center shadow">
+                    <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                    <div class="text-xs font-medium">개인지갑</div>
+                  </div>
+                  <div class="text-xs text-center mt-2 space-y-1">
+                    <div class="text-gray-900 font-bold">{{ formatPrice(result.actualAmount) }}원</div>
+                    <div class="text-gray-500">수령금액</div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Event Guide Message in Flow View -->
+            <div v-if="result.exchanges.some(ex => ex.note)" class="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <div class="text-sm text-gray-700">
+                자세한 이벤트를 보려면 이벤트 표시를 클릭하세요
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
@@ -249,6 +520,29 @@
         </div>
       </div>
     </div>
+
+    <!-- Event Details Modal -->
+    <div v-if="showEventModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" @click="closeEventModal">
+      <div class="bg-white rounded-lg max-w-md w-full p-6" @click.stop>
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-semibold text-gray-900">이벤트 상세정보</h3>
+          <button @click="closeEventModal" class="text-gray-400 hover:text-gray-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="text-gray-700">
+          <p v-if="selectedEventDetails" class="whitespace-pre-wrap">{{ selectedEventDetails }}</p>
+          <p v-else class="text-gray-500 italic">이벤트 상세정보가 없습니다.</p>
+        </div>
+        <div class="mt-6 text-right">
+          <button @click="closeEventModal" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
+            닫기
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -265,6 +559,9 @@ const error = ref(null)
 const results = ref([])
 const isMobile = ref(false)
 const detailsOpenById = ref({})
+const viewMode = ref('flow') // 'cards' or 'flow'
+const showEventModal = ref(false)
+const selectedEventDetails = ref('')
 
 // Quick amount presets
 const quickAmounts = ref([
@@ -295,7 +592,9 @@ const withdrawalFees = ref({
 
 const lightningServices = ref({
   boltz: 0.5,
-  coinos: 0.4
+  coinos: 0.0,
+  walletofsatoshi: 1.95,
+  strike: 0.0
 })
 
 const exchangeRatesInfo = ref({})
@@ -309,6 +608,16 @@ const btcTransferFee = 0.0002
 const sortedResults = computed(() => {
   return [...results.value].sort((a, b) => a.totalFee - b.totalFee)
 })
+
+const bestResults = computed(() => {
+  if (!sortedResults.value.length) return []
+  const minFee = sortedResults.value[0].totalFee
+  return sortedResults.value.filter(result => Math.abs(result.totalFee - minFee) < 0.01)
+})
+
+const isOptimal = (result) => {
+  return bestResults.value.some(best => best.id === result.id)
+}
 
 const maxSavings = computed(() => {
   if (results.value.length < 2) return 0
@@ -334,8 +643,21 @@ const getServiceUrl = (name) => {
   const n = (name || '').toLowerCase()
   if (n.includes('boltz')) return 'https://boltz.exchange'
   if (n.includes('coinos')) return 'https://coinos.io'
+  if (n.includes('월렛오브사토시') || n.includes('walletofsatoshi')) return 'https://walletofsatoshi.com'
+  if (n.includes('strike')) return 'https://strike.me'
   return null
 }
+
+// Exchange official sites
+const getExchangeUrl = (name) => {
+  const n = (name || '').toLowerCase()
+  if (n.includes('업비트') || n.includes('upbit')) return 'https://upbit.com'
+  if (n.includes('빗썸') || n.includes('bithumb')) return 'https://www.bithumb.com'
+  if (n.includes('바이낸스') || n.includes('binance')) return 'https://www.binance.com'
+  if (n.includes('okx')) return 'https://www.okx.com'
+  return null
+}
+
 
 const getPlaceholder = () => {
   const unit = selectedUnit.value
@@ -430,7 +752,8 @@ const calculateFees = () => {
       {
         name: '업비트 (BTC)',
         rate: feeRates.value.upbit_btc,
-        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.upbit_btc?.event_details || ''
       }
     ],
     withdrawalFees: [
@@ -462,7 +785,8 @@ const calculateFees = () => {
       {
         name: '업비트 (BTC)',
         rate: feeRates.value.upbit_btc,
-        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.upbit_btc?.event_details || ''
       }
     ],
     withdrawalFees: [
@@ -494,7 +818,8 @@ const calculateFees = () => {
       {
         name: '빗썸 (BTC)',
         rate: feeRates.value.bithumb,
-        note: exchangeRatesInfo.value.bithumb?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.bithumb?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.bithumb?.event_details || ''
       }
     ],
     withdrawalFees: [
@@ -527,12 +852,14 @@ const calculateFees = () => {
       {
         name: '업비트 (USDT)',
         rate: feeRates.value.upbit_usdt,
-        note: exchangeRatesInfo.value.upbit_usdt?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.upbit_usdt?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.upbit_usdt?.event_details || ''
       },
       {
         name: 'OKX',
         rate: feeRates.value.okx,
-        note: exchangeRatesInfo.value.okx?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.okx?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.okx?.event_details || ''
       }
     ],
     withdrawalFees: [{
@@ -557,12 +884,14 @@ const calculateFees = () => {
       {
         name: '업비트 (USDT)',
         rate: feeRates.value.upbit_usdt,
-        note: exchangeRatesInfo.value.upbit_usdt?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.upbit_usdt?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.upbit_usdt?.event_details || ''
       },
       {
         name: '바이낸스',
         rate: feeRates.value.binance,
-        note: exchangeRatesInfo.value.binance?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.binance?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.binance?.event_details || ''
       }
     ],
     withdrawalFees: [{
@@ -588,7 +917,8 @@ const calculateFees = () => {
       {
         name: '업비트 (BTC)',
         rate: feeRates.value.upbit_btc,
-        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.upbit_btc?.event_details || ''
       }
     ],
     withdrawalFees: [
@@ -605,7 +935,8 @@ const calculateFees = () => {
     ],
     lightningServices: [{
       name: 'Boltz Exchange',
-      rate: lightningServices.value.boltz
+      rate: lightningServices.value.boltz,
+      isKyc: lightningServicesInfo.value.boltz?.is_kyc || false
     }],
     tradingFee: amount * (feeRates.value.upbit_btc / 100),
     transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.binance_lightning * bitcoinPrice.value,
@@ -624,7 +955,8 @@ const calculateFees = () => {
       {
         name: '업비트 (BTC)',
         rate: feeRates.value.upbit_btc,
-        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.upbit_btc?.event_details || ''
       }
     ],
     withdrawalFees: [
@@ -641,7 +973,8 @@ const calculateFees = () => {
     ],
     lightningServices: [{
       name: 'Coinos',
-      rate: lightningServices.value.coinos
+      rate: lightningServices.value.coinos,
+      isKyc: lightningServicesInfo.value.coinos?.is_kyc || false
     }],
     tradingFee: amount * (feeRates.value.upbit_btc / 100),
     transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.binance_lightning * bitcoinPrice.value,
@@ -660,7 +993,8 @@ const calculateFees = () => {
       {
         name: '업비트 (BTC)',
         rate: feeRates.value.upbit_btc,
-        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.upbit_btc?.event_details || ''
       }
     ],
     withdrawalFees: [
@@ -677,7 +1011,8 @@ const calculateFees = () => {
     ],
     lightningServices: [{
       name: 'Boltz Exchange',
-      rate: lightningServices.value.boltz
+      rate: lightningServices.value.boltz,
+      isKyc: lightningServicesInfo.value.boltz?.is_kyc || false
     }],
     tradingFee: amount * (feeRates.value.upbit_btc / 100),
     transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.okx_lightning * bitcoinPrice.value,
@@ -696,7 +1031,8 @@ const calculateFees = () => {
       {
         name: '업비트 (BTC)',
         rate: feeRates.value.upbit_btc,
-        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.upbit_btc?.event_details || ''
       }
     ],
     withdrawalFees: [
@@ -713,7 +1049,8 @@ const calculateFees = () => {
     ],
     lightningServices: [{
       name: 'Coinos',
-      rate: lightningServices.value.coinos
+      rate: lightningServices.value.coinos,
+      isKyc: lightningServicesInfo.value.coinos?.is_kyc || false
     }],
     tradingFee: amount * (feeRates.value.upbit_btc / 100),
     transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.okx_lightning * bitcoinPrice.value,
@@ -733,12 +1070,14 @@ const calculateFees = () => {
       {
         name: '업비트 (USDT)',
         rate: feeRates.value.upbit_usdt,
-        note: exchangeRatesInfo.value.upbit_usdt?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.upbit_usdt?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.upbit_usdt?.event_details || ''
       },
       {
         name: 'OKX',
         rate: feeRates.value.okx,
-        note: exchangeRatesInfo.value.okx?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.okx?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.okx?.event_details || ''
       }
     ],
     withdrawalFees: [{
@@ -748,7 +1087,8 @@ const calculateFees = () => {
     }],
     lightningServices: [{
       name: 'Boltz Exchange',
-      rate: lightningServices.value.boltz
+      rate: lightningServices.value.boltz,
+      isKyc: lightningServicesInfo.value.boltz?.is_kyc || false
     }],
     tradingFee: amount * (feeRates.value.upbit_usdt / 100) + amount * (feeRates.value.okx / 100),
     transferFee: withdrawalFees.value.okx_lightning * bitcoinPrice.value,
@@ -767,12 +1107,14 @@ const calculateFees = () => {
       {
         name: '업비트 (USDT)',
         rate: feeRates.value.upbit_usdt,
-        note: exchangeRatesInfo.value.upbit_usdt?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.upbit_usdt?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.upbit_usdt?.event_details || ''
       },
       {
         name: 'OKX',
         rate: feeRates.value.okx,
-        note: exchangeRatesInfo.value.okx?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.okx?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.okx?.event_details || ''
       }
     ],
     withdrawalFees: [{
@@ -782,7 +1124,8 @@ const calculateFees = () => {
     }],
     lightningServices: [{
       name: 'Coinos',
-      rate: lightningServices.value.coinos
+      rate: lightningServices.value.coinos,
+      isKyc: lightningServicesInfo.value.coinos?.is_kyc || false
     }],
     tradingFee: amount * (feeRates.value.upbit_usdt / 100) + amount * (feeRates.value.okx / 100),
     transferFee: withdrawalFees.value.okx_lightning * bitcoinPrice.value,
@@ -801,12 +1144,14 @@ const calculateFees = () => {
       {
         name: '업비트 (USDT)',
         rate: feeRates.value.upbit_usdt,
-        note: exchangeRatesInfo.value.upbit_usdt?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.upbit_usdt?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.upbit_usdt?.event_details || ''
       },
       {
         name: '바이낸스',
         rate: feeRates.value.binance,
-        note: exchangeRatesInfo.value.binance?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.binance?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.binance?.event_details || ''
       }
     ],
     withdrawalFees: [{
@@ -816,7 +1161,8 @@ const calculateFees = () => {
     }],
     lightningServices: [{
       name: 'Boltz Exchange',
-      rate: lightningServices.value.boltz
+      rate: lightningServices.value.boltz,
+      isKyc: lightningServicesInfo.value.boltz?.is_kyc || false
     }],
     tradingFee: amount * (feeRates.value.upbit_usdt / 100) + amount * (feeRates.value.binance / 100),
     transferFee: withdrawalFees.value.binance_lightning * bitcoinPrice.value,
@@ -835,12 +1181,14 @@ const calculateFees = () => {
       {
         name: '업비트 (USDT)',
         rate: feeRates.value.upbit_usdt,
-        note: exchangeRatesInfo.value.upbit_usdt?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.upbit_usdt?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.upbit_usdt?.event_details || ''
       },
       {
         name: '바이낸스',
         rate: feeRates.value.binance,
-        note: exchangeRatesInfo.value.binance?.is_event ? '한시적 이벤트' : ''
+        note: exchangeRatesInfo.value.binance?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.binance?.event_details || ''
       }
     ],
     withdrawalFees: [{
@@ -850,7 +1198,8 @@ const calculateFees = () => {
     }],
     lightningServices: [{
       name: 'Coinos',
-      rate: lightningServices.value.coinos
+      rate: lightningServices.value.coinos,
+      isKyc: lightningServicesInfo.value.coinos?.is_kyc || false
     }],
     tradingFee: amount * (feeRates.value.upbit_usdt / 100) + amount * (feeRates.value.binance / 100),
     transferFee: withdrawalFees.value.binance_lightning * bitcoinPrice.value,
@@ -860,10 +1209,191 @@ const calculateFees = () => {
     feeRate: 0
   })
 
-  // Calculate totals and final amounts for all scenarios
+  // Add new lightning service scenarios with 월렛오브사토시 and Strike
+  // 14. 업비트 → OKX → 월렛오브사토시 → 온체인 개인지갑
+  newResults.push({
+    id: 'upbit-usdt-okx-lightning-walletofsatoshi',
+    title: '업비트 → OKX → 월렛오브사토시 → 온체인 개인지갑',
+    description: '업비트 USDT → OKX → 라이트닝 → 월렛오브사토시 → 온체인 개인지갑',
+    exchanges: [
+      {
+        name: '업비트 (USDT)',
+        rate: feeRates.value.upbit_usdt,
+        note: exchangeRatesInfo.value.upbit_usdt?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.upbit_usdt?.event_details || ''
+      },
+      {
+        name: 'OKX',
+        rate: feeRates.value.okx,
+        note: exchangeRatesInfo.value.okx?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.okx?.event_details || ''
+      }
+    ],
+    withdrawalFees: [{
+      name: 'OKX 라이트닝',
+      amount: withdrawalFees.value.okx_lightning,
+      amountKrw: withdrawalFees.value.okx_lightning * bitcoinPrice.value
+    }],
+    lightningServices: [{
+      name: '월렛오브사토시',
+      rate: lightningServices.value.walletofsatoshi,
+      isKyc: lightningServicesInfo.value.walletofsatoshi?.is_kyc || false
+    }],
+    tradingFee: amount * (feeRates.value.upbit_usdt / 100) + amount * (feeRates.value.okx / 100),
+    transferFee: withdrawalFees.value.okx_lightning * bitcoinPrice.value,
+    lightningFee: amount * (lightningServices.value.walletofsatoshi / 100),
+    totalFee: 0,
+    actualAmount: 0,
+    feeRate: 0
+  })
+
+  // 업비트 → OKX → Strike → 온체인 개인지갑 (문구에서 0% 언급 제거)
+  newResults.push({
+    id: 'upbit-usdt-okx-lightning-strike',
+    title: '업비트 → OKX → Strike → 온체인 개인지갑',
+    description: '업비트 USDT → OKX → 라이트닝 → Strike → 온체인 개인지갑',
+    exchanges: [
+      {
+        name: '업비트 (USDT)',
+        rate: feeRates.value.upbit_usdt,
+        note: exchangeRatesInfo.value.upbit_usdt?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.upbit_usdt?.event_details || ''
+      },
+      {
+        name: 'OKX',
+        rate: feeRates.value.okx,
+        note: exchangeRatesInfo.value.okx?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.okx?.event_details || ''
+      }
+    ],
+    withdrawalFees: [{
+      name: 'OKX 라이트닝',
+      amount: withdrawalFees.value.okx_lightning,
+      amountKrw: withdrawalFees.value.okx_lightning * bitcoinPrice.value
+    }],
+    lightningServices: [{
+      name: 'Strike',
+      rate: lightningServices.value.strike,
+      isKyc: lightningServicesInfo.value.strike?.is_kyc || true
+    }],
+    tradingFee: amount * (feeRates.value.upbit_usdt / 100) + amount * (feeRates.value.okx / 100),
+    transferFee: withdrawalFees.value.okx_lightning * bitcoinPrice.value,
+    lightningFee: amount * (lightningServices.value.strike / 100),
+    totalFee: 0,
+    actualAmount: 0,
+    feeRate: 0
+  })
+
+  
+
+  // 16. 업비트 BTC → OKX → 월렛오브사토시 → 온체인 개인지갑
+  newResults.push({
+    id: 'upbit-btc-okx-lightning-walletofsatoshi',
+    title: '업비트 BTC → OKX → 월렛오브사토시 → 온체인 개인지갑',
+    description: '업비트 비트코인 직접 송금 → OKX → 라이트닝 → 월렛오브사토시 → 온체인 개인지갑',
+    exchanges: [
+      {
+        name: '업비트 (BTC)',
+        rate: feeRates.value.upbit_btc,
+        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.upbit_btc?.event_details || ''
+      }
+    ],
+    withdrawalFees: [
+      {
+        name: '업비트 BTC 송금',
+        amount: btcTransferFee,
+        amountKrw: btcTransferFee * bitcoinPrice.value
+      },
+      {
+        name: 'OKX 라이트닝',
+        amount: withdrawalFees.value.okx_lightning,
+        amountKrw: withdrawalFees.value.okx_lightning * bitcoinPrice.value
+      }
+    ],
+    lightningServices: [{
+      name: '월렛오브사토시',
+      rate: lightningServices.value.walletofsatoshi,
+      isKyc: lightningServicesInfo.value.walletofsatoshi?.is_kyc || false
+    }],
+    tradingFee: amount * (feeRates.value.upbit_btc / 100),
+    transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.okx_lightning * bitcoinPrice.value,
+    lightningFee: amount * (lightningServices.value.walletofsatoshi / 100),
+    totalFee: 0,
+    actualAmount: 0,
+    feeRate: 0
+  })
+
+  // 업비트 BTC → OKX → Strike → 온체인 개인지갑 (문구에서 0% 언급 제거)
+  newResults.push({
+    id: 'upbit-btc-okx-lightning-strike',
+    title: '업비트 BTC → OKX → Strike → 온체인 개인지갑',
+    description: '업비트 비트코인 직접 송금 → OKX → 라이트닝 → Strike → 온체인 개인지갑',
+    exchanges: [
+      {
+        name: '업비트 (BTC)',
+        rate: feeRates.value.upbit_btc,
+        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : '',
+        eventDetails: exchangeRatesInfo.value.upbit_btc?.event_details || ''
+      }
+    ],
+    withdrawalFees: [
+      {
+        name: '업비트 BTC 송금',
+        amount: btcTransferFee,
+        amountKrw: btcTransferFee * bitcoinPrice.value
+      },
+      {
+        name: 'OKX 라이트닝',
+        amount: withdrawalFees.value.okx_lightning,
+        amountKrw: withdrawalFees.value.okx_lightning * bitcoinPrice.value
+      }
+    ],
+    lightningServices: [{
+      name: 'Strike',
+      rate: lightningServices.value.strike,
+      isKyc: lightningServicesInfo.value.strike?.is_kyc || true
+    }],
+    tradingFee: amount * (feeRates.value.upbit_btc / 100),
+    transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.okx_lightning * bitcoinPrice.value,
+    lightningFee: amount * (lightningServices.value.strike / 100),
+    totalFee: 0,
+    actualAmount: 0,
+    feeRate: 0
+  })
+
+  
+
+  // Calculate totals and final amounts for all scenarios with step-by-step deduction
   newResults.forEach(result => {
+    let currentAmount = amount
+
+    // Step 1: Apply trading fee (첫 번째 거래소 수수료)
+    const actualTradingFee = currentAmount * (result.exchanges[0].rate / 100)
+    currentAmount -= actualTradingFee
+
+    // Step 2: Apply transfer fee (출금 수수료 - 고정)
+    currentAmount -= result.transferFee
+
+    // Step 3: Apply second exchange trading fee if exists
+    let secondTradingFee = 0
+    if (result.exchanges.length > 1) {
+      secondTradingFee = currentAmount * (result.exchanges[1].rate / 100)
+      currentAmount -= secondTradingFee
+    }
+
+    // Step 4: Apply lightning service fee on remaining amount
+    let actualLightningFee = 0
+    if (result.lightningServices && result.lightningServices.length > 0) {
+      actualLightningFee = currentAmount * (result.lightningServices[0].rate / 100)
+      currentAmount -= actualLightningFee
+    }
+
+    // Update result with corrected values
+    result.tradingFee = actualTradingFee + secondTradingFee
+    result.lightningFee = actualLightningFee
     result.totalFee = result.tradingFee + result.transferFee + result.lightningFee
-    result.actualAmount = amount - result.totalFee
+    result.actualAmount = currentAmount
     result.feeRate = ((result.totalFee / amount) * 100).toFixed(3)
   })
 
@@ -880,6 +1410,80 @@ const toggleDetails = (id) => {
   detailsOpenById.value[id] = !detailsOpenById.value[id]
 }
 
+const showEventDetails = (eventDetails) => {
+  selectedEventDetails.value = eventDetails
+  showEventModal.value = true
+}
+
+const closeEventModal = () => {
+  showEventModal.value = false
+  selectedEventDetails.value = ''
+}
+
+const getBtcWithdrawalFee = (result) => {
+  // 업비트/빗썸의 BTC 출금 수수료는 0.0002 BTC
+  if (result.exchanges.length === 1 && result.transferFee > 0) {
+    return 0.0002
+  }
+  return null
+}
+
+const getFirstTradingFee = (result) => {
+  const amount = getActualAmount()
+  return amount * (result.exchanges[0].rate / 100)
+}
+
+const getSecondTradingFee = (result) => {
+  if (result.exchanges.length <= 1) return 0
+
+  const amount = getActualAmount()
+  const afterFirstTrading = amount - getFirstTradingFee(result)
+  const afterTransfer = afterFirstTrading - result.transferFee
+
+  return afterTransfer * (result.exchanges[1].rate / 100)
+}
+
+const getLightningFee = (result) => {
+  if (!result.lightningServices || result.lightningServices.length === 0) return 0
+
+  const amount = getActualAmount()
+  let currentAmount = amount
+
+  // Step 1: 첫 번째 거래소 수수료 차감
+  currentAmount -= getFirstTradingFee(result)
+
+  // Step 2: 출금 수수료 차감
+  currentAmount -= result.transferFee
+
+  // Step 3: 두 번째 거래소 수수료 차감 (있는 경우)
+  if (result.exchanges.length > 1) {
+    currentAmount -= getSecondTradingFee(result)
+  }
+
+  // Step 4: 라이트닝 서비스 수수료 계산
+  return currentAmount * (result.lightningServices[0].rate / 100)
+}
+
+// Determine purchase label text for an exchange name
+const getPurchaseLabelForExchange = (name) => {
+  const n = (name || '').toLowerCase()
+  // Upbit/Bithumb: show BTC or USDT explicitly
+  if (n.includes('업비트') || n.includes('bithumb') || n.includes('빗썸')) {
+    if (n.includes('usdt')) return 'USDT 구매'
+    if (n.includes('btc')) return 'BTC 구매'
+    // Fallback if asset not in name
+    return 'BTC 구매'
+  }
+  // Binance/OKX: always show BTC purchase per requirement
+  if (n.includes('binance') || n.includes('바이낸스') || n.includes('okx')) {
+    return 'BTC 구매'
+  }
+  // Generic detection from name
+  if (n.includes('usdt')) return 'USDT 구매'
+  if (n.includes('btc')) return 'BTC 구매'
+  return ''
+}
+
 // Initialize data
 onMounted(async () => {
   // Detect mobile viewport
@@ -887,6 +1491,14 @@ onMounted(async () => {
   const updateMobile = () => { isMobile.value = mq.matches }
   updateMobile()
   try { mq.addEventListener('change', updateMobile) } catch (_) { mq.addListener(updateMobile) }
+
+  // ESC key listener for modal
+  const handleEscKey = (event) => {
+    if (event.key === 'Escape' && showEventModal.value) {
+      closeEventModal()
+    }
+  }
+  document.addEventListener('keydown', handleEscKey)
 
   await fetchBitcoinPrice()
   await loadData()
