@@ -139,7 +139,6 @@ const menuItems = computed(() => {
   const items = [
     { key: 'mining', label: '비트코인 채굴' },
     { key: 'utxo', label: 'UTXO' },
-    { key: 'wallet', label: '지갑' },
     { key: 'fee', label: '수수료 계산' },
   ]
 
