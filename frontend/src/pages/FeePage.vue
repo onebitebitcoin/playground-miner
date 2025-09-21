@@ -60,21 +60,21 @@
 
       <!-- Results Section -->
       <div v-if="inputAmount && results.length > 0" class="space-y-6">
-        <div class="flex justify-between items-center">
-          <h2 class="text-xl font-semibold text-gray-900">수수료 비교 결과</h2>
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+          <h2 class="text-lg sm:text-xl font-semibold text-gray-900">수수료 비교 결과</h2>
 
           <!-- View Mode Toggle -->
-          <div class="flex bg-gray-100 rounded-lg p-1">
+          <div class="flex bg-gray-100 rounded-lg p-1 self-start sm:self-auto">
             <button
               @click="viewMode = 'flow'"
               :class="[
-                'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+                'px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-colors flex items-center gap-1',
                 viewMode === 'flow'
                   ? 'bg-white text-gray-900 shadow-sm'
                   : 'text-gray-600 hover:text-gray-900'
               ]"
             >
-              <svg class="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
               흐름도
@@ -82,13 +82,13 @@
             <button
               @click="viewMode = 'cards'"
               :class="[
-                'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+                'px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-colors flex items-center gap-1',
                 viewMode === 'cards'
                   ? 'bg-white text-gray-900 shadow-sm'
                   : 'text-gray-600 hover:text-gray-900'
               ]"
             >
-              <svg class="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
               </svg>
               카드
@@ -299,135 +299,136 @@
             v-for="(result, index) in sortedResults"
             :key="result.id"
             :class="[
-              'bg-white rounded-2xl shadow-lg p-6 border transition-all overflow-visible',
+              'bg-white rounded-2xl shadow-lg border transition-all overflow-visible',
+              'p-3 sm:p-6',
               isOptimal(result) ? 'border-emerald-200 ring-2 ring-emerald-100 bg-emerald-50/30' : 'border-slate-200'
             ]"
           >
             <!-- Header with ranking and total cost -->
-            <div class="flex items-center justify-between mb-6">
-              <div class="flex items-center gap-4">
-                <div v-if="isOptimal(result)" class="bg-emerald-600 text-white px-3 py-2 rounded-full text-sm font-bold flex items-center gap-2">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-3">
+              <div class="flex items-center gap-2 sm:gap-4">
+                <div v-if="isOptimal(result)" class="bg-emerald-600 text-white px-2 py-1 sm:px-3 sm:py-2 rounded-full text-xs sm:text-sm font-bold flex items-center gap-1 sm:gap-2 flex-shrink-0">
+                  <svg class="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                   </svg>
                   최적 #{{ index + 1 }}
                 </div>
-                <div v-else class="bg-gray-500 text-white px-3 py-2 rounded-full text-sm font-bold">
+                <div v-else class="bg-gray-500 text-white px-2 py-1 sm:px-3 sm:py-2 rounded-full text-xs sm:text-sm font-bold flex-shrink-0">
                   #{{ index + 1 }}
                 </div>
-                <h3 class="text-lg font-bold text-gray-900">{{ result.title }}</h3>
+                <h3 class="text-sm sm:text-lg font-bold text-gray-900 min-w-0">{{ result.title }}</h3>
               </div>
-              <div class="text-right">
-                <div class="text-2xl font-bold text-red-600">{{ formatPrice(result.totalFee) }}원</div>
-                <div class="text-sm text-gray-500">총 수수료 ({{ result.feeRate }}%)</div>
+              <div class="text-left sm:text-right">
+                <div class="text-lg sm:text-2xl font-bold text-red-600">{{ formatPrice(result.totalFee) }}원</div>
+                <div class="text-xs sm:text-sm text-gray-500">총 수수료 ({{ result.feeRate }}%)</div>
               </div>
             </div>
 
             <!-- Flow Diagram -->
             <div class="relative overflow-x-auto overflow-y-visible">
-              <div class="flex items-center justify-between min-w-max gap-6 py-10 px-10">
+              <div class="flex items-center justify-between min-w-max gap-3 sm:gap-6 py-6 sm:py-10 px-2 sm:px-10">
 
                 <!-- Start: User Wallet -->
                 <div class="flex flex-col items-center">
-                  <div class="w-20 h-16 bg-gray-800 text-white rounded-lg flex flex-col items-center justify-center shadow">
-                    <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div class="w-14 h-12 sm:w-20 sm:h-16 bg-gray-800 text-white rounded-lg flex flex-col items-center justify-center shadow">
+                    <svg class="w-4 h-4 sm:w-6 sm:h-6 mb-0.5 sm:mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
-                    <div class="text-xs font-medium">사용자</div>
+                    <div class="text-[10px] sm:text-xs font-medium">사용자</div>
                   </div>
-                  <div class="text-xs text-gray-600 mt-2 text-center">
+                  <div class="text-[10px] sm:text-xs text-gray-600 mt-1 sm:mt-2 text-center max-w-16 sm:max-w-none break-words">
                     {{ formatPrice(getActualAmount()) }}원
                   </div>
                 </div>
 
                 <!-- Arrow 1 -->
-                <div class="flex flex-col items-center h-16 justify-center">
-                  <svg class="w-8 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="flex flex-col items-center h-12 sm:h-16 justify-center">
+                  <svg class="w-5 h-4 sm:w-8 sm:h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                   </svg>
-                  <div class="text-xs text-gray-500 mt-1">원화구매</div>
+                  <div class="text-[9px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">원화구매</div>
                 </div>
 
                 <!-- Exchange 1 -->
-                <div class="flex flex-col items-center relative px-5 pt-5 pb-3">
+                <div class="flex flex-col items-center relative px-2 sm:px-5 pt-3 sm:pt-5 pb-2 sm:pb-3">
                   <component v-for="(exchange, exIndex) in result.exchanges.slice(0, 1)" :key="exIndex"
                              :is="getExchangeUrl(exchange.name) ? 'a' : 'div'"
                              :href="getExchangeUrl(exchange.name) || undefined"
                              target="_blank" rel="noopener noreferrer"
-                             class="w-24 h-16 bg-white border border-gray-300 text-gray-800 rounded-lg flex flex-col items-center justify-center shadow relative block">
+                             class="w-16 h-12 sm:w-24 sm:h-16 bg-white border border-gray-300 text-gray-800 rounded-lg flex flex-col items-center justify-center shadow relative block">
 
                     <!-- Exchange icon -->
-                    <svg class="w-6 h-6 mb-1 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-4 h-4 sm:w-6 sm:h-6 mb-0.5 sm:mb-1 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                     </svg>
-                    <div class="text-xs font-medium text-center leading-tight px-1">{{ exchange.name }}</div>
+                    <div class="text-[9px] sm:text-xs font-medium text-center leading-tight px-0.5 sm:px-1">{{ exchange.name }}</div>
 
                     <!-- Event badge (prevent navigation) -->
                     <div v-if="exchange.note"
                          @click.prevent.stop="showEventDetails(exchange.eventDetails)"
-                         class="absolute -top-3 -right-3 bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded-full font-medium shadow whitespace-nowrap cursor-pointer hover:bg-orange-600 transition-colors">
+                         class="absolute -top-2 sm:-top-3 -right-2 sm:-right-3 bg-orange-500 text-white text-[8px] sm:text-xs px-1 sm:px-1.5 py-0.5 rounded-full font-medium shadow whitespace-nowrap cursor-pointer hover:bg-orange-600 transition-colors">
                       이벤트
                     </div>
                   </component>
                   <!-- Purchase label for first exchange -->
-                  <div v-if="getPurchaseLabelForExchange(result.exchanges[0]?.name)" class="text-[11px] text-gray-700 mt-1">
+                  <div v-if="getPurchaseLabelForExchange(result.exchanges[0]?.name)" class="text-[9px] sm:text-[11px] text-gray-700 mt-1">
                     {{ getPurchaseLabelForExchange(result.exchanges[0].name) }}
                   </div>
-                  <div class="text-xs text-center mt-2 space-y-1">
+                  <div class="text-[9px] sm:text-xs text-center mt-1 sm:mt-2 space-y-0.5 sm:space-y-1">
                     <div class="text-gray-900 font-medium">{{ formatPrice(getFirstTradingFee(result)) }}원</div>
                     <div class="text-gray-500">거래수수료 ({{ result.exchanges[0].rate }}%)</div>
                   </div>
                 </div>
 
                 <!-- Arrow 2 (if there's a second exchange or withdrawal) -->
-                <div v-if="result.exchanges.length > 1 || result.transferFee > 0" class="flex flex-col items-center h-16 justify-center">
-                  <svg class="w-8 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div v-if="result.exchanges.length > 1 || result.transferFee > 0" class="flex flex-col items-center h-12 sm:h-16 justify-center">
+                  <svg class="w-5 h-4 sm:w-8 sm:h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                   </svg>
-                  <div class="text-xs text-gray-500 mt-1">
+                  <div class="text-[9px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">
                     {{ result.exchanges.length > 1 ? 'USDT전송' : 'BTC출금' }}
                   </div>
                 </div>
 
                 <!-- Exchange 2 or Withdrawal -->
-                <div v-if="result.exchanges.length > 1 || result.transferFee > 0" class="flex flex-col items-center relative px-5 pt-5 pb-3">
+                <div v-if="result.exchanges.length > 1 || result.transferFee > 0" class="flex flex-col items-center relative px-2 sm:px-5 pt-3 sm:pt-5 pb-2 sm:pb-3">
                   <component v-if="result.exchanges.length > 1"
                              :is="getExchangeUrl(result.exchanges[1].name) ? 'a' : 'div'"
                              :href="getExchangeUrl(result.exchanges[1].name) || undefined"
                              target="_blank" rel="noopener noreferrer"
-                             class="w-24 h-16 bg-white border border-gray-300 text-gray-800 rounded-lg flex flex-col items-center justify-center shadow relative block">
+                             class="w-16 h-12 sm:w-24 sm:h-16 bg-white border border-gray-300 text-gray-800 rounded-lg flex flex-col items-center justify-center shadow relative block">
 
                     <!-- Second exchange icon -->
-                    <svg class="w-6 h-6 mb-1 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-4 h-4 sm:w-6 sm:h-6 mb-0.5 sm:mb-1 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7" />
                     </svg>
-                    <div class="text-xs font-medium text-center leading-tight px-1">{{ result.exchanges[1].name }}</div>
+                    <div class="text-[9px] sm:text-xs font-medium text-center leading-tight px-0.5 sm:px-1">{{ result.exchanges[1].name }}</div>
 
                     <!-- Event badge for second exchange (prevent navigation) -->
                     <div v-if="result.exchanges[1].note"
                          @click.prevent.stop="showEventDetails(result.exchanges[1].eventDetails)"
-                         class="absolute -top-3 -right-3 bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded-full font-medium shadow whitespace-nowrap cursor-pointer hover:bg-orange-600 transition-colors">
+                         class="absolute -top-2 sm:-top-3 -right-2 sm:-right-3 bg-orange-500 text-white text-[8px] sm:text-xs px-1 sm:px-1.5 py-0.5 rounded-full font-medium shadow whitespace-nowrap cursor-pointer hover:bg-orange-600 transition-colors">
                       이벤트
                     </div>
                   </component>
-                  <div v-else class="w-24 h-16 bg-gray-700 text-white rounded-lg flex flex-col items-center justify-center shadow">
-                    <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div v-else class="w-16 h-12 sm:w-24 sm:h-16 bg-gray-700 text-white rounded-lg flex flex-col items-center justify-center shadow">
+                    <svg class="w-4 h-4 sm:w-6 sm:h-6 mb-0.5 sm:mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                     </svg>
-                    <div class="text-xs font-medium text-center leading-tight px-1">출금</div>
+                    <div class="text-[9px] sm:text-xs font-medium text-center leading-tight px-0.5 sm:px-1">출금</div>
                   </div>
 
                   <!-- Purchase label for second exchange (if present) -->
-                  <div v-if="result.exchanges.length > 1 && getPurchaseLabelForExchange(result.exchanges[1]?.name)" class="text-[11px] text-gray-700 mt-1">
+                  <div v-if="result.exchanges.length > 1 && getPurchaseLabelForExchange(result.exchanges[1]?.name)" class="text-[9px] sm:text-[11px] text-gray-700 mt-1">
                     {{ getPurchaseLabelForExchange(result.exchanges[1].name) }}
                   </div>
-                  <div class="text-xs text-center mt-2 space-y-1">
+                  <div class="text-[9px] sm:text-xs text-center mt-1 sm:mt-2 space-y-0.5 sm:space-y-1">
                     <div class="text-gray-900 font-medium">
                       {{ formatPrice(result.exchanges.length > 1 ? getSecondTradingFee(result) : result.transferFee) }}원
                     </div>
                     <div class="text-gray-500">
                       {{ result.exchanges.length > 1 ? `거래수수료 (${result.exchanges[1].rate}%)` : '출금수수료' }}
-                      <div v-if="getBtcWithdrawalFee(result)" class="text-xs text-gray-400 mt-0.5">
+                      <div v-if="getBtcWithdrawalFee(result)" class="text-[8px] sm:text-xs text-gray-400 mt-0.5">
                         ({{ getBtcWithdrawalFee(result) }} BTC)
                       </div>
                     </div>
@@ -435,57 +436,57 @@
                 </div>
 
                 <!-- Arrow 3 (to Lightning if applicable) -->
-                <div v-if="result.lightningServices && result.lightningServices.length > 0" class="flex flex-col items-center h-16 justify-center">
-                  <svg class="w-8 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div v-if="result.lightningServices && result.lightningServices.length > 0" class="flex flex-col items-center h-12 sm:h-16 justify-center">
+                  <svg class="w-5 h-4 sm:w-8 sm:h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                   </svg>
-                  <div class="text-xs text-gray-500 mt-1">라이트닝</div>
+                  <div class="text-[9px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">라이트닝</div>
                 </div>
 
                 <!-- Lightning Service -->
-                <div v-if="result.lightningServices && result.lightningServices.length > 0" class="flex flex-col items-center relative px-6 pt-5 pb-3">
+                <div v-if="result.lightningServices && result.lightningServices.length > 0" class="flex flex-col items-center relative px-2 sm:px-6 pt-3 sm:pt-5 pb-2 sm:pb-3">
                   <component :is="getServiceUrl(result.lightningServices[0].name) ? 'a' : 'div'"
                              :href="getServiceUrl(result.lightningServices[0].name) || undefined"
                              target="_blank" rel="noopener noreferrer"
-                             class="w-24 h-16 bg-white border border-gray-300 text-gray-800 rounded-lg flex flex-col items-center justify-center shadow relative block">
+                             class="w-16 h-12 sm:w-24 sm:h-16 bg-white border border-gray-300 text-gray-800 rounded-lg flex flex-col items-center justify-center shadow relative block">
 
                     <!-- Lightning service icon -->
-                    <svg class="w-6 h-6 mb-1 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-4 h-4 sm:w-6 sm:h-6 mb-0.5 sm:mb-1 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
-                    <div class="text-xs font-medium text-center leading-tight px-1">{{ result.lightningServices[0].name }}</div>
+                    <div class="text-[9px] sm:text-xs font-medium text-center leading-tight px-0.5 sm:px-1">{{ result.lightningServices[0].name }}</div>
 
                     <!-- KYC badge -->
-                    <div class="absolute -top-3 -right-3 text-xs px-1.5 py-0.5 rounded-full font-medium shadow whitespace-nowrap"
+                    <div class="absolute -top-2 sm:-top-3 -right-2 sm:-right-3 text-[8px] sm:text-xs px-1 sm:px-1.5 py-0.5 rounded-full font-medium shadow whitespace-nowrap"
                          :class="result.lightningServices[0].isKyc
                            ? 'bg-red-500 text-white'
                            : 'bg-green-500 text-white'">
                       {{ result.lightningServices[0].isKyc ? 'KYC' : 'non-KYC' }}
                     </div>
                   </component>
-                  <div class="text-xs text-center mt-2 space-y-1">
+                  <div class="text-[9px] sm:text-xs text-center mt-1 sm:mt-2 space-y-0.5 sm:space-y-1">
                     <div class="text-gray-900 font-medium">{{ formatPrice(getLightningFee(result)) }}원</div>
                     <div class="text-gray-500">온체인 전환 수수료 ({{ result.lightningServices[0].rate }}%)</div>
                   </div>
                 </div>
 
                 <!-- Final Arrow -->
-                <div class="flex flex-col items-center h-16 justify-center">
-                  <svg class="w-8 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="flex flex-col items-center h-12 sm:h-16 justify-center">
+                  <svg class="w-5 h-4 sm:w-8 sm:h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                   </svg>
-                  <div class="text-xs text-gray-500 mt-1">최종출금</div>
+                  <div class="text-[9px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">최종출금</div>
                 </div>
 
                 <!-- End: Personal Wallet -->
                 <div class="flex flex-col items-center">
-                  <div class="w-20 h-16 bg-gray-900 text-white rounded-lg flex flex-col items-center justify-center shadow">
-                    <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div class="w-14 h-12 sm:w-20 sm:h-16 bg-gray-900 text-white rounded-lg flex flex-col items-center justify-center shadow">
+                    <svg class="w-4 h-4 sm:w-6 sm:h-6 mb-0.5 sm:mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                     </svg>
-                    <div class="text-xs font-medium">개인지갑</div>
+                    <div class="text-[10px] sm:text-xs font-medium">개인지갑</div>
                   </div>
-                  <div class="text-xs text-center mt-2 space-y-1">
+                  <div class="text-[9px] sm:text-xs text-center mt-1 sm:mt-2 space-y-0.5 sm:space-y-1">
                     <div class="text-gray-900 font-bold">{{ formatPrice(result.actualAmount) }}원</div>
                     <div class="text-gray-500">수령금액</div>
                   </div>
