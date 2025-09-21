@@ -603,32 +603,39 @@ const viewMode = ref('flow') // 'cards' or 'flow'
 const showEventModal = ref(false)
 const selectedEventDetails = ref('')
 // Flow container overflow tracking
-const flowContainerRefs = ref({})
+// Use non-reactive map to avoid update loops from ref callbacks
+const flowContainerRefs = Object.create(null)
 const flowOverflowById = ref({})
 
 const setFlowContainerRef = (id, el) => {
   if (!id) return
   if (el) {
-    flowContainerRefs.value[id] = el
-    // Attach a passive scroll listener to update overflow indicator as user scrolls
-    const onScroll = () => checkOverflowForId(id)
-    el.__overflowScrollHandler = onScroll
-    el.addEventListener('scroll', onScroll, { passive: true })
-    // Initial check
-    checkOverflowForId(id)
+    flowContainerRefs[id] = el
+    // Attach a passive scroll listener once to update overflow indicator as user scrolls
+    if (!el.__overflowScrollAttached) {
+      const onScroll = () => checkOverflowForId(id)
+      el.__overflowScrollHandler = onScroll
+      el.addEventListener('scroll', onScroll, { passive: true })
+      el.__overflowScrollAttached = true
+    }
+    // Defer initial check to avoid state updates during render
+    requestAnimationFrame(() => checkOverflowForId(id))
   }
 }
 
 const checkOverflowForId = (id) => {
-  const el = flowContainerRefs.value[id]
+  const el = flowContainerRefs[id]
   if (!el) return
   // Small tolerance to avoid layout jitter
   const hasOverflow = (el.scrollWidth - el.clientWidth) > 1
-  flowOverflowById.value = { ...flowOverflowById.value, [id]: hasOverflow }
+  const prev = flowOverflowById.value[id]
+  if (prev !== hasOverflow) {
+    flowOverflowById.value = { ...flowOverflowById.value, [id]: hasOverflow }
+  }
 }
 
 const checkAllOverflows = () => {
-  Object.keys(flowContainerRefs.value).forEach(checkOverflowForId)
+  Object.keys(flowContainerRefs).forEach(checkOverflowForId)
 }
 
 // Quick amount presets
@@ -1783,8 +1790,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   // Clean up scroll listeners
-  for (const id of Object.keys(flowContainerRefs.value)) {
-    const el = flowContainerRefs.value[id]
+  for (const id of Object.keys(flowContainerRefs)) {
+    const el = flowContainerRefs[id]
     if (el && el.__overflowScrollHandler) {
       el.removeEventListener('scroll', el.__overflowScrollHandler)
       delete el.__overflowScrollHandler
