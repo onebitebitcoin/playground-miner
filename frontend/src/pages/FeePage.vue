@@ -384,8 +384,8 @@
                   <div v-if="getPurchaseLabelForExchange(result.exchanges[0]?.name, result.exchanges[0]?.rate)" class="text-[9px] sm:text-[11px] text-gray-700 mt-1">
                     {{ getPurchaseLabelForExchange(result.exchanges[0].name, result.exchanges[0].rate) }}
                   </div>
-                  <div class="text-[9px] sm:text-xs text-center mt-1 sm:mt-2 space-y-0.5 sm:space-y-1">
-                    <div class="text-gray-900 font-medium">{{ formatPrice(getFirstTradingFee(result)) }}원</div>
+                    <div class="text-[9px] sm:text-xs text-center mt-1 sm:mt-2 space-y-0.5 sm:space-y-1">
+                    <div class="text-gray-900 font-medium">{{ formatPrice(result.firstTradingFee) }}원</div>
                     <div class="text-gray-500">{{ result.exchanges[0].rate === 0 ? '바로 출금' : `거래수수료 (${result.exchanges[0].rate}%)` }}</div>
                   </div>
                 </div>
@@ -436,9 +436,7 @@
                     {{ getPurchaseLabelForExchange(result.exchanges[1].name, result.exchanges[1].rate) }}
                   </div>
                   <div class="text-[9px] sm:text-xs text-center mt-1 sm:mt-2 space-y-0.5 sm:space-y-1">
-                    <div class="text-gray-900 font-medium">
-                      {{ formatPrice(getSecondTradingFee(result)) }}원
-                    </div>
+                    <div class="text-gray-900 font-medium">{{ formatPrice(result.secondTradingFee) }}원</div>
                     <div class="text-gray-500">
                       {{ result.exchanges[1].rate === 0 ? '바로 출금' : `거래수수료 (${result.exchanges[1].rate}%)` }}
                     </div>
@@ -452,10 +450,10 @@
                   </svg>
                   <div class="text-[8px] sm:text-[10px] text-gray-500 mt-0.5 sm:mt-1">라이트닝</div>
                   <!-- Lightning withdrawal fee display -->
-                  <div v-if="getLightningArrowFeeDisplay(result)" class="text-[7px] sm:text-[9px] font-medium text-orange-600 text-center mt-0.5 sm:mt-1 leading-tight">
+                  <div v-if="result.lightningArrowFee" class="text-[7px] sm:text-[9px] font-medium text-orange-600 text-center mt-0.5 sm:mt-1 leading-tight">
                     <div>출금수수료</div>
-                    <div>{{ getLightningArrowFeeDisplay(result).amount }}원</div>
-                    <div class="text-[6px] sm:text-[8px] text-gray-500">({{ getLightningArrowFeeDisplay(result).btc }} BTC)</div>
+                    <div>{{ result.lightningArrowFee.amount }}원</div>
+                    <div class="text-[6px] sm:text-[8px] text-gray-500">({{ result.lightningArrowFee.btc }} BTC)</div>
                   </div>
                 </div>
 
@@ -489,7 +487,7 @@
                     </div>
                   </component>
                   <div class="text-[9px] sm:text-xs text-center mt-1 sm:mt-2 space-y-0.5 sm:space-y-1">
-                    <div class="text-gray-900 font-medium">{{ formatPrice(getLightningFee(result)) }}원</div>
+                    <div class="text-gray-900 font-medium">{{ formatPrice(result.lightningFee) }}원</div>
                     <div class="text-gray-500">온체인 전환 수수료 ({{ result.lightningServices[0].rate }}%)</div>
                   </div>
                 </div>
@@ -500,14 +498,14 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                   </svg>
                   <div class="text-[8px] sm:text-[10px] text-gray-500 mt-0.5 sm:mt-1 text-center">
-                    {{ getFinalTransferType(result) }}
+                    {{ result.finalTransferType }}
                   </div>
 
                   <!-- Show onchain withdrawal fee on arrow -->
-                  <div v-if="getFinalArrowWithdrawalFeeDisplay(result)" class="text-[7px] sm:text-[9px] font-medium text-center mt-0.5 sm:mt-1 leading-tight" :class="getFinalArrowWithdrawalFeeDisplay(result).amount === '0' ? 'text-green-600' : 'text-orange-600'">
+                  <div v-if="result.finalArrowWithdrawalFee" class="text-[7px] sm:text-[9px] font-medium text-center mt-0.5 sm:mt-1 leading-tight" :class="result.finalArrowWithdrawalFee.amount === '0' ? 'text-green-600' : 'text-orange-600'">
                     <div>출금수수료</div>
-                    <div>{{ getFinalArrowWithdrawalFeeDisplay(result).amount }}원</div>
-                    <div v-if="getFinalArrowWithdrawalFeeDisplay(result).amount !== '0'" class="text-[6px] sm:text-[8px] text-gray-500">({{ getFinalArrowWithdrawalFeeDisplay(result).btc }} BTC)</div>
+                    <div>{{ result.finalArrowWithdrawalFee.amount }}원</div>
+                    <div v-if="result.finalArrowWithdrawalFee.amount !== '0'" class="text-[6px] sm:text-[8px] text-gray-500">({{ result.finalArrowWithdrawalFee.btc }} BTC)</div>
                   </div>
 
                   <!-- Show Strike final withdrawal fee separately if applicable -->
@@ -1505,11 +1503,46 @@ const calculateFees = () => {
     }
 
     // Update result with corrected values
+    result.firstTradingFee = actualTradingFee
+    result.secondTradingFee = secondTradingFee
     result.tradingFee = actualTradingFee + secondTradingFee
     result.lightningFee = actualLightningFee
     result.totalFee = result.tradingFee + result.transferFee + result.lightningFee
     result.actualAmount = currentAmount
     result.feeRate = ((result.totalFee / amount) * 100).toFixed(3)
+
+    // Derive final transfer type (cache for UI)
+    if (!result.lightningServices || result.lightningServices.length === 0) {
+      result.finalTransferType = '온체인'
+    } else {
+      const svc = (result.lightningServices[0]?.name || '')
+      result.finalTransferType = (svc === '월렛오브사토시' || svc === 'Boltz Exchange' || svc === 'Coinos') ? '온체인' : '라이트닝'
+    }
+
+    // Derive lightning arrow fee display (cache for UI)
+    if (result.lightningServices && result.lightningServices.length > 0 && result.withdrawalFees && result.withdrawalFees.length > 0) {
+      const lightningFee = result.withdrawalFees.find(f => f.name && f.name.includes('라이트닝'))
+      if (lightningFee && lightningFee.amountKrw > 0) {
+        result.lightningArrowFee = { amount: formatPrice(lightningFee.amountKrw), btc: lightningFee.amount }
+      } else {
+        result.lightningArrowFee = null
+      }
+    } else {
+      result.lightningArrowFee = null
+    }
+
+    // Derive final onchain arrow fee display (cache for UI)
+    if (result.finalTransferType === '온체인' && result.withdrawalFees && result.withdrawalFees.length > 0) {
+      const onchainFee = result.withdrawalFees.find(f => f.name && (f.name.includes('온체인') || f.name.includes('개인지갑'))) ||
+                         result.withdrawalFees.find(f => f.name && f.name.includes('BTC 송금'))
+      if (onchainFee && onchainFee.amountKrw > 0) {
+        result.finalArrowWithdrawalFee = { amount: formatPrice(onchainFee.amountKrw), btc: onchainFee.amount }
+      } else {
+        result.finalArrowWithdrawalFee = { amount: '0', btc: '0' }
+      }
+    } else {
+      result.finalArrowWithdrawalFee = null
+    }
   })
 
   results.value = newResults
