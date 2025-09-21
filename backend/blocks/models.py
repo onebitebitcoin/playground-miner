@@ -106,6 +106,7 @@ class ExchangeRate(models.Model):
     fee_rate = models.DecimalField(max_digits=6, decimal_places=4)  # Support up to 99.9999%
     is_event = models.BooleanField(default=False)  # Mark if this is a temporary event rate
     description = models.TextField(blank=True, null=True)  # Additional notes
+    event_details = models.TextField(blank=True, null=True)  # Detailed event information
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -123,6 +124,7 @@ class ExchangeRate(models.Model):
             'fee_rate': float(self.fee_rate),
             'is_event': self.is_event,
             'description': self.description,
+            'event_details': self.event_details,
             'updated_at': self.updated_at.isoformat(),
         }
 
@@ -170,10 +172,13 @@ class LightningService(models.Model):
     SERVICE_CHOICES = [
         ('boltz', 'Boltz Exchange'),
         ('coinos', 'Coinos'),
+        ('walletofsatoshi', '월렛오브사토시'),
+        ('strike', 'Strike'),
     ]
 
-    service = models.CharField(max_length=20, choices=SERVICE_CHOICES, unique=True)
+    service = models.CharField(max_length=30, choices=SERVICE_CHOICES, unique=True)
     fee_rate = models.DecimalField(max_digits=6, decimal_places=4)  # Fee rate as percentage
+    is_kyc = models.BooleanField(default=False)  # KYC required or not
     description = models.TextField(blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -182,13 +187,15 @@ class LightningService(models.Model):
         ordering = ['service']
 
     def __str__(self):
-        return f"{self.get_service_display()}: {self.fee_rate}%"
+        kyc_indicator = " (KYC)" if self.is_kyc else " (non-KYC)"
+        return f"{self.get_service_display()}: {self.fee_rate}%{kyc_indicator}"
 
     def as_dict(self):
         return {
             'service': self.service,
             'service_name': self.get_service_display(),
             'fee_rate': float(self.fee_rate),
+            'is_kyc': self.is_kyc,
             'description': self.description,
             'updated_at': self.updated_at.isoformat(),
         }

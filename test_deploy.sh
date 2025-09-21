@@ -2,26 +2,26 @@
 
 set -euo pipefail
 
-# Playground Miner deployment script (Ubuntu)
-# Based on ../training/deploy.sh, adapted for this repo layout.
+# Playground Miner test deployment script (Ubuntu)
+# Based on deploy.sh, adapted for test environment.
 #
 # Usage:
-#   SERVER_NAME=playground.onebitebitcoin.com BACKEND_PORT=8002 sudo -E ./deploy.sh
+#   SERVER_NAME=test.onebitebitcoin.com BACKEND_PORT=8003 sudo -E ./test_deploy.sh
 #
 # Notes:
 # - Expects Ubuntu with apt. Installs Node LTS, Python, Nginx.
 # - Backend (Django) runs via systemd + gunicorn on 127.0.0.1:$BACKEND_PORT.
-# - Frontend (Vite) is built and served by Nginx from /var/www/$PROJECT_NAME.
+# - Frontend (Vite) is built and served by Nginx from /var/www/test.
 
-PROJECT_NAME="playground"
+PROJECT_NAME="test"
 ROOT_DIR=$(pwd)
 BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 FRONTEND_DEPLOY_DIR="/var/www/${PROJECT_NAME}"
 SERVICE_NAME="${PROJECT_NAME}-backend"
-BACKEND_PORT="${BACKEND_PORT:-8002}"
+BACKEND_PORT="${BACKEND_PORT:-8003}"
 # Default to the intended domain; override via SERVER_NAME env
-SERVER_NAME="${SERVER_NAME:-playground.onebitebitcoin.com}"
+SERVER_NAME="${SERVER_NAME:-test.onebitebitcoin.com}"
 
 echo "=== Deploying $PROJECT_NAME ==="
 echo "Root: $ROOT_DIR"
@@ -218,7 +218,7 @@ else
 fi
 
 echo "=== Nginx: Reverse proxy + static ==="
-# Name the nginx config after the server_name (e.g., playground.onebitebitcoin.com.conf)
+# Name the nginx config after the server_name (e.g., test.onebitebitcoin.com.conf)
 CERT_DOMAIN="${CERT_DOMAIN:-onebitebitcoin.com}"
 NGINX_BASENAME="${SERVER_NAME:-$PROJECT_NAME}"
 NGINX_CONF="/etc/nginx/sites-available/${NGINX_BASENAME}.conf"

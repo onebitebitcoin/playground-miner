@@ -64,8 +64,10 @@ def seed_withdrawal_fees():
 
 def seed_lightning_services():
     defaults = [
-        { 'service': 'boltz',  'fee_rate': 0.5, 'description': 'Boltz 교환 수수료' },
-        { 'service': 'coinos', 'fee_rate': 0.4, 'description': 'Coinos 수수료' },
+        { 'service': 'boltz',  'fee_rate': 0.5, 'is_kyc': False, 'description': 'Boltz 교환 수수료 (non-KYC)' },
+        { 'service': 'coinos', 'fee_rate': 0.0, 'is_kyc': False, 'description': 'Coinos 라이트닝 간 거래수수료 0% (non-KYC)' },
+        { 'service': 'walletofsatoshi', 'fee_rate': 0.0, 'is_kyc': False, 'description': '월렛오브사토시 라이트닝 간 거래수수료 0% (non-KYC)' },
+        { 'service': 'strike', 'fee_rate': 0.0, 'is_kyc': True, 'description': 'Strike 라이트닝 간 거래수수료 0%, 온체인 출금수수료 0% (KYC)' },
     ]
     created = 0
     for d in defaults:
@@ -73,6 +75,7 @@ def seed_lightning_services():
             service=d['service'],
             defaults={
                 'fee_rate': d['fee_rate'],
+                'is_kyc': d['is_kyc'],
                 'description': d['description'],
             },
         )

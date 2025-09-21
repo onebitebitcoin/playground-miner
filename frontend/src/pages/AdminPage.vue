@@ -266,6 +266,22 @@
                       </div>
                     </div>
 
+                    <!-- Event details field (shown only for events) -->
+                    <div v-if="rate.is_event" class="mt-4">
+                      <label class="block text-sm font-medium text-gray-700 mb-1">
+                        이벤트 상세 정보
+                      </label>
+                      <textarea
+                        v-model="rate.event_details"
+                        placeholder="이벤트 조건, 기간, 주의사항 등 자세한 내용을 입력하세요"
+                        rows="3"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      ></textarea>
+                      <div class="text-xs text-gray-500 mt-1">
+                        이벤트 관련 자세한 내용이 수수료 계산 페이지에 표시됩니다
+                      </div>
+                    </div>
+
                     <div class="mt-4 flex justify-between items-center">
                       <div class="text-sm text-gray-500">
                         <span v-if="rate.is_event" class="text-orange-600 font-medium">⚠️ 한시적 이벤트</span>
@@ -340,7 +356,7 @@
                       <h4 class="font-medium text-gray-900">{{ service.service_name }}</h4>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">
                           수수료율 (%)
@@ -353,6 +369,24 @@
                           max="100"
                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
+                      </div>
+                      <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">
+                          KYC 상태
+                        </label>
+                        <div class="flex items-center gap-2 mt-2">
+                          <label class="flex items-center">
+                            <input
+                              v-model="service.is_kyc"
+                              type="checkbox"
+                              class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span class="ml-2 text-sm text-gray-700">KYC 필요</span>
+                          </label>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">
+                          {{ service.is_kyc ? 'KYC 인증 필요' : 'non-KYC 서비스' }}
+                        </div>
                       </div>
                       <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">
@@ -634,7 +668,8 @@ const updateExchangeRate = async (rate) => {
       rate.exchange,
       rate.fee_rate,
       rate.is_event,
-      rate.description
+      rate.description,
+      rate.event_details
     )
 
     if (response.success) {
@@ -739,6 +774,7 @@ const updateLightningService = async (service) => {
       username,
       service.service,
       service.fee_rate,
+      service.is_kyc,
       service.description
     )
 

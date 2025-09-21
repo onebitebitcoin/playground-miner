@@ -407,6 +407,7 @@ def admin_exchange_rates_view(request):
         fee_rate = data.get('fee_rate')
         is_event = data.get('is_event', False)
         description = data.get('description', '')
+        event_details = data.get('event_details', '')
 
         if not exchange or fee_rate is None:
             return JsonResponse({'ok': False, 'error': 'Exchange and fee_rate required'}, status=400)
@@ -425,7 +426,8 @@ def admin_exchange_rates_view(request):
                 defaults={
                     'fee_rate': fee_rate,
                     'is_event': is_event,
-                    'description': description
+                    'description': description,
+                    'event_details': event_details
                 }
             )
 
@@ -561,6 +563,7 @@ def admin_lightning_services_view(request):
 
         service = data.get('service')
         fee_rate = data.get('fee_rate')
+        is_kyc = data.get('is_kyc', False)  # Default to False if not provided
         description = data.get('description', '')
 
         if not service or fee_rate is None:
@@ -579,6 +582,7 @@ def admin_lightning_services_view(request):
                 service=service,
                 defaults={
                     'fee_rate': fee_rate,
+                    'is_kyc': bool(is_kyc),
                     'description': description
                 }
             )

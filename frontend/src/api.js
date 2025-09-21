@@ -188,7 +188,7 @@ export async function apiGetAdminExchangeRates(username) {
   }
 }
 
-export async function apiUpdateExchangeRate(username, exchange, feeRate, isEvent, description) {
+export async function apiUpdateExchangeRate(username, exchange, feeRate, isEvent, description, eventDetails = '') {
   try {
     const res = await fetch(`${BASE_URL}/api/exchange-rates/admin`, {
       method: 'POST',
@@ -201,7 +201,8 @@ export async function apiUpdateExchangeRate(username, exchange, feeRate, isEvent
         exchange,
         fee_rate: feeRate,
         is_event: isEvent,
-        description
+        description,
+        event_details: eventDetails
       })
     })
     if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
@@ -294,7 +295,7 @@ export async function apiGetAdminLightningServices(username) {
   }
 }
 
-export async function apiUpdateLightningService(username, service, feeRate, description) {
+export async function apiUpdateLightningService(username, service, feeRate, isKyc, description) {
   try {
     const res = await fetch(`${BASE_URL}/api/lightning-services/admin`, {
       method: 'POST',
@@ -306,6 +307,7 @@ export async function apiUpdateLightningService(username, service, feeRate, desc
         username,
         service,
         fee_rate: feeRate,
+        is_kyc: isKyc,
         description
       })
     })
