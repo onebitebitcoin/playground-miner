@@ -27,24 +27,15 @@
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
 
-    <!-- PWA Service Worker Registration -->
+    <!-- PWA Service Worker Registration - DISABLED -->
     <script>
+      // Service Worker disabled - clean up any existing registrations
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          // Register service worker with better error handling
-          navigator.serviceWorker.register('/sw.js')
-            .then((registration) => {
-              console.log('SW registered: ', registration);
-            })
-            .catch((registrationError) => {
-              console.warn('SW registration failed: ', registrationError);
-              // Optionally unregister any existing service workers that might be causing issues
-              navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                for(let registration of registrations) {
-                  registration.unregister();
-                }
-              });
-            });
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for(let registration of registrations) {
+            registration.unregister();
+            console.log('Unregistered service worker:', registration);
+          }
         });
       }
     </script>
