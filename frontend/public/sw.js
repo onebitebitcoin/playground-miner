@@ -1,54 +1,34 @@
-const CACHE_NAME = 'bitcoin-playground-v2';
-// Cache only stable, guaranteed assets. Vite outputs hashed assets under /assets,
-// which change per build; caching them here would cause 404 on install.
-const urlsToCache = [
-  '/',
-  '/manifest.json'
-];
+// Service Worker DISABLED - Immediately unregister and clean up
+console.log('Service Worker: Disabling and cleaning up...');
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(urlsToCache))
-  );
-});
-
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // Return cached version if available
-        if (response) {
-          return response;
-        }
-
-        // Try to fetch from network with error handling
-        return fetch(event.request)
-          .catch((error) => {
-            console.warn('Service Worker: Fetch failed for', event.request.url, error);
-
-            // For navigation requests, return the cached index.html as fallback
-            if (event.request.mode === 'navigate') {
-              return caches.match('/');
-            }
-
-            // For other requests, just let them fail gracefully
-            throw error;
-          });
-      })
-  );
+  // Skip waiting and take control immediately
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
+    // Clear all caches
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
+          console.log('Deleting cache:', cacheName);
+          return caches.delete(cacheName);
         })
       );
+    }).then(() => {
+      // Unregister this service worker
+      console.log('Service Worker: Unregistering...');
+      return self.registration.unregister();
+    }).then(() => {
+      // Take control of all clients
+      return self.clients.claim();
     })
   );
+});
+
+// Do not handle any fetch events
+self.addEventListener('fetch', (event) => {
+  // Let all requests go through normally to the network
+  return;
 });
