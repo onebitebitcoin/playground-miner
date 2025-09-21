@@ -324,6 +324,31 @@ server {
         expires 30d;
         add_header Cache-Control "public, max-age=2592000";
     }
+
+    # PWA Icons
+    location /icons/ {
+        alias $FRONTEND_DEPLOY_DIR/icons/;
+        access_log off;
+        expires 7d;
+        add_header Cache-Control "public, max-age=604800";
+
+        # Handle CORS for PWA manifest
+        add_header Access-Control-Allow-Origin "*";
+        add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS";
+        add_header Access-Control-Allow-Headers "Range";
+    }
+
+    # Manifest and Service Worker
+    location ~ ^/(manifest\.json|sw\.js)$ {
+        root $FRONTEND_DEPLOY_DIR;
+        access_log off;
+        expires 1d;
+        add_header Cache-Control "public, max-age=86400";
+
+        # Handle CORS
+        add_header Access-Control-Allow-Origin "*";
+        add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS";
+    }
 }
 EOF
 

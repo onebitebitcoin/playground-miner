@@ -17,8 +17,24 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
-        // Return cached version or fetch from network
-        return response || fetch(event.request);
+        // Return cached version if available
+        if (response) {
+          return response;
+        }
+
+        // Try to fetch from network with error handling
+        return fetch(event.request)
+          .catch((error) => {
+            console.warn('Service Worker: Fetch failed for', event.request.url, error);
+
+            // For navigation requests, return the cached index.html as fallback
+            if (event.request.mode === 'navigate') {
+              return caches.match('/');
+            }
+
+            // For other requests, just let them fail gracefully
+            throw error;
+          });
       })
   );
 });
