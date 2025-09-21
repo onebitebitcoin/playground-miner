@@ -325,12 +325,19 @@
             </div>
 
             <!-- Flow Diagram -->
-            <div class="relative overflow-x-auto overflow-y-visible">
-              <div class="flex items-center justify-between min-w-max gap-3 sm:gap-6 py-6 sm:py-10 px-2 sm:px-10">
+            <div
+              class="relative overflow-y-visible overflow-x-auto -mx-2 px-2 scrollbar-hide sm:overflow-visible sm:mx-0 sm:px-0"
+              :ref="el => setFlowContainerRef(result.id, el)"
+            >
+              <!-- Mobile scroll hint (only when overflowing) -->
+              <div v-if="flowOverflowById[result.id]" class="sm:hidden text-[10px] text-gray-500 px-1 pb-1">좌우로 스크롤해 전체 흐름 보기</div>
+              <!-- Right fade indicator -->
+              <div v-if="flowOverflowById[result.id]" class="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-gray-50 to-transparent sm:hidden"></div>
+              <div class="flex items-center justify-start sm:justify-between gap-1 sm:gap-3 py-4 sm:py-6 px-1 sm:px-4">
 
                 <!-- Start: User Wallet -->
-                <div class="flex flex-col items-center">
-                  <div class="w-14 h-12 sm:w-20 sm:h-16 bg-gray-800 text-white rounded-lg flex flex-col items-center justify-center shadow">
+                <div class="flex flex-col items-center shrink-0">
+                  <div class="w-12 h-10 sm:w-16 sm:h-12 bg-gray-800 text-white rounded-lg flex flex-col items-center justify-center shadow">
                     <svg class="w-4 h-4 sm:w-6 sm:h-6 mb-0.5 sm:mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
@@ -342,20 +349,23 @@
                 </div>
 
                 <!-- Arrow 1 -->
-                <div class="flex flex-col items-center h-12 sm:h-16 justify-center">
+                <div class="flex flex-col items-center h-12 sm:h-16 justify-center shrink-0">
                   <svg class="w-5 h-4 sm:w-8 sm:h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                   </svg>
-                  <div class="text-[9px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">원화구매</div>
+                  <div class="text-[8px] sm:text-[10px] text-gray-500 mt-0.5 sm:mt-1 text-center leading-tight">
+                    <div>원화충전</div>
+                    <div>(24h 대기)</div>
+                  </div>
                 </div>
 
                 <!-- Exchange 1 -->
-                <div class="flex flex-col items-center relative px-2 sm:px-5 pt-3 sm:pt-5 pb-2 sm:pb-3">
+                <div class="flex flex-col items-center relative px-1 sm:px-3 pt-2 sm:pt-3 pb-1 sm:pb-2 shrink-0">
                   <component v-for="(exchange, exIndex) in result.exchanges.slice(0, 1)" :key="exIndex"
                              :is="getExchangeUrl(exchange.name) ? 'a' : 'div'"
                              :href="getExchangeUrl(exchange.name) || undefined"
                              target="_blank" rel="noopener noreferrer"
-                             class="w-16 h-12 sm:w-24 sm:h-16 bg-white border border-gray-300 text-gray-800 rounded-lg flex flex-col items-center justify-center shadow relative block">
+                             class="w-14 h-10 sm:w-20 sm:h-12 bg-white border border-gray-300 text-gray-800 rounded-lg flex flex-col items-center justify-center shadow relative block">
 
                     <!-- Exchange icon -->
                     <svg class="w-4 h-4 sm:w-6 sm:h-6 mb-0.5 sm:mb-1 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -371,32 +381,41 @@
                     </div>
                   </component>
                   <!-- Purchase label for first exchange -->
-                  <div v-if="getPurchaseLabelForExchange(result.exchanges[0]?.name)" class="text-[9px] sm:text-[11px] text-gray-700 mt-1">
-                    {{ getPurchaseLabelForExchange(result.exchanges[0].name) }}
+                  <div v-if="getPurchaseLabelForExchange(result.exchanges[0]?.name, result.exchanges[0]?.rate)" class="text-[9px] sm:text-[11px] text-gray-700 mt-1">
+                    {{ getPurchaseLabelForExchange(result.exchanges[0].name, result.exchanges[0].rate) }}
                   </div>
                   <div class="text-[9px] sm:text-xs text-center mt-1 sm:mt-2 space-y-0.5 sm:space-y-1">
                     <div class="text-gray-900 font-medium">{{ formatPrice(getFirstTradingFee(result)) }}원</div>
-                    <div class="text-gray-500">거래수수료 ({{ result.exchanges[0].rate }}%)</div>
+                    <div class="text-gray-500">{{ result.exchanges[0].rate === 0 ? '바로 출금' : `거래수수료 (${result.exchanges[0].rate}%)` }}</div>
                   </div>
                 </div>
 
-                <!-- Arrow 2 (if there's a second exchange or withdrawal) -->
-                <div v-if="result.exchanges.length > 1 || result.transferFee > 0" class="flex flex-col items-center h-12 sm:h-16 justify-center">
+                <!-- Arrow 2 (to second exchange) -->
+                <div v-if="result.exchanges.length > 1" class="flex flex-col items-center justify-center shrink-0" :class="result.exchanges[0].name && result.exchanges[0].name.includes('BTC') ? 'h-16 sm:h-20' : 'h-10 sm:h-12'">
                   <svg class="w-5 h-4 sm:w-8 sm:h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                   </svg>
-                  <div class="text-[9px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">
-                    {{ result.exchanges.length > 1 ? 'USDT전송' : 'BTC출금' }}
+                  <div class="text-[8px] sm:text-[10px] text-gray-500 mt-0.5 sm:mt-1 text-center leading-tight">
+                    <div v-if="result.exchanges[0].name && result.exchanges[0].name.includes('BTC')">
+                      <div>BTC출금</div>
+                      <div v-if="result.withdrawalFees && result.withdrawalFees.length > 0" class="text-[7px] sm:text-[9px] font-medium text-orange-600 mt-0.5 leading-tight">
+                        <div>{{ formatPrice(result.withdrawalFees[0].amountKrw) }}원</div>
+                        <div class="text-[6px] sm:text-[8px] text-gray-500">({{ result.withdrawalFees[0].amount }} BTC)</div>
+                      </div>
+                    </div>
+                    <div v-else>
+                      <div>USDT전송</div>
+                      <div>(무료)</div>
+                    </div>
                   </div>
                 </div>
 
-                <!-- Exchange 2 or Withdrawal -->
-                <div v-if="result.exchanges.length > 1 || result.transferFee > 0" class="flex flex-col items-center relative px-2 sm:px-5 pt-3 sm:pt-5 pb-2 sm:pb-3">
-                  <component v-if="result.exchanges.length > 1"
-                             :is="getExchangeUrl(result.exchanges[1].name) ? 'a' : 'div'"
+                <!-- Exchange 2 -->
+                <div v-if="result.exchanges.length > 1" class="flex flex-col items-center relative px-2 sm:px-5 pt-3 sm:pt-5 pb-2 sm:pb-3 shrink-0">
+                  <component :is="getExchangeUrl(result.exchanges[1].name) ? 'a' : 'div'"
                              :href="getExchangeUrl(result.exchanges[1].name) || undefined"
                              target="_blank" rel="noopener noreferrer"
-                             class="w-16 h-12 sm:w-24 sm:h-16 bg-white border border-gray-300 text-gray-800 rounded-lg flex flex-col items-center justify-center shadow relative block">
+                             class="w-14 h-10 sm:w-20 sm:h-12 bg-white border border-gray-300 text-gray-800 rounded-lg flex flex-col items-center justify-center shadow relative block">
 
                     <!-- Second exchange icon -->
                     <svg class="w-4 h-4 sm:w-6 sm:h-6 mb-0.5 sm:mb-1 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -411,44 +430,41 @@
                       이벤트
                     </div>
                   </component>
-                  <div v-else class="w-16 h-12 sm:w-24 sm:h-16 bg-gray-700 text-white rounded-lg flex flex-col items-center justify-center shadow">
-                    <svg class="w-4 h-4 sm:w-6 sm:h-6 mb-0.5 sm:mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                    </svg>
-                    <div class="text-[9px] sm:text-xs font-medium text-center leading-tight px-0.5 sm:px-1">출금</div>
-                  </div>
 
-                  <!-- Purchase label for second exchange (if present) -->
-                  <div v-if="result.exchanges.length > 1 && getPurchaseLabelForExchange(result.exchanges[1]?.name)" class="text-[9px] sm:text-[11px] text-gray-700 mt-1">
-                    {{ getPurchaseLabelForExchange(result.exchanges[1].name) }}
+                  <!-- Purchase label for second exchange -->
+                  <div v-if="getPurchaseLabelForExchange(result.exchanges[1]?.name, result.exchanges[1]?.rate)" class="text-[9px] sm:text-[11px] text-gray-700 mt-1">
+                    {{ getPurchaseLabelForExchange(result.exchanges[1].name, result.exchanges[1].rate) }}
                   </div>
                   <div class="text-[9px] sm:text-xs text-center mt-1 sm:mt-2 space-y-0.5 sm:space-y-1">
                     <div class="text-gray-900 font-medium">
-                      {{ formatPrice(result.exchanges.length > 1 ? getSecondTradingFee(result) : result.transferFee) }}원
+                      {{ formatPrice(getSecondTradingFee(result)) }}원
                     </div>
                     <div class="text-gray-500">
-                      {{ result.exchanges.length > 1 ? `거래수수료 (${result.exchanges[1].rate}%)` : '출금수수료' }}
-                      <div v-if="getBtcWithdrawalFee(result)" class="text-[8px] sm:text-xs text-gray-400 mt-0.5">
-                        ({{ getBtcWithdrawalFee(result) }} BTC)
-                      </div>
+                      {{ result.exchanges[1].rate === 0 ? '바로 출금' : `거래수수료 (${result.exchanges[1].rate}%)` }}
                     </div>
                   </div>
                 </div>
 
                 <!-- Arrow 3 (to Lightning if applicable) -->
-                <div v-if="result.lightningServices && result.lightningServices.length > 0" class="flex flex-col items-center h-12 sm:h-16 justify-center">
+                <div v-if="result.lightningServices && result.lightningServices.length > 0" class="flex flex-col items-center h-10 sm:h-12 justify-center shrink-0">
                   <svg class="w-5 h-4 sm:w-8 sm:h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                   </svg>
-                  <div class="text-[9px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">라이트닝</div>
+                  <div class="text-[8px] sm:text-[10px] text-gray-500 mt-0.5 sm:mt-1">라이트닝</div>
+                  <!-- Lightning withdrawal fee display -->
+                  <div v-if="getLightningArrowFeeDisplay(result)" class="text-[7px] sm:text-[9px] font-medium text-orange-600 text-center mt-0.5 sm:mt-1 leading-tight">
+                    <div>출금수수료</div>
+                    <div>{{ getLightningArrowFeeDisplay(result).amount }}원</div>
+                    <div class="text-[6px] sm:text-[8px] text-gray-500">({{ getLightningArrowFeeDisplay(result).btc }} BTC)</div>
+                  </div>
                 </div>
 
                 <!-- Lightning Service -->
-                <div v-if="result.lightningServices && result.lightningServices.length > 0" class="flex flex-col items-center relative px-2 sm:px-6 pt-3 sm:pt-5 pb-2 sm:pb-3">
+                <div v-if="result.lightningServices && result.lightningServices.length > 0" class="flex flex-col items-center relative px-1 sm:px-4 pt-2 sm:pt-3 pb-1 sm:pb-2 shrink-0">
                   <component :is="getServiceUrl(result.lightningServices[0].name) ? 'a' : 'div'"
                              :href="getServiceUrl(result.lightningServices[0].name) || undefined"
                              target="_blank" rel="noopener noreferrer"
-                             class="w-16 h-12 sm:w-24 sm:h-16 bg-white border border-gray-300 text-gray-800 rounded-lg flex flex-col items-center justify-center shadow relative block">
+                             class="w-14 h-10 sm:w-20 sm:h-12 bg-white border border-gray-300 text-gray-800 rounded-lg flex flex-col items-center justify-center shadow relative block">
 
                     <!-- Lightning service icon -->
                     <svg class="w-4 h-4 sm:w-6 sm:h-6 mb-0.5 sm:mb-1 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -463,6 +479,14 @@
                            : 'bg-green-500 text-white'">
                       {{ result.lightningServices[0].isKyc ? 'KYC' : 'non-KYC' }}
                     </div>
+
+                    <!-- Custodial badge -->
+                    <div class="absolute -top-2 sm:-top-3 -left-2 sm:-left-3 text-[8px] sm:text-xs px-1 sm:px-1.5 py-0.5 rounded-full font-medium shadow whitespace-nowrap"
+                         :class="result.lightningServices[0].isCustodial
+                           ? 'bg-blue-500 text-white'
+                           : 'bg-purple-500 text-white'">
+                      {{ result.lightningServices[0].isCustodial ? '수탁형' : '비수탁형' }}
+                    </div>
                   </component>
                   <div class="text-[9px] sm:text-xs text-center mt-1 sm:mt-2 space-y-0.5 sm:space-y-1">
                     <div class="text-gray-900 font-medium">{{ formatPrice(getLightningFee(result)) }}원</div>
@@ -471,16 +495,31 @@
                 </div>
 
                 <!-- Final Arrow -->
-                <div class="flex flex-col items-center h-12 sm:h-16 justify-center">
+                <div class="flex flex-col items-center justify-center py-2 shrink-0">
                   <svg class="w-5 h-4 sm:w-8 sm:h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                   </svg>
-                  <div class="text-[9px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">최종출금</div>
+                  <div class="text-[8px] sm:text-[10px] text-gray-500 mt-0.5 sm:mt-1 text-center">
+                    {{ getFinalTransferType(result) }}
+                  </div>
+
+                  <!-- Show onchain withdrawal fee on arrow -->
+                  <div v-if="getFinalArrowWithdrawalFeeDisplay(result)" class="text-[7px] sm:text-[9px] font-medium text-center mt-0.5 sm:mt-1 leading-tight" :class="getFinalArrowWithdrawalFeeDisplay(result).amount === '0' ? 'text-green-600' : 'text-orange-600'">
+                    <div>출금수수료</div>
+                    <div>{{ getFinalArrowWithdrawalFeeDisplay(result).amount }}원</div>
+                    <div v-if="getFinalArrowWithdrawalFeeDisplay(result).amount !== '0'" class="text-[6px] sm:text-[8px] text-gray-500">({{ getFinalArrowWithdrawalFeeDisplay(result).btc }} BTC)</div>
+                  </div>
+
+                  <!-- Show Strike final withdrawal fee separately if applicable -->
+                  <div v-if="getStrikeFinalWithdrawalDisplay(result)" class="text-[7px] sm:text-[9px] font-medium mt-1 text-center text-green-600 leading-tight">
+                    <div>Strike→지갑</div>
+                    <div>무료</div>
+                  </div>
                 </div>
 
                 <!-- End: Personal Wallet -->
-                <div class="flex flex-col items-center">
-                  <div class="w-14 h-12 sm:w-20 sm:h-16 bg-gray-900 text-white rounded-lg flex flex-col items-center justify-center shadow">
+                <div class="flex flex-col items-center shrink-0">
+                  <div class="w-12 h-10 sm:w-16 sm:h-12 bg-gray-900 text-white rounded-lg flex flex-col items-center justify-center shadow">
                     <svg class="w-4 h-4 sm:w-6 sm:h-6 mb-0.5 sm:mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                     </svg>
@@ -548,7 +587,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { apiGetExchangeRates, apiGetWithdrawalFees, apiGetLightningServices } from '../api'
 
 // Reactive data
@@ -563,6 +602,34 @@ const detailsOpenById = ref({})
 const viewMode = ref('flow') // 'cards' or 'flow'
 const showEventModal = ref(false)
 const selectedEventDetails = ref('')
+// Flow container overflow tracking
+const flowContainerRefs = ref({})
+const flowOverflowById = ref({})
+
+const setFlowContainerRef = (id, el) => {
+  if (!id) return
+  if (el) {
+    flowContainerRefs.value[id] = el
+    // Attach a passive scroll listener to update overflow indicator as user scrolls
+    const onScroll = () => checkOverflowForId(id)
+    el.__overflowScrollHandler = onScroll
+    el.addEventListener('scroll', onScroll, { passive: true })
+    // Initial check
+    checkOverflowForId(id)
+  }
+}
+
+const checkOverflowForId = (id) => {
+  const el = flowContainerRefs.value[id]
+  if (!el) return
+  // Small tolerance to avoid layout jitter
+  const hasOverflow = (el.scrollWidth - el.clientWidth) > 1
+  flowOverflowById.value = { ...flowOverflowById.value, [id]: hasOverflow }
+}
+
+const checkAllOverflows = () => {
+  Object.keys(flowContainerRefs.value).forEach(checkOverflowForId)
+}
 
 // Quick amount presets
 const quickAmounts = ref([
@@ -704,22 +771,27 @@ const loadData = async () => {
   try {
     // Load exchange rates
     const exchangeResponse = await apiGetExchangeRates()
+    console.log('Exchange rates response:', exchangeResponse)
     if (exchangeResponse.success && exchangeResponse.rates) {
       exchangeResponse.rates.forEach(rate => {
         feeRates.value[rate.exchange] = rate.fee_rate
         exchangeRatesInfo.value[rate.exchange] = rate
+        console.log(`Loaded ${rate.exchange}:`, rate)
       })
     }
 
     // Load withdrawal fees
     const withdrawalResponse = await apiGetWithdrawalFees()
+    console.log('Withdrawal fees response:', withdrawalResponse)
     if (withdrawalResponse.success && withdrawalResponse.fees) {
       withdrawalResponse.fees.forEach(fee => {
         const key = `${fee.exchange}_${fee.withdrawal_type}`
         withdrawalFees.value[key] = fee.fee_btc
         withdrawalFeesInfo.value[key] = fee
+        console.log(`Loaded ${key}:`, fee.fee_btc, 'BTC')
       })
     }
+    console.log('Final withdrawal fees object:', withdrawalFees.value)
 
     // Load lightning services
     const lightningResponse = await apiGetLightningServices()
@@ -740,6 +812,11 @@ const calculateFees = () => {
     return
   }
 
+  // Debug withdrawal fees values
+  console.log('Current withdrawal fees:', withdrawalFees.value)
+  console.log('binance_lightning fee:', withdrawalFees.value.binance_lightning)
+  console.log('okx_lightning fee:', withdrawalFees.value.okx_lightning)
+
   const amount = getActualAmount()
   const newResults = []
 
@@ -755,6 +832,12 @@ const calculateFees = () => {
         rate: feeRates.value.upbit_btc,
         note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : '',
         eventDetails: exchangeRatesInfo.value.upbit_btc?.event_details || ''
+      },
+      {
+        name: '바이낸스',
+        rate: 0, // 바이낸스에서는 거래 없이 출금만 하므로 거래수수료 0
+        note: '',
+        eventDetails: ''
       }
     ],
     withdrawalFees: [
@@ -788,6 +871,12 @@ const calculateFees = () => {
         rate: feeRates.value.upbit_btc,
         note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : '',
         eventDetails: exchangeRatesInfo.value.upbit_btc?.event_details || ''
+      },
+      {
+        name: 'OKX',
+        rate: 0, // OKX에서는 거래 없이 출금만 하므로 거래수수료 0
+        note: '',
+        eventDetails: ''
       }
     ],
     withdrawalFees: [
@@ -821,6 +910,12 @@ const calculateFees = () => {
         rate: feeRates.value.bithumb,
         note: exchangeRatesInfo.value.bithumb?.is_event ? '한시적 이벤트' : '',
         eventDetails: exchangeRatesInfo.value.bithumb?.event_details || ''
+      },
+      {
+        name: 'OKX',
+        rate: 0, // OKX에서는 거래 없이 출금만 하므로 거래수수료 0
+        note: '',
+        eventDetails: ''
       }
     ],
     withdrawalFees: [
@@ -937,7 +1032,8 @@ const calculateFees = () => {
     lightningServices: [{
       name: 'Boltz Exchange',
       rate: lightningServices.value.boltz,
-      isKyc: lightningServicesInfo.value.boltz?.is_kyc || false
+      isKyc: lightningServicesInfo.value.boltz?.is_kyc || false,
+      isCustodial: lightningServicesInfo.value.boltz?.is_custodial ?? true
     }],
     tradingFee: amount * (feeRates.value.upbit_btc / 100),
     transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.binance_lightning * bitcoinPrice.value,
@@ -975,7 +1071,8 @@ const calculateFees = () => {
     lightningServices: [{
       name: 'Coinos',
       rate: lightningServices.value.coinos,
-      isKyc: lightningServicesInfo.value.coinos?.is_kyc || false
+      isKyc: lightningServicesInfo.value.coinos?.is_kyc || false,
+      isCustodial: lightningServicesInfo.value.coinos?.is_custodial ?? true
     }],
     tradingFee: amount * (feeRates.value.upbit_btc / 100),
     transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.binance_lightning * bitcoinPrice.value,
@@ -1013,7 +1110,8 @@ const calculateFees = () => {
     lightningServices: [{
       name: 'Boltz Exchange',
       rate: lightningServices.value.boltz,
-      isKyc: lightningServicesInfo.value.boltz?.is_kyc || false
+      isKyc: lightningServicesInfo.value.boltz?.is_kyc || false,
+      isCustodial: lightningServicesInfo.value.boltz?.is_custodial ?? true
     }],
     tradingFee: amount * (feeRates.value.upbit_btc / 100),
     transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.okx_lightning * bitcoinPrice.value,
@@ -1051,7 +1149,8 @@ const calculateFees = () => {
     lightningServices: [{
       name: 'Coinos',
       rate: lightningServices.value.coinos,
-      isKyc: lightningServicesInfo.value.coinos?.is_kyc || false
+      isKyc: lightningServicesInfo.value.coinos?.is_kyc || false,
+      isCustodial: lightningServicesInfo.value.coinos?.is_custodial ?? true
     }],
     tradingFee: amount * (feeRates.value.upbit_btc / 100),
     transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.okx_lightning * bitcoinPrice.value,
@@ -1089,7 +1188,8 @@ const calculateFees = () => {
     lightningServices: [{
       name: 'Boltz Exchange',
       rate: lightningServices.value.boltz,
-      isKyc: lightningServicesInfo.value.boltz?.is_kyc || false
+      isKyc: lightningServicesInfo.value.boltz?.is_kyc || false,
+      isCustodial: lightningServicesInfo.value.boltz?.is_custodial ?? true
     }],
     tradingFee: amount * (feeRates.value.upbit_usdt / 100) + amount * (feeRates.value.okx / 100),
     transferFee: withdrawalFees.value.okx_lightning * bitcoinPrice.value,
@@ -1126,7 +1226,8 @@ const calculateFees = () => {
     lightningServices: [{
       name: 'Coinos',
       rate: lightningServices.value.coinos,
-      isKyc: lightningServicesInfo.value.coinos?.is_kyc || false
+      isKyc: lightningServicesInfo.value.coinos?.is_kyc || false,
+      isCustodial: lightningServicesInfo.value.coinos?.is_custodial ?? true
     }],
     tradingFee: amount * (feeRates.value.upbit_usdt / 100) + amount * (feeRates.value.okx / 100),
     transferFee: withdrawalFees.value.okx_lightning * bitcoinPrice.value,
@@ -1163,7 +1264,8 @@ const calculateFees = () => {
     lightningServices: [{
       name: 'Boltz Exchange',
       rate: lightningServices.value.boltz,
-      isKyc: lightningServicesInfo.value.boltz?.is_kyc || false
+      isKyc: lightningServicesInfo.value.boltz?.is_kyc || false,
+      isCustodial: lightningServicesInfo.value.boltz?.is_custodial ?? true
     }],
     tradingFee: amount * (feeRates.value.upbit_usdt / 100) + amount * (feeRates.value.binance / 100),
     transferFee: withdrawalFees.value.binance_lightning * bitcoinPrice.value,
@@ -1200,7 +1302,8 @@ const calculateFees = () => {
     lightningServices: [{
       name: 'Coinos',
       rate: lightningServices.value.coinos,
-      isKyc: lightningServicesInfo.value.coinos?.is_kyc || false
+      isKyc: lightningServicesInfo.value.coinos?.is_kyc || false,
+      isCustodial: lightningServicesInfo.value.coinos?.is_custodial ?? true
     }],
     tradingFee: amount * (feeRates.value.upbit_usdt / 100) + amount * (feeRates.value.binance / 100),
     transferFee: withdrawalFees.value.binance_lightning * bitcoinPrice.value,
@@ -1238,7 +1341,8 @@ const calculateFees = () => {
     lightningServices: [{
       name: '월렛오브사토시',
       rate: lightningServices.value.walletofsatoshi,
-      isKyc: lightningServicesInfo.value.walletofsatoshi?.is_kyc || false
+      isKyc: lightningServicesInfo.value.walletofsatoshi?.is_kyc || false,
+      isCustodial: lightningServicesInfo.value.walletofsatoshi?.is_custodial ?? true
     }],
     tradingFee: amount * (feeRates.value.upbit_usdt / 100) + amount * (feeRates.value.okx / 100),
     transferFee: withdrawalFees.value.okx_lightning * bitcoinPrice.value,
@@ -1275,7 +1379,8 @@ const calculateFees = () => {
     lightningServices: [{
       name: 'Strike',
       rate: lightningServices.value.strike,
-      isKyc: lightningServicesInfo.value.strike?.is_kyc || true
+      isKyc: lightningServicesInfo.value.strike?.is_kyc || true,
+      isCustodial: lightningServicesInfo.value.strike?.is_custodial ?? true
     }],
     tradingFee: amount * (feeRates.value.upbit_usdt / 100) + amount * (feeRates.value.okx / 100),
     transferFee: withdrawalFees.value.okx_lightning * bitcoinPrice.value,
@@ -1315,7 +1420,8 @@ const calculateFees = () => {
     lightningServices: [{
       name: '월렛오브사토시',
       rate: lightningServices.value.walletofsatoshi,
-      isKyc: lightningServicesInfo.value.walletofsatoshi?.is_kyc || false
+      isKyc: lightningServicesInfo.value.walletofsatoshi?.is_kyc || false,
+      isCustodial: lightningServicesInfo.value.walletofsatoshi?.is_custodial ?? true
     }],
     tradingFee: amount * (feeRates.value.upbit_btc / 100),
     transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.okx_lightning * bitcoinPrice.value,
@@ -1353,7 +1459,8 @@ const calculateFees = () => {
     lightningServices: [{
       name: 'Strike',
       rate: lightningServices.value.strike,
-      isKyc: lightningServicesInfo.value.strike?.is_kyc || true
+      isKyc: lightningServicesInfo.value.strike?.is_kyc || true,
+      isCustodial: lightningServicesInfo.value.strike?.is_custodial ?? true
     }],
     tradingFee: amount * (feeRates.value.upbit_btc / 100),
     transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.okx_lightning * bitcoinPrice.value,
@@ -1405,6 +1512,8 @@ const calculateFees = () => {
     for (const r of newResults) map[r.id] = false
     detailsOpenById.value = map
   }
+  // Defer overflow checking until DOM updates
+  nextTick(() => checkAllOverflows())
 }
 
 const toggleDetails = (id) => {
@@ -1465,23 +1574,181 @@ const getLightningFee = (result) => {
   return currentAmount * (result.lightningServices[0].rate / 100)
 }
 
+// Get withdrawal fee display text - simple and clear
+const getWithdrawalFeeDisplay = (result) => {
+  console.log('Withdrawal fees check:', result.withdrawalFees)
+
+  if (!result.withdrawalFees || result.withdrawalFees.length === 0) {
+    return null
+  }
+
+  // Check if this is a lightning scenario
+  const isLightning = result.lightningServices && result.lightningServices.length > 0
+
+  if (isLightning) {
+    const lightningServiceName = result.lightningServices[0]?.name || ''
+    console.log('Lightning service:', lightningServiceName)
+
+    // For lightning scenarios, don't show withdrawal fees at personal wallet stage
+    // These are now shown at the lightning service stage
+    return null
+  } else {
+    // Find onchain withdrawal fee
+    const onchainFee = result.withdrawalFees.find(fee =>
+      fee.name && (fee.name.includes('온체인') || fee.name.includes('BTC 송금'))
+    )
+    console.log('Found onchain fee:', onchainFee)
+
+    if (onchainFee && onchainFee.amountKrw > 0) {
+      return `온체인 출금 수수료\n${formatPrice(onchainFee.amountKrw)}원 (${onchainFee.amount} BTC)`
+    }
+    return '온체인 출금 수수료\n무료'
+  }
+}
+
+// Get Strike final withdrawal fee display (Strike -> personal wallet)
+const getStrikeFinalWithdrawalDisplay = (result) => {
+  // Only show for Strike lightning scenarios
+  if (!result.lightningServices || result.lightningServices.length === 0) {
+    return null
+  }
+
+  const lightningServiceName = result.lightningServices[0]?.name || ''
+  if (lightningServiceName === 'Strike') {
+    return 'Strike → 개인지갑\n라이트닝 출금 무료'
+  }
+
+  return null
+}
+
+// Get lightning withdrawal fee display for lightning service box
+const getLightningWithdrawalFeeDisplay = (result) => {
+  if (!result.withdrawalFees || result.withdrawalFees.length === 0) {
+    return null
+  }
+
+  // Check if this is a lightning scenario
+  const isLightning = result.lightningServices && result.lightningServices.length > 0
+  if (!isLightning) {
+    return null
+  }
+
+  const lightningServiceName = result.lightningServices[0]?.name || ''
+
+  // Find any lightning withdrawal fee from exchange
+  const lightningFee = result.withdrawalFees.find(fee =>
+    fee.name && fee.name.includes('라이트닝')
+  )
+
+  if (lightningFee && lightningFee.amountKrw > 0) {
+    // For Strike, this is the OKX → Strike fee
+    if (lightningServiceName === 'Strike') {
+      return `OKX → Strike\n출금 수수료\n${formatPrice(lightningFee.amountKrw)}원`
+    } else {
+      // For other lightning services, show generic lightning withdrawal fee
+      return `라이트닝 출금 수수료\n${formatPrice(lightningFee.amountKrw)}원`
+    }
+  }
+
+  return null
+}
+
+// Get lightning arrow withdrawal fee display
+const getLightningArrowFeeDisplay = (result) => {
+  if (!result.withdrawalFees || result.withdrawalFees.length === 0) {
+    return null
+  }
+
+  // Check if this is a lightning scenario
+  const isLightning = result.lightningServices && result.lightningServices.length > 0
+  if (!isLightning) {
+    return null
+  }
+
+  // Find any lightning withdrawal fee from exchange
+  const lightningFee = result.withdrawalFees.find(fee =>
+    fee.name && fee.name.includes('라이트닝')
+  )
+
+  if (lightningFee && lightningFee.amountKrw > 0) {
+    return {
+      amount: formatPrice(lightningFee.amountKrw),
+      btc: lightningFee.amount
+    }
+  }
+
+  return null
+}
+
+// Get final transfer type (라이트닝 or 온체인) based on lightning service
+const getFinalTransferType = (result) => {
+  // If no lightning services, it's onchain
+  if (!result.lightningServices || result.lightningServices.length === 0) {
+    return '온체인'
+  }
+
+  // For 월렛오브사토시, Boltz Exchange, and Coinos, final transfer is onchain
+  const lightningServiceName = result.lightningServices[0]?.name || ''
+  if (
+    lightningServiceName === '월렛오브사토시' ||
+    lightningServiceName === 'Boltz Exchange' ||
+    lightningServiceName === 'Coinos'
+  ) {
+    return '온체인'
+  }
+
+  // For other lightning services (e.g., Strike), it's lightning
+  return '라이트닝'
+}
+
+// Get final arrow withdrawal fee display (for onchain scenarios)
+const getFinalArrowWithdrawalFeeDisplay = (result) => {
+  if (!result.withdrawalFees || result.withdrawalFees.length === 0) {
+    return null
+  }
+
+  // Only show for scenarios where final hop is onchain
+  const isFinalOnchain = getFinalTransferType(result) === '온체인'
+  if (!isFinalOnchain) {
+    return null
+  }
+
+  // Find the final onchain withdrawal fee (prefer items indicating onchain personal wallet withdrawal)
+  const onchainFee = result.withdrawalFees.find(fee =>
+    fee.name && (fee.name.includes('온체인') || fee.name.includes('개인지갑'))
+  )
+
+  if (onchainFee && onchainFee.amountKrw > 0) {
+    return {
+      amount: formatPrice(onchainFee.amountKrw),
+      btc: onchainFee.amount
+    }
+  }
+
+  // If not explicitly provided, treat as free (or network-only not modeled)
+  return { amount: '0', btc: '0' }
+}
+
 // Determine purchase label text for an exchange name
-const getPurchaseLabelForExchange = (name) => {
+const getPurchaseLabelForExchange = (name, rate) => {
   const n = (name || '').toLowerCase()
   // Upbit/Bithumb: show BTC or USDT explicitly
   if (n.includes('업비트') || n.includes('bithumb') || n.includes('빗썸')) {
-    if (n.includes('usdt')) return 'USDT 구매'
-    if (n.includes('btc')) return 'BTC 구매'
+    if (n.includes('usdt')) return '원화로 USDT 구매'
+    if (n.includes('btc')) return '원화로 BTC 구매'
     // Fallback if asset not in name
-    return 'BTC 구매'
+    return '원화로 BTC 구매'
   }
-  // Binance/OKX: always show BTC purchase per requirement
+  // Binance/OKX: only show purchase if there's actual trading (rate > 0)
   if (n.includes('binance') || n.includes('바이낸스') || n.includes('okx')) {
-    return 'BTC 구매'
+    if (rate > 0) {
+      return 'USDT로 BTC 구매'
+    }
+    return '' // No trading, just withdrawal
   }
   // Generic detection from name
-  if (n.includes('usdt')) return 'USDT 구매'
-  if (n.includes('btc')) return 'BTC 구매'
+  if (n.includes('usdt')) return '원화로 USDT 구매'
+  if (n.includes('btc')) return '원화로 BTC 구매'
   return ''
 }
 
@@ -1492,6 +1759,8 @@ onMounted(async () => {
   const updateMobile = () => { isMobile.value = mq.matches }
   updateMobile()
   try { mq.addEventListener('change', updateMobile) } catch (_) { mq.addListener(updateMobile) }
+  // Recalculate overflow on resize
+  try { window.addEventListener('resize', checkAllOverflows, { passive: true }) } catch (_) { window.addEventListener('resize', checkAllOverflows) }
 
   // ESC key listener for modal
   const handleEscKey = (event) => {
@@ -1508,5 +1777,19 @@ onMounted(async () => {
   if (inputAmount.value) {
     calculateFees()
   }
+  // Initial overflow check after first render
+  nextTick(() => checkAllOverflows())
+})
+
+onBeforeUnmount(() => {
+  // Clean up scroll listeners
+  for (const id of Object.keys(flowContainerRefs.value)) {
+    const el = flowContainerRefs.value[id]
+    if (el && el.__overflowScrollHandler) {
+      el.removeEventListener('scroll', el.__overflowScrollHandler)
+      delete el.__overflowScrollHandler
+    }
+  }
+  window.removeEventListener('resize', checkAllOverflows)
 })
 </script>
