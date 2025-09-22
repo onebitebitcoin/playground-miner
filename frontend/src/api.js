@@ -295,7 +295,7 @@ export async function apiGetAdminLightningServices(username) {
   }
 }
 
-export async function apiUpdateLightningService(username, service, feeRate, isKyc, description) {
+export async function apiUpdateLightningService(username, service, feeRate, isKyc, isCustodial, description) {
   try {
     const res = await fetch(`${BASE_URL}/api/lightning-services/admin`, {
       method: 'POST',
@@ -308,6 +308,7 @@ export async function apiUpdateLightningService(username, service, feeRate, isKy
         service,
         fee_rate: feeRate,
         is_kyc: isKyc,
+        is_custodial: isCustodial,
         description
       })
     })

@@ -564,6 +564,7 @@ def admin_lightning_services_view(request):
         service = data.get('service')
         fee_rate = data.get('fee_rate')
         is_kyc = data.get('is_kyc', False)  # Default to False if not provided
+        is_custodial = data.get('is_custodial', True)  # Default to True if not provided
         description = data.get('description', '')
 
         if not service or fee_rate is None:
@@ -583,6 +584,7 @@ def admin_lightning_services_view(request):
                 defaults={
                     'fee_rate': fee_rate,
                     'is_kyc': bool(is_kyc),
+                    'is_custodial': bool(is_custodial),
                     'description': description
                 }
             )

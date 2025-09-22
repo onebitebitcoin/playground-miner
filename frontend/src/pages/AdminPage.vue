@@ -356,7 +356,7 @@
                       <h4 class="font-medium text-gray-900">{{ service.service_name }}</h4>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">
                           수수료율 (%)
@@ -386,6 +386,24 @@
                         </div>
                         <div class="text-xs text-gray-500 mt-1">
                           {{ service.is_kyc ? 'KYC 인증 필요' : 'non-KYC 서비스' }}
+                        </div>
+                      </div>
+                      <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">
+                          수탁 유형
+                        </label>
+                        <div class="flex items-center gap-2 mt-2">
+                          <label class="flex items-center">
+                            <input
+                              v-model="service.is_custodial"
+                              type="checkbox"
+                              class="rounded border-gray-300 text-red-600 focus:ring-red-500"
+                            />
+                            <span class="ml-2 text-sm text-gray-700">수탁형</span>
+                          </label>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">
+                          {{ service.is_custodial ? '수탁형 서비스' : '비수탁형 서비스' }}
                         </div>
                       </div>
                       <div>
@@ -753,13 +771,22 @@ const loadLightningServices = async () => {
   try {
     const username = getCurrentUsername()
     const response = await apiGetAdminLightningServices(username)
+    console.log('Lightning services response:', response)
     if (response.success) {
-      lightningServices.value = response.services
+      // Force reactivity by creating new array
+      lightningServices.value = [...response.services]
+      console.log('Loaded lightning services:', lightningServices.value)
+      // Log Strike specifically
+      const strike = response.services.find(s => s.service === 'strike')
+      if (strike) {
+        console.log('Strike KYC status:', strike.is_kyc)
+      }
     } else {
       feeUpdateError.value = response.error || '라이트닝 서비스 데이터 로드에 실패했습니다'
     }
   } catch (error) {
     feeUpdateError.value = '네트워크 오류'
+    console.error('Lightning services load error:', error)
   }
 }
 
@@ -768,6 +795,8 @@ const updateLightningService = async (service) => {
   feeUpdateSuccess.value = false
   feeUpdateError.value = ''
 
+  console.log('Updating lightning service:', service.service, 'KYC:', service.is_kyc, 'Custodial:', service.is_custodial)
+
   try {
     const username = getCurrentUsername()
     const response = await apiUpdateLightningService(
@@ -775,8 +804,10 @@ const updateLightningService = async (service) => {
       service.service,
       service.fee_rate,
       service.is_kyc,
+      service.is_custodial,
       service.description
     )
+    console.log('Update response:', response)
 
     if (response.success) {
       feeUpdateSuccess.value = true

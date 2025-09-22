@@ -179,6 +179,7 @@ class LightningService(models.Model):
     service = models.CharField(max_length=30, choices=SERVICE_CHOICES, unique=True)
     fee_rate = models.DecimalField(max_digits=6, decimal_places=4)  # Fee rate as percentage
     is_kyc = models.BooleanField(default=False)  # KYC required or not
+    is_custodial = models.BooleanField(default=True)  # Custodial or non-custodial service
     description = models.TextField(blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -188,7 +189,8 @@ class LightningService(models.Model):
 
     def __str__(self):
         kyc_indicator = " (KYC)" if self.is_kyc else " (non-KYC)"
-        return f"{self.get_service_display()}: {self.fee_rate}%{kyc_indicator}"
+        custodial_indicator = " 수탁형" if self.is_custodial else " 비수탁형"
+        return f"{self.get_service_display()}: {self.fee_rate}%{kyc_indicator}{custodial_indicator}"
 
     def as_dict(self):
         return {
@@ -196,6 +198,7 @@ class LightningService(models.Model):
             'service_name': self.get_service_display(),
             'fee_rate': float(self.fee_rate),
             'is_kyc': self.is_kyc,
+            'is_custodial': self.is_custodial,
             'description': self.description,
             'updated_at': self.updated_at.isoformat(),
         }
