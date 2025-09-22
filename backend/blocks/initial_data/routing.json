@@ -1,0 +1,384 @@
+{
+  "nodes": [
+    {
+      "service": "binance_btc",
+      "display_name": "바이낸스 BTC",
+      "is_kyc": true,
+      "is_custodial": true,
+      "is_enabled": true,
+      "description": "바이낸스 BTC 서비스",
+      "website_url": "https://www.binance.com"
+    },
+    {
+      "service": "binance_usdt",
+      "display_name": "바이낸스 USDT",
+      "is_kyc": true,
+      "is_custodial": true,
+      "is_enabled": true,
+      "description": "바이낸스 USDT 서비스",
+      "website_url": "https://www.binance.com"
+    },
+    {
+      "service": "bithumb_btc",
+      "display_name": "빗썸 BTC",
+      "is_kyc": true,
+      "is_custodial": true,
+      "is_enabled": true,
+      "description": "빗썸 BTC 서비스",
+      "website_url": "https://www.bithumb.com"
+    },
+    {
+      "service": "bithumb_usdt",
+      "display_name": "빗썸 USDT",
+      "is_kyc": true,
+      "is_custodial": true,
+      "is_enabled": true,
+      "description": "빗썸 USDT 서비스",
+      "website_url": "https://www.bithumb.com"
+    },
+    {
+      "service": "boltz",
+      "display_name": "Boltz Exchange",
+      "is_kyc": false,
+      "is_custodial": false,
+      "is_enabled": true,
+      "description": "Boltz Exchange 서비스",
+      "website_url": "https://boltz.exchange"
+    },
+    {
+      "service": "coinos",
+      "display_name": "Coinos",
+      "is_kyc": false,
+      "is_custodial": true,
+      "is_enabled": true,
+      "description": "Coinos 서비스",
+      "website_url": "https://coinos.io"
+    },
+    {
+      "service": "okx_btc",
+      "display_name": "OKX BTC",
+      "is_kyc": true,
+      "is_custodial": true,
+      "is_enabled": true,
+      "description": "OKX BTC 서비스",
+      "website_url": "https://www.okx.com"
+    },
+    {
+      "service": "okx_usdt",
+      "display_name": "OKX USDT",
+      "is_kyc": true,
+      "is_custodial": true,
+      "is_enabled": true,
+      "description": "OKX USDT 서비스",
+      "website_url": "https://www.okx.com"
+    },
+    {
+      "service": "personal_wallet",
+      "display_name": "개인지갑",
+      "is_kyc": false,
+      "is_custodial": false,
+      "is_enabled": true,
+      "description": "개인지갑 서비스",
+      "website_url": ""
+    },
+    {
+      "service": "strike",
+      "display_name": "Strike",
+      "is_kyc": true,
+      "is_custodial": true,
+      "is_enabled": true,
+      "description": "Strike 서비스",
+      "website_url": "https://strike.me"
+    },
+    {
+      "service": "upbit_btc",
+      "display_name": "업비트 BTC",
+      "is_kyc": true,
+      "is_custodial": true,
+      "is_enabled": true,
+      "description": "업비트 BTC 서비스",
+      "website_url": "https://upbit.com"
+    },
+    {
+      "service": "upbit_usdt",
+      "display_name": "업비트 USDT",
+      "is_kyc": true,
+      "is_custodial": true,
+      "is_enabled": true,
+      "description": "업비트 USDT 서비스",
+      "website_url": "https://upbit.com"
+    },
+    {
+      "service": "user",
+      "display_name": "사용자",
+      "is_kyc": false,
+      "is_custodial": false,
+      "is_enabled": true,
+      "description": "사용자 서비스",
+      "website_url": ""
+    },
+    {
+      "service": "walletofsatoshi",
+      "display_name": "월렛오브사토시",
+      "is_kyc": false,
+      "is_custodial": true,
+      "is_enabled": true,
+      "description": "월렛오브사토시 서비스",
+      "website_url": "https://walletofsatoshi.com"
+    }
+  ],
+  "routes": [
+    {
+      "source": "binance_btc",
+      "destination": "coinos",
+      "route_type": "withdrawal_lightning",
+      "fee_rate": null,
+      "fee_fixed": 1e-06,
+      "is_enabled": true,
+      "description": "바이낸스 BTC → Coinos 라이트닝"
+    },
+    {
+      "source": "binance_btc",
+      "destination": "personal_wallet",
+      "route_type": "withdrawal_onchain",
+      "fee_rate": null,
+      "fee_fixed": 3e-05,
+      "is_enabled": true,
+      "description": "바이낸스 BTC → 개인지갑 온체인"
+    },
+    {
+      "source": "binance_btc",
+      "destination": "strike",
+      "route_type": "withdrawal_lightning",
+      "fee_rate": null,
+      "fee_fixed": 1e-06,
+      "is_enabled": true,
+      "description": "바이낸스 BTC → Strike 라이트닝"
+    },
+    {
+      "source": "binance_btc",
+      "destination": "walletofsatoshi",
+      "route_type": "withdrawal_lightning",
+      "fee_rate": null,
+      "fee_fixed": 1e-06,
+      "is_enabled": true,
+      "description": "바이낸스 BTC → Wallet of Satoshi 라이트닝"
+    },
+    {
+      "source": "binance_usdt",
+      "destination": "binance_btc",
+      "route_type": "trading",
+      "fee_rate": 0.1,
+      "fee_fixed": null,
+      "is_enabled": true,
+      "description": "바이낸스 USDT → 바이낸스 BTC"
+    },
+    {
+      "source": "bithumb_btc",
+      "destination": "binance_btc",
+      "route_type": "withdrawal_onchain",
+      "fee_rate": null,
+      "fee_fixed": 0.0002,
+      "is_enabled": true,
+      "description": "빗썸 BTC → 바이낸스 BTC 온체인"
+    },
+    {
+      "source": "bithumb_btc",
+      "destination": "okx_btc",
+      "route_type": "withdrawal_onchain",
+      "fee_rate": null,
+      "fee_fixed": 0.0002,
+      "is_enabled": true,
+      "description": "빗썸 BTC → OKX BTC 온체인"
+    },
+    {
+      "source": "bithumb_usdt",
+      "destination": "binance_usdt",
+      "route_type": "trading",
+      "fee_rate": 0.0,
+      "fee_fixed": null,
+      "is_enabled": true,
+      "description": "빗썸 USDT → 바이낸스 USDT"
+    },
+    {
+      "source": "bithumb_usdt",
+      "destination": "okx_usdt",
+      "route_type": "trading",
+      "fee_rate": 0.0,
+      "fee_fixed": null,
+      "is_enabled": true,
+      "description": "빗썸 USDT → OKX USDT"
+    },
+    {
+      "source": "boltz",
+      "destination": "personal_wallet",
+      "route_type": "withdrawal_onchain",
+      "fee_rate": 0.5,
+      "fee_fixed": null,
+      "is_enabled": true,
+      "description": "Boltz Exchange → 개인지갑"
+    },
+    {
+      "source": "coinos",
+      "destination": "boltz",
+      "route_type": "withdrawal_lightning",
+      "fee_rate": 0.0,
+      "fee_fixed": 0.0,
+      "is_enabled": true,
+      "description": "Coinos → Boltz 라이트닝"
+    },
+    {
+      "source": "coinos",
+      "destination": "personal_wallet",
+      "route_type": "withdrawal_onchain",
+      "fee_rate": 0.4,
+      "fee_fixed": null,
+      "is_enabled": true,
+      "description": "Coinos → 개인지갑"
+    },
+    {
+      "source": "okx_btc",
+      "destination": "coinos",
+      "route_type": "withdrawal_lightning",
+      "fee_rate": null,
+      "fee_fixed": 1e-05,
+      "is_enabled": true,
+      "description": "OKX BTC → Coinos 라이트닝"
+    },
+    {
+      "source": "okx_btc",
+      "destination": "personal_wallet",
+      "route_type": "withdrawal_onchain",
+      "fee_rate": null,
+      "fee_fixed": 1e-05,
+      "is_enabled": true,
+      "description": "OKX BTC → 개인지갑 온체인"
+    },
+    {
+      "source": "okx_btc",
+      "destination": "walletofsatoshi",
+      "route_type": "withdrawal_lightning",
+      "fee_rate": null,
+      "fee_fixed": 1e-05,
+      "is_enabled": true,
+      "description": "OKX BTC → Wallet of Satoshi 라이트닝"
+    },
+    {
+      "source": "okx_usdt",
+      "destination": "okx_btc",
+      "route_type": "trading",
+      "fee_rate": 0.1,
+      "fee_fixed": null,
+      "is_enabled": true,
+      "description": "OKX USDT → OKX BTC"
+    },
+    {
+      "source": "strike",
+      "destination": "boltz",
+      "route_type": "withdrawal_lightning",
+      "fee_rate": 0.0,
+      "fee_fixed": 0.0,
+      "is_enabled": true,
+      "description": "Strike → Boltz 라이트닝"
+    },
+    {
+      "source": "strike",
+      "destination": "personal_wallet",
+      "route_type": "withdrawal_onchain",
+      "fee_rate": 0.0,
+      "fee_fixed": null,
+      "is_enabled": true,
+      "description": "Strike → 개인지갑"
+    },
+    {
+      "source": "upbit_btc",
+      "destination": "binance_btc",
+      "route_type": "withdrawal_onchain",
+      "fee_rate": null,
+      "fee_fixed": 0.0002,
+      "is_enabled": true,
+      "description": "업비트 BTC → 바이낸스 BTC 온체인"
+    },
+    {
+      "source": "upbit_btc",
+      "destination": "okx_btc",
+      "route_type": "withdrawal_onchain",
+      "fee_rate": null,
+      "fee_fixed": 0.0002,
+      "is_enabled": true,
+      "description": "업비트 BTC → OKX BTC 온체인"
+    },
+    {
+      "source": "upbit_usdt",
+      "destination": "binance_usdt",
+      "route_type": "trading",
+      "fee_rate": 0.0,
+      "fee_fixed": null,
+      "is_enabled": true,
+      "description": "업비트 USDT → 바이낸스 USDT"
+    },
+    {
+      "source": "upbit_usdt",
+      "destination": "okx_usdt",
+      "route_type": "trading",
+      "fee_rate": 0.0,
+      "fee_fixed": null,
+      "is_enabled": true,
+      "description": "업비트 USDT → OKX USDT"
+    },
+    {
+      "source": "user",
+      "destination": "bithumb_btc",
+      "route_type": "trading",
+      "fee_rate": 0.04,
+      "fee_fixed": null,
+      "is_enabled": true,
+      "description": "사용자 → 빗썸 BTC"
+    },
+    {
+      "source": "user",
+      "destination": "bithumb_usdt",
+      "route_type": "trading",
+      "fee_rate": 0.04,
+      "fee_fixed": null,
+      "is_enabled": true,
+      "description": "사용자 → 빗썸 USDT"
+    },
+    {
+      "source": "user",
+      "destination": "upbit_btc",
+      "route_type": "trading",
+      "fee_rate": 0.05,
+      "fee_fixed": null,
+      "is_enabled": true,
+      "description": "사용자 → 업비트 BTC"
+    },
+    {
+      "source": "user",
+      "destination": "upbit_usdt",
+      "route_type": "trading",
+      "fee_rate": 0.01,
+      "fee_fixed": null,
+      "is_enabled": true,
+      "description": "사용자 → 업비트 USDT"
+    },
+    {
+      "source": "walletofsatoshi",
+      "destination": "boltz",
+      "route_type": "withdrawal_lightning",
+      "fee_rate": 0.0,
+      "fee_fixed": 0.0,
+      "is_enabled": true,
+      "description": "월렛오브사토시 → Boltz 라이트닝"
+    },
+    {
+      "source": "walletofsatoshi",
+      "destination": "personal_wallet",
+      "route_type": "withdrawal_onchain",
+      "fee_rate": 1.95,
+      "fee_fixed": null,
+      "is_enabled": true,
+      "description": "월렛오브사토시 → 개인지갑"
+    }
+  ]
+}
