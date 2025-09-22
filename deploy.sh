@@ -74,6 +74,13 @@ if [ -f "$BACKEND_DIR/requirements.txt" ]; then
   pip install -r requirements.txt
   pip install gunicorn
 
+  echo "Checking for missing migrations..."
+  if ! python manage.py makemigrations --check --dry-run; then
+    echo "\nERROR: There are model changes without migrations.\n"
+    echo "Run 'python manage.py makemigrations' locally, commit, and redeploy."
+    exit 1
+  fi
+
   echo "Running migrations..."
   python manage.py migrate --noinput
 
