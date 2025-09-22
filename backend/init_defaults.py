@@ -17,6 +17,13 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'playground_server.settings')
 django.setup()
 
 from blocks.models import ExchangeRate, WithdrawalFee, LightningService, Mnemonic, ServiceNode, Route
+import json
+
+# Optional routing seed file (exported from dev) to sync to prod
+ROUTING_SEED_FILE = os.environ.get(
+    'ROUTING_SEED_FILE',
+    os.path.join(os.path.dirname(__file__), 'blocks', 'initial_data', 'routing.json')
+)
 
 
 def seed_exchange_rates():
@@ -112,6 +119,30 @@ def seed_mnemonics(count=10):
 
 def seed_service_nodes():
     """Seed service nodes for the new routing system"""
+    # If a routing seed file exists, prefer using it for initial nodes
+    if os.path.isfile(ROUTING_SEED_FILE):
+        try:
+            with open(ROUTING_SEED_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            nodes = data.get('nodes', [])
+            created = 0
+            for n in nodes:
+                obj, was_created = ServiceNode.objects.update_or_create(
+                    service=n['service'],
+                    defaults={
+                        'display_name': n.get('display_name') or n['service'],
+                        'is_kyc': bool(n.get('is_kyc', False)),
+                        'is_custodial': bool(n.get('is_custodial', True)),
+                        'is_enabled': bool(n.get('is_enabled', True)),
+                        'website_url': n.get('website_url') or '',
+                        'description': n.get('description') or '',
+                    }
+                )
+                created += 1 if was_created else 0
+            return created
+        except Exception as e:
+            print(f"Failed to load routing seed file for nodes: {e}. Falling back to built-in defaults.")
+
     nodes = [
         {'service': 'user', 'display_name': '사용자', 'is_kyc': False, 'is_custodial': False, 'website_url': ''},
         {'service': 'upbit', 'display_name': '업비트', 'is_kyc': True, 'is_custodial': True, 'website_url': 'https://upbit.com'},
@@ -144,6 +175,37 @@ def seed_service_nodes():
 def seed_default_routes():
     """Seed default routes based on existing data"""
     created = 0
+
+    # If a routing seed file exists, prefer using it for initial routes
+    if os.path.isfile(ROUTING_SEED_FILE):
+        try:
+            with open(ROUTING_SEED_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            routes = data.get('routes', [])
+
+            # Build lookup for ServiceNode by service code
+            service_to_node = {s.service: s for s in ServiceNode.objects.all()}
+            for r in routes:
+                src = service_to_node.get(r['source'])
+                dst = service_to_node.get(r['destination'])
+                if not src or not dst:
+                    continue
+
+                obj, was_created = Route.objects.update_or_create(
+                    source=src,
+                    destination=dst,
+                    route_type=r['route_type'],
+                    defaults={
+                        'fee_rate': r.get('fee_rate', None),
+                        'fee_fixed': r.get('fee_fixed', None),
+                        'is_enabled': bool(r.get('is_enabled', True)),
+                        'description': r.get('description', ''),
+                    }
+                )
+                created += 1 if was_created else 0
+            return created
+        except Exception as e:
+            print(f"Failed to load routing seed file for routes: {e}. Falling back to built-in defaults.")
 
     # Get service nodes
     try:
