@@ -16,7 +16,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'playground_server.settings')
 django.setup()
 
-from blocks.models import ExchangeRate, WithdrawalFee, LightningService, Mnemonic
+from blocks.models import ExchangeRate, WithdrawalFee, LightningService, Mnemonic, ServiceNode, Route
 
 
 def seed_exchange_rates():
@@ -46,7 +46,7 @@ def seed_withdrawal_fees():
         { 'exchange': 'okx',     'withdrawal_type': 'onchain',   'fee_btc': 0.00001, 'description': 'OKX 온체인 개인지갑 출금 수수료' },
         { 'exchange': 'okx',     'withdrawal_type': 'lightning', 'fee_btc': 0.00001, 'description': 'OKX 라이트닝 출금 수수료' },
         { 'exchange': 'binance', 'withdrawal_type': 'onchain',   'fee_btc': 0.00003, 'description': '바이낸스 온체인 개인지갑 출금 수수료' },
-        { 'exchange': 'binance', 'withdrawal_type': 'lightning', 'fee_btc': 0.00001, 'description': '바이낸스 라이트닝 출금 수수료' },
+        { 'exchange': 'binance', 'withdrawal_type': 'lightning', 'fee_btc': 0.000001, 'description': '바이낸스 라이트닝 출금 수수료' },
     ]
     created = 0
     for d in defaults:
@@ -110,11 +110,143 @@ def seed_mnemonics(count=10):
     return created
 
 
+def seed_service_nodes():
+    """Seed service nodes for the new routing system"""
+    nodes = [
+        {'service': 'user', 'display_name': '사용자', 'is_kyc': False, 'is_custodial': False, 'website_url': ''},
+        {'service': 'upbit', 'display_name': '업비트', 'is_kyc': True, 'is_custodial': True, 'website_url': 'https://upbit.com'},
+        {'service': 'bithumb', 'display_name': '빗썸', 'is_kyc': True, 'is_custodial': True, 'website_url': 'https://www.bithumb.com'},
+        {'service': 'binance', 'display_name': '바이낸스', 'is_kyc': True, 'is_custodial': True, 'website_url': 'https://www.binance.com'},
+        {'service': 'okx', 'display_name': 'OKX', 'is_kyc': True, 'is_custodial': True, 'website_url': 'https://www.okx.com'},
+        {'service': 'strike', 'display_name': 'Strike', 'is_kyc': True, 'is_custodial': True, 'website_url': 'https://strike.me'},
+        {'service': 'walletofsatoshi', 'display_name': '월렛오브사토시', 'is_kyc': False, 'is_custodial': True, 'website_url': 'https://walletofsatoshi.com'},
+        {'service': 'coinos', 'display_name': 'Coinos', 'is_kyc': False, 'is_custodial': True, 'website_url': 'https://coinos.io'},
+        {'service': 'boltz', 'display_name': 'Boltz Exchange', 'is_kyc': False, 'is_custodial': False, 'website_url': 'https://boltz.exchange'},
+        {'service': 'personal_wallet', 'display_name': '개인지갑', 'is_kyc': False, 'is_custodial': False, 'website_url': ''},
+    ]
+
+    created = 0
+    for node_data in nodes:
+        obj, was_created = ServiceNode.objects.get_or_create(
+            service=node_data['service'],
+            defaults={
+                'display_name': node_data['display_name'],
+                'is_kyc': node_data['is_kyc'],
+                'is_custodial': node_data['is_custodial'],
+                'website_url': node_data['website_url'],
+                'description': f"{node_data['display_name']} 서비스"
+            }
+        )
+        created += 1 if was_created else 0
+    return created
+
+
+def seed_default_routes():
+    """Seed default routes based on existing data"""
+    created = 0
+
+    # Get service nodes
+    try:
+        user = ServiceNode.objects.get(service='user')
+        upbit = ServiceNode.objects.get(service='upbit')
+        binance = ServiceNode.objects.get(service='binance')
+        okx = ServiceNode.objects.get(service='okx')
+        strike = ServiceNode.objects.get(service='strike')
+        coinos = ServiceNode.objects.get(service='coinos')
+        personal_wallet = ServiceNode.objects.get(service='personal_wallet')
+
+        # Trading fee routes (거래수수료)
+        trading_routes = [
+            # User to exchanges (no fee - just entry point)
+            {'source': user, 'dest': upbit, 'fee_rate': 0.0, 'desc': '업비트 입금'},
+            {'source': user, 'dest': binance, 'fee_rate': 0.0, 'desc': '바이낸스 입금'},
+            {'source': user, 'dest': okx, 'fee_rate': 0.0, 'desc': 'OKX 입금'},
+        ]
+
+        for route in trading_routes:
+            obj, was_created = Route.objects.get_or_create(
+                source=route['source'],
+                destination=route['dest'],
+                route_type='trading',
+                defaults={
+                    'fee_rate': route['fee_rate'],
+                    'description': route['desc']
+                }
+            )
+            created += 1 if was_created else 0
+
+        # Lightning withdrawal routes
+        lightning_routes = [
+            {'source': binance, 'dest': strike, 'fee_fixed': 0.000001, 'desc': '바이낸스 → Strike 라이트닝'},
+            {'source': binance, 'dest': ServiceNode.objects.get(service='walletofsatoshi'), 'fee_fixed': 0.000001, 'desc': '바이낸스 → 월렛오브사토시 라이트닝'},
+            {'source': binance, 'dest': coinos, 'fee_fixed': 0.000001, 'desc': '바이낸스 → Coinos 라이트닝'},
+            {'source': okx, 'dest': strike, 'fee_fixed': 0.00001, 'desc': 'OKX → Strike 라이트닝'},
+            {'source': okx, 'dest': coinos, 'fee_fixed': 0.00001, 'desc': 'OKX → Coinos 라이트닝'},
+        ]
+
+        for route in lightning_routes:
+            obj, was_created = Route.objects.get_or_create(
+                source=route['source'],
+                destination=route['dest'],
+                route_type='withdrawal_lightning',
+                defaults={
+                    'fee_fixed': route['fee_fixed'],
+                    'description': route['desc']
+                }
+            )
+            created += 1 if was_created else 0
+
+        # Service fee routes (라이트닝 서비스 수수료)
+        service_routes = [
+            {'source': strike, 'dest': personal_wallet, 'fee_rate': 0.0, 'desc': 'Strike → 개인지갑'},
+            {'source': coinos, 'dest': personal_wallet, 'fee_rate': 0.0, 'desc': 'Coinos → 개인지갑'},
+        ]
+
+        for route in service_routes:
+            obj, was_created = Route.objects.get_or_create(
+                source=route['source'],
+                destination=route['dest'],
+                route_type='withdrawal_onchain',
+                defaults={
+                    'fee_rate': route['fee_rate'],
+                    'description': route['desc']
+                }
+            )
+            created += 1 if was_created else 0
+
+        # On-chain direct withdrawals from exchanges to personal wallet (fixed BTC fees)
+        try:
+            direct_onchain = [
+                {'source': binance, 'fee_fixed': 0.00003, 'desc': '바이낸스 BTC → 개인지갑 온체인'},
+                {'source': okx,     'fee_fixed': 0.00001, 'desc': 'OKX BTC → 개인지갑 온체인'},
+            ]
+            for item in direct_onchain:
+                if item['source'] and personal_wallet:
+                    obj, was_created = Route.objects.get_or_create(
+                        source=item['source'], destination=personal_wallet, route_type='withdrawal_onchain',
+                        defaults={'fee_rate': None, 'fee_fixed': item['fee_fixed'], 'description': item['desc']}
+                    )
+                    created += 1 if was_created else 0
+        except Exception:
+            pass
+
+    except ServiceNode.DoesNotExist as e:
+        print(f"Service node not found: {e}")
+        return 0
+
+    return created
+
+
 def main():
     created = 0
     created += seed_exchange_rates()
     created += seed_withdrawal_fees()
     created += seed_lightning_services()
+
+    # Seed new routing system
+    created += seed_service_nodes()
+    created += seed_default_routes()
+
     # Only seed mnemonics if none exist
     if Mnemonic.objects.count() == 0 or not Mnemonic.objects.filter(is_assigned=False).exists():
         created += seed_mnemonics()
@@ -123,4 +255,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

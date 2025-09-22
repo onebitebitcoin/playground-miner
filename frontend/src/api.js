@@ -319,3 +319,165 @@ export async function apiUpdateLightningService(username, service, feeRate, isKy
     return { success: false, error: '네트워크 오류' }
   }
 }
+
+// New routing system API
+
+export async function apiGetServiceNodes(username) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/service-nodes/admin?username=${encodeURIComponent(username)}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, nodes: data.nodes, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiUpdateServiceNode(username, service, displayName, isKyc, isCustodial, isEnabled, description, websiteUrl) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/service-nodes/admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        username,
+        service,
+        display_name: displayName,
+        is_kyc: isKyc,
+        is_custodial: isCustodial,
+        is_enabled: isEnabled,
+        description,
+        website_url: websiteUrl
+      })
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, node: data.node, created: data.created, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiGetRoutes(username) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/routes/admin?username=${encodeURIComponent(username)}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, routes: data.routes, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiCreateRoute(username, sourceId, destinationId, routeType, feeRate, feeFixed, isEnabled, description) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/routes/admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        username,
+        source_id: sourceId,
+        destination_id: destinationId,
+        route_type: routeType,
+        fee_rate: feeRate,
+        fee_fixed: feeFixed,
+        is_enabled: isEnabled,
+        description
+      })
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, route: data.route, created: data.created, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiDeleteRoute(username, routeId) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/routes/admin`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        username,
+        id: routeId
+      })
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiGetOptimalPaths(maxPaths = 300) {
+  try {
+    const params = new URLSearchParams({ max_paths: String(maxPaths || 300) })
+    const res = await fetch(`${BASE_URL}/api/optimal-paths?${params.toString()}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, paths: data.paths, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+// Routing snapshot API
+export async function apiGetRoutingSnapshotInfo() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/routing-snapshot`, { method: 'GET', headers: { 'Accept': 'application/json' } })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, info: data }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiSaveRoutingSnapshot(username) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/routing-snapshot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ username, action: 'save' })
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, data }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiResetRoutingFromSnapshot(username) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/routing-snapshot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ username, action: 'reset' })
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, data }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}

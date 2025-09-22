@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models import Max
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from .models import Block, Nickname, Mnemonic, ExchangeRate, WithdrawalFee, LightningService
+from .models import Block, Nickname, Mnemonic, ExchangeRate, WithdrawalFee, LightningService, ServiceNode, Route, RoutingSnapshot
 from .broadcast import broadcaster
 
 
@@ -600,5 +600,579 @@ def admin_lightning_services_view(request):
             logger = logging.getLogger(__name__)
             logger.error(f"Error updating lightning service {service}: {e}")
             return JsonResponse({'ok': False, 'error': '라이트닝 서비스 업데이트 중 오류가 발생했습니다'}, status=500)
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+# New routing system views
+
+@csrf_exempt
+def admin_service_nodes_view(request):
+    """Admin endpoint to manage service nodes. GET is public (read-only)."""
+    if request.method == 'GET':
+        # Ensure required service nodes exist (idempotent)
+        try:
+            required = [
+                { 'service': 'user',            'display_name': '사용자',        'is_kyc': False, 'is_custodial': False, 'website_url': '' },
+                { 'service': 'upbit_btc',       'display_name': '업비트 BTC',    'is_kyc': True,  'is_custodial': True,  'website_url': 'https://upbit.com' },
+                { 'service': 'upbit_usdt',      'display_name': '업비트 USDT',   'is_kyc': True,  'is_custodial': True,  'website_url': 'https://upbit.com' },
+                { 'service': 'bithumb_btc',     'display_name': '빗썸 BTC',      'is_kyc': True,  'is_custodial': True,  'website_url': 'https://www.bithumb.com' },
+                { 'service': 'bithumb_usdt',    'display_name': '빗썸 USDT',     'is_kyc': True,  'is_custodial': True,  'website_url': 'https://www.bithumb.com' },
+                { 'service': 'binance_usdt',    'display_name': '바이낸스 USDT', 'is_kyc': True,  'is_custodial': True,  'website_url': 'https://www.binance.com' },
+                { 'service': 'binance_btc',     'display_name': '바이낸스 BTC',  'is_kyc': True,  'is_custodial': True,  'website_url': 'https://www.binance.com' },
+                { 'service': 'okx_usdt',        'display_name': 'OKX USDT',      'is_kyc': True,  'is_custodial': True,  'website_url': 'https://www.okx.com' },
+                { 'service': 'okx_btc',         'display_name': 'OKX BTC',       'is_kyc': True,  'is_custodial': True,  'website_url': 'https://www.okx.com' },
+                { 'service': 'strike',          'display_name': 'Strike',        'is_kyc': True,  'is_custodial': True,  'website_url': 'https://strike.me' },
+                { 'service': 'coinos',          'display_name': 'Coinos',        'is_kyc': False, 'is_custodial': True,  'website_url': 'https://coinos.io' },
+                { 'service': 'walletofsatoshi', 'display_name': 'Wallet of Satoshi','is_kyc': False,'is_custodial': True,  'website_url': 'https://walletofsatoshi.com' },
+                { 'service': 'boltz',           'display_name': 'Boltz Exchange','is_kyc': False, 'is_custodial': False, 'website_url': 'https://boltz.exchange' },
+                { 'service': 'personal_wallet', 'display_name': '개인지갑',      'is_kyc': False, 'is_custodial': False, 'website_url': '' },
+            ]
+            for d in required:
+                ServiceNode.objects.get_or_create(
+                    service=d['service'],
+                    defaults={
+                        'display_name': d['display_name'],
+                        'is_kyc': d['is_kyc'],
+                        'is_custodial': d['is_custodial'],
+                        'website_url': d['website_url'],
+                        'description': f"{d['display_name']} 서비스",
+                        'is_enabled': True,
+                    },
+                )
+            # Remove plain exchange umbrella nodes if they exist
+            ServiceNode.objects.filter(service__in=['upbit','bithumb','binance','okx']).delete()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Error seeding default service nodes: {e}")
+
+        nodes = ServiceNode.objects.all()
+        nodes_list = [node.as_dict() for node in nodes]
+        return JsonResponse({'ok': True, 'nodes': nodes_list})
+
+    elif request.method == 'POST':
+        if not is_admin(request):
+            return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+        service = data.get('service')
+        display_name = data.get('display_name')
+        is_kyc = data.get('is_kyc', False)
+        is_custodial = data.get('is_custodial', True)
+        is_enabled = data.get('is_enabled', True)
+        description = data.get('description', '')
+        website_url = data.get('website_url', '')
+
+        if not service or not display_name:
+            return JsonResponse({'ok': False, 'error': 'Service and display_name required'}, status=400)
+
+        try:
+            node, created = ServiceNode.objects.update_or_create(
+                service=service,
+                defaults={
+                    'display_name': display_name,
+                    'is_kyc': bool(is_kyc),
+                    'is_custodial': bool(is_custodial),
+                    'is_enabled': bool(is_enabled),
+                    'description': description,
+                    'website_url': website_url
+                }
+            )
+
+            return JsonResponse({
+                'ok': True,
+                'node': node.as_dict(),
+                'created': created
+            })
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error updating service node {service}: {e}")
+            return JsonResponse({'ok': False, 'error': '서비스 노드 업데이트 중 오류가 발생했습니다'}, status=500)
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def admin_routes_view(request):
+    """Admin endpoint to manage routes. GET is public (read-only)."""
+    if request.method == 'GET':
+        # Seed/ensure a richer default graph based on requested reference
+        try:
+            user = ServiceNode.objects.filter(service='user').first()
+            # Only use split nodes; plain umbrella nodes are deprecated
+            wos = ServiceNode.objects.filter(service='walletofsatoshi').first()
+            coinos = ServiceNode.objects.filter(service='coinos').first()
+            boltz = ServiceNode.objects.filter(service='boltz').first()
+            personal_wallet = ServiceNode.objects.filter(service='personal_wallet').first()
+
+            if user:
+                # Trading edges (deposits and exchange to exchange)
+                trading_pairs = []
+                # 사용자 → 업비트/빗썸 원화
+                # Split nodes
+                up_krw = ServiceNode.objects.filter(service='upbit_krw').first()
+                up_usdt = ServiceNode.objects.filter(service='upbit_usdt').first()
+                up_btc = ServiceNode.objects.filter(service='upbit_btc').first()
+                bi_krw = ServiceNode.objects.filter(service='bithumb_krw').first()
+                bi_usdt = ServiceNode.objects.filter(service='bithumb_usdt').first()
+                bi_btc = ServiceNode.objects.filter(service='bithumb_btc').first()
+                bz_usdt = ServiceNode.objects.filter(service='binance_usdt').first()
+                bz_btc  = ServiceNode.objects.filter(service='binance_btc').first()
+                ok_usdt = ServiceNode.objects.filter(service='okx_usdt').first()
+                ok_btc  = ServiceNode.objects.filter(service='okx_btc').first()
+                # User deposits to KRW entries
+                if up_krw: trading_pairs.append((user, up_krw, '업비트 원화 입금'))
+                if bi_krw: trading_pairs.append((user, bi_krw, '빗썸 원화 입금'))
+                # Internal exchange conversions
+                if up_krw and up_usdt: trading_pairs.append((up_krw, up_usdt, '업비트 원화 → 업비트 USDT'))
+                # 업비트/빗썸에서 USDT → BTC 직접 전환은 유효하지 않음 (삭제/차단)
+                if bi_krw and bi_usdt: trading_pairs.append((bi_krw, bi_usdt, '빗썸 원화 → 빗썸 USDT'))
+                # 거래소 내부 USDT → BTC (바이낸스/OKX) - 수수료 0.1%
+                if bz_usdt and bz_btc:
+                    Route.objects.update_or_create(
+                        source=bz_usdt, destination=bz_btc, route_type='trading',
+                        defaults={'fee_rate': 0.1, 'description': '바이낸스 USDT → 바이낸스 BTC', 'is_enabled': True},
+                    )
+                if ok_usdt and ok_btc:
+                    Route.objects.update_or_create(
+                        source=ok_usdt, destination=ok_btc, route_type='trading',
+                        defaults={'fee_rate': 0.1, 'description': 'OKX USDT → OKX BTC', 'is_enabled': True},
+                    )
+                # Direct user -> exchange (splits) with trading fees
+                special_user_pairs = []
+                if up_usdt: special_user_pairs.append((user, up_usdt, 0.01, '사용자 → 업비트 USDT'))
+                if up_btc:  special_user_pairs.append((user, up_btc,  0.05, '사용자 → 업비트 BTC'))
+                if bi_usdt: special_user_pairs.append((user, bi_usdt, 0.04, '사용자 → 빗썸 USDT'))
+                if bi_btc:  special_user_pairs.append((user, bi_btc,  0.04, '사용자 → 빗썸 BTC'))
+                for (src, dst, fee_rate, desc) in special_user_pairs:
+                    Route.objects.update_or_create(
+                        source=src, destination=dst, route_type='trading',
+                        defaults={'fee_rate': fee_rate, 'description': desc, 'is_enabled': True},
+                    )
+                # Cross-exchange USDT 온체인 경로는 생성하지 않음 (업비트 USDT 포함)
+
+                # BTC cross-exchange onchain 0.0002 BTC
+                btc_onchain_pairs = []
+                if up_btc and bz_btc:
+                    btc_onchain_pairs.append((up_btc, bz_btc, '업비트 BTC → 바이낸스 BTC 온체인'))
+                if up_btc and ok_btc:
+                    btc_onchain_pairs.append((up_btc, ok_btc, '업비트 BTC → OKX BTC 온체인'))
+                if bi_btc and bz_btc:
+                    btc_onchain_pairs.append((bi_btc, bz_btc, '빗썸 BTC → 바이낸스 BTC 온체인'))
+                if bi_btc and ok_btc:
+                    btc_onchain_pairs.append((bi_btc, ok_btc, '빗썸 BTC → OKX BTC 온체인'))
+                for (src, dst, desc) in btc_onchain_pairs:
+                    Route.objects.update_or_create(
+                        source=src, destination=dst, route_type='withdrawal_onchain',
+                        defaults={'fee_rate': None, 'fee_fixed': 0.0002, 'description': desc, 'is_enabled': True},
+                    )
+                for (src, dst, desc) in trading_pairs:
+                    Route.objects.get_or_create(
+                        source=src, destination=dst, route_type='trading',
+                        defaults={'fee_rate': 0.0, 'description': desc, 'is_enabled': True},
+                    )
+
+                # Lightning withdrawals from exchanges (BTC) to LN services
+                # - Binance BTC -> WoS/Strike/Coinos at 0.000001 BTC
+                # - OKX BTC -> WoS/Coinos at 0.00001 BTC (unchanged)
+                if bz_btc:
+                    for dst, name in [(wos, 'Wallet of Satoshi'), (ServiceNode.objects.filter(service='strike').first(), 'Strike'), (coinos, 'Coinos')]:
+                        if dst:
+                            Route.objects.get_or_create(
+                                source=bz_btc, destination=dst, route_type='withdrawal_lightning',
+                                defaults={'fee_fixed': 0.000001, 'description': f"바이낸스 BTC → {name} 라이트닝", 'is_enabled': True},
+                            )
+                if ok_btc:
+                    for dst, name in [(wos, 'Wallet of Satoshi'), (coinos, 'Coinos')]:
+                        if dst:
+                            Route.objects.get_or_create(
+                                source=ok_btc, destination=dst, route_type='withdrawal_lightning',
+                                defaults={'fee_fixed': 0.00001, 'description': f"OKX BTC → {name} 라이트닝", 'is_enabled': True},
+                            )
+
+                # LN services → Boltz (lightning, 0%/0 BTC)
+                if boltz:
+                    for src in [wos, ServiceNode.objects.filter(service='strike').first(), coinos]:
+                        if src:
+                            Route.objects.get_or_create(
+                                source=src, destination=boltz, route_type='withdrawal_lightning',
+                                defaults={'fee_fixed': 0.0, 'fee_rate': 0.0, 'description': f"{src.display_name} → Boltz 라이트닝", 'is_enabled': True},
+                            )
+
+                # On-chain direct withdrawals from exchange BTC to personal wallet
+                if bz_btc and personal_wallet:
+                    Route.objects.get_or_create(
+                        source=bz_btc,
+                        destination=personal_wallet,
+                        route_type='withdrawal_onchain',
+                        defaults={'fee_rate': None, 'fee_fixed': 0.00003, 'description': '바이낸스 BTC → 개인지갑 온체인', 'is_enabled': True},
+                    )
+                if ok_btc and personal_wallet:
+                    Route.objects.get_or_create(
+                        source=ok_btc,
+                        destination=personal_wallet,
+                        route_type='withdrawal_onchain',
+                        defaults={'fee_rate': None, 'fee_fixed': 0.00001, 'description': 'OKX BTC → 개인지갑 온체인', 'is_enabled': True},
+                    )
+
+                # On-chain withdrawals to personal wallet
+                for src in [wos, coinos, boltz, binance, okx]:
+                    if src and personal_wallet:
+                        Route.objects.get_or_create(
+                            source=src, destination=personal_wallet, route_type='withdrawal_onchain',
+                            defaults={'fee_rate': 0.0, 'description': f"{src.display_name} → 개인지갑", 'is_enabled': True},
+                        )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Error seeding default routes: {e}")
+
+        # Cleanup invalid routes: user -> (binance|okx) umbrellas
+        try:
+            Route.objects.filter(source=user, destination__service__in=['binance', 'okx']).delete()
+        except Exception:
+            pass
+
+        # Cleanup invalid: (binance|okx and their splits) -> boltz (lightning)
+        try:
+            Route.objects.filter(source__service__in=['binance', 'okx', 'binance_usdt', 'binance_btc', 'okx_usdt', 'okx_btc'], destination__service='boltz', route_type='withdrawal_lightning').delete()
+        except Exception:
+            pass
+
+        # Remove any routes still referencing umbrella nodes on either side
+        try:
+            Route.objects.filter(source__service__in=['upbit','bithumb','binance','okx']).delete()
+            Route.objects.filter(destination__service__in=['upbit','bithumb','binance','okx']).delete()
+        except Exception:
+            pass
+
+        # Cleanup invalid: (업비트/빗썸) USDT -> (업비트/빗썸) BTC (어떤 유형이든 제거)
+        try:
+            Route.objects.filter(source__service__in=['upbit_usdt','bithumb_usdt'], destination__service__in=['upbit_btc','bithumb_btc']).delete()
+        except Exception:
+            pass
+
+        # Cleanup invalid: 업비트 BTC -> 빗썸 BTC (요청에 따라 제거)
+        try:
+            Route.objects.filter(source__service='upbit_btc', destination__service='bithumb_btc').delete()
+        except Exception:
+            pass
+
+        # Cleanup: 빗썸 USDT -> (바이낸스/OKX) USDT 온체인 경로 제거
+        try:
+            bi_usdt = ServiceNode.objects.filter(service='bithumb_usdt').first()
+            bz_usdt = ServiceNode.objects.filter(service='binance_usdt').first()
+            ok_usdt = ServiceNode.objects.filter(service='okx_usdt').first()
+            for dst in [bz_usdt, ok_usdt]:
+                if bi_usdt and dst:
+                    Route.objects.filter(
+                        source=bi_usdt,
+                        destination=dst,
+                        route_type='withdrawal_onchain',
+                    ).delete()
+        except Exception:
+            pass
+
+        # Cleanup: 업비트 USDT -> (바이낸스/OKX) USDT 온체인 경로 제거
+        try:
+            up_usdt = ServiceNode.objects.filter(service='upbit_usdt').first()
+            bz_usdt = ServiceNode.objects.filter(service='binance_usdt').first()
+            ok_usdt = ServiceNode.objects.filter(service='okx_usdt').first()
+            for dst in [bz_usdt, ok_usdt]:
+                if up_usdt and dst:
+                    Route.objects.filter(
+                        source=up_usdt,
+                        destination=dst,
+                        route_type='withdrawal_onchain',
+                    ).delete()
+        except Exception:
+            pass
+
+        # Note: Keep OKX USDT → OKX BTC trading route (0.1%) as requested
+
+        routes = Route.objects.select_related('source', 'destination').all()
+        routes_list = [route.as_dict() for route in routes]
+        return JsonResponse({'ok': True, 'routes': routes_list})
+
+    elif request.method == 'POST':
+        if not is_admin(request):
+            return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+        source_id = data.get('source_id')
+        destination_id = data.get('destination_id')
+        route_type = data.get('route_type')
+        fee_rate = data.get('fee_rate')
+        fee_fixed = data.get('fee_fixed')
+        is_enabled = data.get('is_enabled', True)
+        description = data.get('description', '')
+
+        if not source_id or not destination_id or not route_type:
+            return JsonResponse({'ok': False, 'error': 'Source, destination, and route_type required'}, status=400)
+
+        try:
+            source = ServiceNode.objects.get(id=source_id)
+            destination = ServiceNode.objects.get(id=destination_id)
+        except ServiceNode.DoesNotExist:
+            return JsonResponse({'ok': False, 'error': 'Invalid source or destination'}, status=400)
+
+        # Reject invalid user -> (binance|okx) paths
+        if source.service == 'user' and destination.service in ['binance', 'okx']:
+            return JsonResponse({'ok': False, 'error': '사용자에서 바로 바이낸스/OKX로 가는 경로는 유효하지 않습니다'}, status=400)
+
+        # Reject invalid (upbit/bithumb) USDT -> (upbit/bithumb) BTC
+        if source.service in ['upbit_usdt','bithumb_usdt'] and destination.service in ['upbit_btc','bithumb_btc']:
+            return JsonResponse({'ok': False, 'error': 'USDT에서 동일 거래소 BTC로의 직접 전환 경로는 유효하지 않습니다'}, status=400)
+
+        try:
+            route, created = Route.objects.update_or_create(
+                source=source,
+                destination=destination,
+                route_type=route_type,
+                defaults={
+                    'fee_rate': fee_rate if fee_rate is not None else None,
+                    'fee_fixed': fee_fixed if fee_fixed is not None else None,
+                    'is_enabled': bool(is_enabled),
+                    'description': description
+                }
+            )
+
+            return JsonResponse({
+                'ok': True,
+                'route': route.as_dict(),
+                'created': created
+            })
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error updating route {source.service} -> {destination.service}: {e}")
+            return JsonResponse({'ok': False, 'error': '라우트 업데이트 중 오류가 발생했습니다'}, status=500)
+
+    elif request.method == 'DELETE':
+        if not is_admin(request):
+            return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+        try:
+            data = json.loads(request.body)
+            route_id = data.get('id')
+            if not route_id:
+                return JsonResponse({'ok': False, 'error': 'Route ID required'}, status=400)
+
+            Route.objects.filter(id=route_id).delete()
+            return JsonResponse({'ok': True})
+        except Exception as e:
+            return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+def get_optimal_paths_view(request):
+    """Get optimal paths from user to personal wallet"""
+    try:
+        user = ServiceNode.objects.get(service='user')
+        personal_wallet = ServiceNode.objects.get(service='personal_wallet')
+
+        # Allow clients to request more paths; clamp to avoid explosion
+        try:
+            max_paths = int(request.GET.get('max_paths', '300'))
+        except (TypeError, ValueError):
+            max_paths = 300
+        max_paths = max(1, min(max_paths, 1000))
+
+        paths = find_optimal_paths(user, personal_wallet, max_paths=max_paths)
+
+        return JsonResponse({
+            'ok': True,
+            'paths': [path_to_dict(path) for path in paths]
+        })
+
+    except ServiceNode.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'Required service nodes not found'}, status=404)
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error finding optimal paths: {e}")
+        return JsonResponse({'ok': False, 'error': '경로 찾기 중 오류가 발생했습니다'}, status=500)
+
+
+# Path finding algorithm
+def find_optimal_paths(start_node, end_node, max_paths=10):
+    """Find optimal paths between two nodes using Dijkstra-like algorithm"""
+    from collections import defaultdict, deque
+    import heapq
+
+    # Get all enabled routes
+    routes = Route.objects.filter(is_enabled=True).select_related('source', 'destination')
+
+    # Build adjacency list
+    graph = defaultdict(list)
+    for route in routes:
+        graph[route.source.id].append(route)
+
+    # Priority queue: (total_cost, tie_breaker, path_routes, current_node_id)
+    from itertools import count
+    _tie = count()
+    pq = [(0.0, next(_tie), [], start_node.id)]
+    completed_paths = []
+    visited_paths = set()
+
+    while pq and len(completed_paths) < max_paths:
+        current_cost, _seq, path_routes, current_node_id = heapq.heappop(pq)
+
+        # Create path signature to avoid duplicates
+        path_signature = tuple(route.id for route in path_routes)
+        if path_signature in visited_paths:
+            continue
+        visited_paths.add(path_signature)
+
+        # If we reached the destination
+        if current_node_id == end_node.id:
+            completed_paths.append({
+                'routes': path_routes,
+                'total_cost': current_cost,
+                'path_signature': path_signature
+            })
+            continue
+
+        # Explore neighbors
+        for route in graph[current_node_id]:
+            # Avoid cycles (don't go back to nodes already in path)
+            nodes_in_path = {start_node.id} | {r.destination.id for r in path_routes}
+            if route.destination.id in nodes_in_path:
+                continue
+
+            # Calculate route cost
+            route_cost = calculate_route_cost(route)
+            new_cost = current_cost + route_cost
+            new_path = path_routes + [route]
+
+            heapq.heappush(pq, (new_cost, next(_tie), new_path, route.destination.id))
+
+    return completed_paths
+
+
+def calculate_route_cost(route):
+    """Calculate the cost of a single route"""
+    cost = 0.0
+    if route.fee_rate:
+        cost += float(route.fee_rate)  # Percentage cost
+    if route.fee_fixed:
+        cost += float(route.fee_fixed) * 100000000  # Convert BTC to satoshis for comparison
+    return cost
+
+
+def path_to_dict(path):
+    """Convert path data to dictionary format"""
+    return {
+        'routes': [route.as_dict() for route in path['routes']],
+        'total_cost': path['total_cost'],
+        'path_signature': path['path_signature']
+    }
+
+
+@csrf_exempt
+def routing_snapshot_view(request):
+    """Save and reset routing graph snapshot (service nodes + routes)."""
+    if request.method == 'GET':
+        try:
+            snap = RoutingSnapshot.objects.filter(name='default').first()
+            if not snap:
+                return JsonResponse({'ok': True, 'has_snapshot': False})
+            return JsonResponse({
+                'ok': True,
+                'has_snapshot': True,
+                'updated_at': snap.updated_at.isoformat(),
+                'counts': {
+                    'nodes': len(snap.nodes_json or []),
+                    'routes': len(snap.routes_json or []),
+                }
+            })
+        except Exception as e:
+            return JsonResponse({'ok': False, 'error': f'라우팅 스냅샷을 불러오는 중 오류: {e}'}, status=500)
+
+    if request.method == 'POST':
+        if not is_admin(request):
+            return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+        try:
+            data = json.loads(request.body or '{}')
+        except json.JSONDecodeError:
+            data = {}
+        action = (data.get('action') or '').lower()
+
+        if action == 'save':
+            try:
+                nodes = list(ServiceNode.objects.all().values(
+                    'service', 'display_name', 'is_kyc', 'is_custodial', 'is_enabled', 'description', 'website_url'
+                ))
+                routes_qs = Route.objects.select_related('source', 'destination').all()
+                routes = []
+                for r in routes_qs:
+                    routes.append({
+                        'source': r.source.service,
+                        'destination': r.destination.service,
+                        'route_type': r.route_type,
+                        'fee_rate': float(r.fee_rate) if r.fee_rate is not None else None,
+                        'fee_fixed': float(r.fee_fixed) if r.fee_fixed is not None else None,
+                        'is_enabled': bool(r.is_enabled),
+                        'description': r.description or '',
+                    })
+                snap, _ = RoutingSnapshot.objects.update_or_create(
+                    name='default',
+                    defaults={'nodes_json': nodes, 'routes_json': routes}
+                )
+                return JsonResponse({'ok': True, 'updated_at': snap.updated_at.isoformat(), 'counts': {'nodes': len(nodes), 'routes': len(routes)}})
+            except Exception as e:
+                return JsonResponse({'ok': False, 'error': f'스냅샷 저장 중 오류: {e}'}, status=500)
+
+        if action == 'reset':
+            try:
+                snap = RoutingSnapshot.objects.filter(name='default').first()
+                if not snap:
+                    return JsonResponse({'ok': False, 'error': '저장된 스냅샷이 없습니다'}, status=400)
+                nodes = snap.nodes_json or []
+                routes = snap.routes_json or []
+                # Clear and restore
+                Route.objects.all().delete()
+                ServiceNode.objects.all().delete()
+                service_to_node = {}
+                for n in nodes:
+                    node = ServiceNode.objects.create(
+                        service=n['service'],
+                        display_name=n.get('display_name') or n['service'],
+                        is_kyc=bool(n.get('is_kyc', False)),
+                        is_custodial=bool(n.get('is_custodial', True)),
+                        is_enabled=bool(n.get('is_enabled', True)),
+                        description=n.get('description', ''),
+                        website_url=n.get('website_url', ''),
+                    )
+                    service_to_node[n['service']] = node
+                created = 0
+                for r in routes:
+                    src = service_to_node.get(r['source'])
+                    dst = service_to_node.get(r['destination'])
+                    if not src or not dst:
+                        continue
+                    Route.objects.create(
+                        source=src,
+                        destination=dst,
+                        route_type=r['route_type'],
+                        fee_rate=r.get('fee_rate', None),
+                        fee_fixed=r.get('fee_fixed', None),
+                        is_enabled=bool(r.get('is_enabled', True)),
+                        description=r.get('description', ''),
+                    )
+                    created += 1
+                return JsonResponse({'ok': True, 'restored_nodes': len(service_to_node), 'restored_routes': created})
+            except Exception as e:
+                return JsonResponse({'ok': False, 'error': f'스냅샷 초기화 중 오류: {e}'}, status=500)
+
+        return JsonResponse({'ok': False, 'error': 'Invalid action'}, status=400)
 
     return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)

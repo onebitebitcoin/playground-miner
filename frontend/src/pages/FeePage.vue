@@ -58,8 +58,158 @@
         </div>
       </div>
 
-      <!-- Results Section -->
-      <div v-if="inputAmount && results.length > 0" class="space-y-6">
+      <!-- Final Paths Results (dynamic from backend) -->
+      <div v-if="inputAmount && sortedOptimalPaths.length > 0" class="space-y-6">
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+          <h2 class="text-lg sm:text-xl font-semibold text-gray-900">최종 경로 기반 수수료 비교 ({{ sortedOptimalPaths.length }}개)</h2>
+
+          <!-- View Mode Toggle -->
+          <div class="flex bg-gray-100 rounded-lg p-1 self-start sm:self-auto">
+            <button
+              @click="viewMode = 'flow'"
+              :class="[
+                'px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-colors flex items-center gap-1',
+                viewMode === 'flow'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              ]"
+            >
+              <svg class="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              흐름도
+            </button>
+            <button
+              @click="viewMode = 'cards'"
+              :class="[
+                'px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-colors flex items-center gap-1',
+                viewMode === 'cards'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              ]"
+            >
+              <svg class="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              카드
+            </button>
+          </div>
+        </div>
+
+        <!-- Cards View for final paths -->
+        <div v-if="viewMode === 'cards'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div v-for="(path, idx) in sortedOptimalPaths" :key="path.path_signature || idx" class="bg-white rounded-lg shadow-sm p-6 border transition-all hover:shadow-md">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-800 font-semibold">{{ idx + 1 }}</span>
+                <h3 class="text-base sm:text-lg font-semibold text-gray-900">경로 #{{ idx + 1 }}</h3>
+              </div>
+              <div class="text-right">
+                <div class="text-lg sm:text-2xl font-extrabold text-red-600">{{ formatPrice(computeTotalFeeKRW(path)) }}원</div>
+                <div class="text-[11px] sm:text-xs text-gray-500">총 예상 수수료</div>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center text-sm">
+              <template v-for="(r, i) in path.routes" :key="i">
+                <span class="px-2 py-1 bg-blue-50 text-blue-800 rounded">{{ r.source.display_name }}</span>
+                <svg class="w-4 h-4 mx-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                <span v-if="i === path.routes.length - 1" class="px-2 py-1 bg-green-50 text-green-800 rounded">{{ r.destination.display_name }}</span>
+              </template>
+            </div>
+            <div class="mt-3 grid grid-cols-1 gap-1 text-xs text-gray-600">
+              <div v-for="(r, i) in path.routes" :key="'d'+i" class="flex justify-between bg-gray-50 px-2 py-1 rounded">
+                <span>{{ r.source.display_name }} → {{ r.destination.display_name }} ({{ r.route_type_display }})</span>
+                <span>
+                  <template v-if="r.fee_rate !== null">{{ r.fee_rate }}%</template>
+                  <template v-if="r.fee_fixed !== null">{{ r.fee_rate !== null ? ' + ' : ''}}{{ r.fee_fixed }} BTC</template>
+                  <template v-if="r.fee_rate === null && r.fee_fixed === null">무료</template>
+                </span>
+              </div>
+            </div>
+
+            <!-- Footer: show total rate and fixed fees under the card -->
+            <div class="mt-4 pt-3 border-t text-xs text-gray-600">
+              <div>
+                총 비율 수수료: <span class="font-semibold">{{ computePathFees(path.routes).rate.toFixed(4) }}%</span>
+                • 총 고정 수수료: <span class="font-semibold">{{ computePathFees(path.routes).fixed.toFixed(8) }} BTC</span>
+                <template v-if="bitcoinPrice && computePathFees(path.routes).fixed">
+                  (≈ {{ formatPrice(computePathFees(path.routes).fixed * bitcoinPrice) }}원)
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flow View for final paths -->
+        <div v-else class="space-y-4">
+          <div v-for="(path, idx) in sortedOptimalPaths" :key="path.path_signature || idx" class="bg-white rounded-lg shadow-sm p-4 sm:p-6 border">
+            <div class="flex items-center justify-between mb-3">
+              <div class="font-medium text-gray-900">경로 #{{ idx + 1 }}</div>
+              <div class="text-right">
+                <div class="text-lg sm:text-2xl font-extrabold text-red-600">{{ formatPrice(computeTotalFeeKRW(path)) }}원</div>
+                <div class="text-[11px] sm:text-xs text-gray-500">총 예상 수수료</div>
+              </div>
+            </div>
+            <!-- Flow nodes with KYC/custodial badges and arrows showing fees -->
+            <div class="relative overflow-x-auto -mx-2 px-2 pr-4 pb-2 sm:mx-0 sm:px-0" :ref="el => setFlowContainerRef('final-'+idx, el)">
+              <div v-if="flowOverflowById['final-'+idx]" class="sm:hidden text-[10px] text-gray-500 px-1 pb-1">좌우로 스크롤해 전체 흐름 보기</div>
+              <div class="flex items-center py-1 min-w-full">
+                <!-- First source node -->
+                <template v-if="path.routes && path.routes.length > 0">
+                  <div class="flex flex-col items-center shrink-0 mr-2">
+                    <div class="w-24 sm:w-32 bg-white border border-gray-300 rounded-lg p-2 text-center shadow">
+                      <div class="text-[11px] sm:text-sm font-semibold text-gray-900 truncate">{{ path.routes[0].source.display_name }}</div>
+                      <div class="mt-1 flex items-center justify-center gap-1">
+                        <span class="text-[9px] px-1.5 py-0.5 rounded-full" :class="path.routes[0].source.is_kyc ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'">{{ path.routes[0].source.is_kyc ? 'KYC' : 'non-KYC' }}</span>
+                        <span class="text-[9px] px-1.5 py-0.5 rounded-full" :class="path.routes[0].source.is_custodial ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-purple-100 text-purple-700 border border-purple-200'">{{ path.routes[0].source.is_custodial ? '수탁형' : '비수탁형' }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+
+                <!-- For each route: arrow with fee, then destination node with badges -->
+                <template v-for="(r, i) in path.routes" :key="'flow-'+i">
+                  <div class="flex flex-col items-center mx-2 shrink-0">
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <div class="mt-1 text-[10px] sm:text-xs text-center leading-tight">
+                      <div v-if="r.fee_rate !== null" class="text-gray-700">{{ r.fee_rate }}%</div>
+                      <div v-if="r.fee_fixed !== null" :class="Number(r.fee_fixed) === 0 ? 'text-green-600' : 'text-orange-600'">
+                        {{ r.fee_fixed }} BTC
+                        <template v-if="bitcoinPrice && r.fee_fixed">
+                          <span class="text-[10px] text-gray-500">(≈ {{ formatPrice(r.fee_fixed * bitcoinPrice) }}원)</span>
+                        </template>
+                      </div>
+                      <div class="text-[9px] text-gray-500">{{ r.route_type_display }}</div>
+                    </div>
+                  </div>
+                  <div :class="['flex flex-col items-center shrink-0', i === path.routes.length - 1 ? 'mr-0' : 'mr-2']">
+                    <div class="w-24 sm:w-32 bg-white border border-gray-300 rounded-lg p-2 text-center shadow">
+                      <div class="text-[11px] sm:text-sm font-semibold text-gray-900 truncate">{{ r.destination.display_name }}</div>
+                      <div class="mt-1 flex items-center justify-center gap-1">
+                        <span class="text-[9px] px-1.5 py-0.5 rounded-full" :class="r.destination.is_kyc ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'">{{ r.destination.is_kyc ? 'KYC' : 'non-KYC' }}</span>
+                        <span class="text-[9px] px-1.5 py-0.5 rounded-full" :class="r.destination.is_custodial ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-purple-100 text-purple-700 border border-purple-200'">{{ r.destination.is_custodial ? '수탁형' : '비수탁형' }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+            <!-- Footer totals under flow box -->
+            <div class="mt-3 pt-2 border-t text-xs text-gray-600">
+              총 비율 수수료: <span class="font-semibold">{{ computePathFees(path.routes).rate.toFixed(4) }}%</span>
+              • 총 고정 수수료: <span class="font-semibold">{{ computePathFees(path.routes).fixed.toFixed(8) }} BTC</span>
+              <template v-if="bitcoinPrice && computePathFees(path.routes).fixed">
+                (≈ {{ formatPrice(computePathFees(path.routes).fixed * bitcoinPrice) }}원)
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Legacy Results Section -->
+      <div v-else-if="inputAmount && results.length > 0" class="space-y-6">
         <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
           <h2 class="text-lg sm:text-xl font-semibold text-gray-900">수수료 비교 결과</h2>
 
@@ -326,7 +476,7 @@
 
             <!-- Flow Diagram -->
             <div
-              class="relative overflow-y-visible overflow-x-auto -mx-2 px-2 scrollbar-hide sm:overflow-visible sm:mx-0 sm:px-0"
+              class="relative overflow-y-visible overflow-x-auto -mx-2 px-2 sm:mx-0 sm:px-0"
               :ref="el => setFlowContainerRef(result.id, el)"
             >
               <!-- Mobile scroll hint (only when overflowing) -->
@@ -586,7 +736,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { apiGetExchangeRates, apiGetWithdrawalFees, apiGetLightningServices } from '../api'
+import { apiGetExchangeRates, apiGetWithdrawalFees, apiGetLightningServices, apiGetOptimalPaths } from '../api'
 
 // Reactive data
 const inputAmount = ref('')
@@ -595,6 +745,10 @@ const bitcoinPrice = ref(null)
 const isLoading = ref(false)
 const error = ref(null)
 const results = ref([])
+// Final paths (dynamic) from backend routing graph
+const optimalPaths = ref([])
+const finalLoading = ref(false)
+const finalError = ref('')
 const isMobile = ref(false)
 const detailsOpenById = ref({})
 const viewMode = ref('flow') // 'cards' or 'flow'
@@ -629,6 +783,55 @@ const checkOverflowForId = (id) => {
   const prev = flowOverflowById.value[id]
   if (prev !== hasOverflow) {
     flowOverflowById.value = { ...flowOverflowById.value, [id]: hasOverflow }
+  }
+}
+
+// Helpers for dynamic final paths
+const computePathFees = (pathRoutes) => {
+  let totalRate = 0
+  let totalFixed = 0
+  for (const r of pathRoutes || []) {
+    if (r.fee_rate !== null && r.fee_rate !== undefined) totalRate += Number(r.fee_rate) || 0
+    if (r.fee_fixed !== null && r.fee_fixed !== undefined) totalFixed += Number(r.fee_fixed) || 0
+  }
+  return { rate: totalRate, fixed: totalFixed }
+}
+
+const actualAmountKRW = computed(() => {
+  if (!inputAmount.value) return 0
+  return parseFloat(inputAmount.value) * parseFloat(selectedUnit.value)
+})
+
+const computeTotalFeeKRW = (path) => {
+  if (!path || !Array.isArray(path.routes)) return 0
+  const { rate, fixed } = computePathFees(path.routes)
+  const rateFee = (actualAmountKRW.value || 0) * (Number(rate) || 0) / 100
+  const fixedFee = (Number(fixed) || 0) * (bitcoinPrice.value || 0)
+  return Math.max(0, Math.floor(rateFee + fixedFee))
+}
+
+const sortedOptimalPaths = computed(() => {
+  const arr = [...(optimalPaths.value || [])]
+  if ((actualAmountKRW.value || 0) > 0 && (bitcoinPrice.value || 0) > 0) {
+    arr.sort((a, b) => computeTotalFeeKRW(a) - computeTotalFeeKRW(b))
+  }
+  return arr
+})
+
+const loadFinalPaths = async () => {
+  finalLoading.value = true
+  finalError.value = ''
+  try {
+    const res = await apiGetOptimalPaths(500)
+    if (res.success) {
+      optimalPaths.value = res.paths || []
+    } else {
+      finalError.value = res.error || '최종 경로를 불러오지 못했습니다'
+    }
+  } catch (e) {
+    finalError.value = '네트워크 오류'
+  } finally {
+    finalLoading.value = false
   }
 }
 
@@ -706,7 +909,7 @@ const formatPrice = (price) => {
 const getLightningHeader = (services) => {
   if (!services || services.length === 0) return '라이트닝 서비스'
   const names = services.map(s => (s?.name || '')).join(' ').toLowerCase()
-  if (names.includes('boltz') || names.includes('coinos')) {
+  if (names.includes('coinos')) {
     return '라이트닝 & 온체인 출금'
   }
   return '라이트닝 서비스'
@@ -810,6 +1013,13 @@ const loadData = async () => {
     console.error('Data fetch error:', err)
   }
 }
+
+// Load final paths on mount
+onMounted(async () => {
+  try {
+    await loadFinalPaths()
+  } catch (_) {}
+})
 
 const calculateFees = () => {
   if (!inputAmount.value || !bitcoinPrice.value || inputAmount.value <= 0) {
@@ -1009,44 +1219,6 @@ const calculateFees = () => {
   })
 
   // Direct BTC transfer scenarios with Lightning
-  // 6. 업비트 BTC → 바이낸스 → Boltz → 온체인 개인지갑
-  newResults.push({
-    id: 'upbit-btc-binance-lightning-boltz',
-    title: '업비트 BTC → 바이낸스 → Boltz → 온체인 개인지갑',
-    description: '업비트 비트코인 직접 송금 → 바이낸스 → 라이트닝 → Boltz → 온체인 개인지갑',
-    exchanges: [
-      {
-        name: '업비트 (BTC)',
-        rate: feeRates.value.upbit_btc,
-        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : '',
-        eventDetails: exchangeRatesInfo.value.upbit_btc?.event_details || ''
-      }
-    ],
-    withdrawalFees: [
-      {
-        name: '업비트 BTC 송금',
-        amount: btcTransferFee,
-        amountKrw: btcTransferFee * bitcoinPrice.value
-      },
-      {
-        name: '바이낸스 라이트닝',
-        amount: withdrawalFees.value.binance_lightning,
-        amountKrw: withdrawalFees.value.binance_lightning * bitcoinPrice.value
-      }
-    ],
-    lightningServices: [{
-      name: 'Boltz Exchange',
-      rate: lightningServices.value.boltz,
-      isKyc: lightningServicesInfo.value.boltz?.is_kyc || false,
-      isCustodial: lightningServicesInfo.value.boltz?.is_custodial ?? true
-    }],
-    tradingFee: amount * (feeRates.value.upbit_btc / 100),
-    transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.binance_lightning * bitcoinPrice.value,
-    lightningFee: amount * (lightningServices.value.boltz / 100),
-    totalFee: 0,
-    actualAmount: 0,
-    feeRate: 0
-  })
 
   // 7. 업비트 BTC → 바이낸스 → Coinos → 온체인 개인지갑
   newResults.push({
@@ -1087,44 +1259,6 @@ const calculateFees = () => {
     feeRate: 0
   })
 
-  // 8. 업비트 BTC → OKX → Boltz → 온체인 개인지갑
-  newResults.push({
-    id: 'upbit-btc-okx-lightning-boltz',
-    title: '업비트 BTC → OKX → Boltz → 온체인 개인지갑',
-    description: '업비트 비트코인 직접 송금 → OKX → 라이트닝 → Boltz → 온체인 개인지갑',
-    exchanges: [
-      {
-        name: '업비트 (BTC)',
-        rate: feeRates.value.upbit_btc,
-        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : '',
-        eventDetails: exchangeRatesInfo.value.upbit_btc?.event_details || ''
-      }
-    ],
-    withdrawalFees: [
-      {
-        name: '업비트 BTC 송금',
-        amount: btcTransferFee,
-        amountKrw: btcTransferFee * bitcoinPrice.value
-      },
-      {
-        name: 'OKX 라이트닝',
-        amount: withdrawalFees.value.okx_lightning,
-        amountKrw: withdrawalFees.value.okx_lightning * bitcoinPrice.value
-      }
-    ],
-    lightningServices: [{
-      name: 'Boltz Exchange',
-      rate: lightningServices.value.boltz,
-      isKyc: lightningServicesInfo.value.boltz?.is_kyc || false,
-      isCustodial: lightningServicesInfo.value.boltz?.is_custodial ?? true
-    }],
-    tradingFee: amount * (feeRates.value.upbit_btc / 100),
-    transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.okx_lightning * bitcoinPrice.value,
-    lightningFee: amount * (lightningServices.value.boltz / 100),
-    totalFee: 0,
-    actualAmount: 0,
-    feeRate: 0
-  })
 
   // 9. 업비트 BTC → OKX → Coinos → 온체인 개인지갑
   newResults.push({
@@ -1166,43 +1300,6 @@ const calculateFees = () => {
   })
 
   // USDT Lightning scenarios
-  // 10. 업비트 → OKX → Boltz → 온체인 개인지갑
-  newResults.push({
-    id: 'upbit-usdt-okx-lightning-boltz',
-    title: '업비트 → OKX → Boltz → 온체인 개인지갑',
-    description: '업비트 USDT → OKX → 라이트닝 → Boltz → 온체인 개인지갑',
-    exchanges: [
-      {
-        name: '업비트 (USDT)',
-        rate: feeRates.value.upbit_usdt,
-        note: exchangeRatesInfo.value.upbit_usdt?.is_event ? '한시적 이벤트' : '',
-        eventDetails: exchangeRatesInfo.value.upbit_usdt?.event_details || ''
-      },
-      {
-        name: 'OKX',
-        rate: feeRates.value.okx,
-        note: exchangeRatesInfo.value.okx?.is_event ? '한시적 이벤트' : '',
-        eventDetails: exchangeRatesInfo.value.okx?.event_details || ''
-      }
-    ],
-    withdrawalFees: [{
-      name: 'OKX 라이트닝',
-      amount: withdrawalFees.value.okx_lightning,
-      amountKrw: withdrawalFees.value.okx_lightning * bitcoinPrice.value
-    }],
-    lightningServices: [{
-      name: 'Boltz Exchange',
-      rate: lightningServices.value.boltz,
-      isKyc: lightningServicesInfo.value.boltz?.is_kyc || false,
-      isCustodial: lightningServicesInfo.value.boltz?.is_custodial ?? true
-    }],
-    tradingFee: amount * (feeRates.value.upbit_usdt / 100) + amount * (feeRates.value.okx / 100),
-    transferFee: withdrawalFees.value.okx_lightning * bitcoinPrice.value,
-    lightningFee: amount * (lightningServices.value.boltz / 100),
-    totalFee: 0,
-    actualAmount: 0,
-    feeRate: 0
-  })
 
   // 11. 업비트 → OKX → Coinos → 온체인 개인지갑
   newResults.push({
@@ -1242,43 +1339,6 @@ const calculateFees = () => {
     feeRate: 0
   })
 
-  // 12. 업비트 → 바이낸스 → Boltz → 온체인 개인지갑
-  newResults.push({
-    id: 'upbit-usdt-binance-lightning-boltz',
-    title: '업비트 → 바이낸스 → Boltz → 온체인 개인지갑',
-    description: '업비트 USDT → 바이낸스 → 라이트닝 → Boltz → 온체인 개인지갑',
-    exchanges: [
-      {
-        name: '업비트 (USDT)',
-        rate: feeRates.value.upbit_usdt,
-        note: exchangeRatesInfo.value.upbit_usdt?.is_event ? '한시적 이벤트' : '',
-        eventDetails: exchangeRatesInfo.value.upbit_usdt?.event_details || ''
-      },
-      {
-        name: '바이낸스',
-        rate: feeRates.value.binance,
-        note: exchangeRatesInfo.value.binance?.is_event ? '한시적 이벤트' : '',
-        eventDetails: exchangeRatesInfo.value.binance?.event_details || ''
-      }
-    ],
-    withdrawalFees: [{
-      name: '바이낸스 라이트닝',
-      amount: withdrawalFees.value.binance_lightning,
-      amountKrw: withdrawalFees.value.binance_lightning * bitcoinPrice.value
-    }],
-    lightningServices: [{
-      name: 'Boltz Exchange',
-      rate: lightningServices.value.boltz,
-      isKyc: lightningServicesInfo.value.boltz?.is_kyc || false,
-      isCustodial: lightningServicesInfo.value.boltz?.is_custodial ?? true
-    }],
-    tradingFee: amount * (feeRates.value.upbit_usdt / 100) + amount * (feeRates.value.binance / 100),
-    transferFee: withdrawalFees.value.binance_lightning * bitcoinPrice.value,
-    lightningFee: amount * (lightningServices.value.boltz / 100),
-    totalFee: 0,
-    actualAmount: 0,
-    feeRate: 0
-  })
 
   // 13. 업비트 → 바이낸스 → Coinos → 온체인 개인지갑
   newResults.push({
@@ -1319,43 +1379,6 @@ const calculateFees = () => {
   })
 
   // Add new lightning service scenarios with 월렛오브사토시 and Strike
-  // 14. 업비트 → OKX → 월렛오브사토시 → 온체인 개인지갑
-  newResults.push({
-    id: 'upbit-usdt-okx-lightning-walletofsatoshi',
-    title: '업비트 → OKX → 월렛오브사토시 → 온체인 개인지갑',
-    description: '업비트 USDT → OKX → 라이트닝 → 월렛오브사토시 → 온체인 개인지갑',
-    exchanges: [
-      {
-        name: '업비트 (USDT)',
-        rate: feeRates.value.upbit_usdt,
-        note: exchangeRatesInfo.value.upbit_usdt?.is_event ? '한시적 이벤트' : '',
-        eventDetails: exchangeRatesInfo.value.upbit_usdt?.event_details || ''
-      },
-      {
-        name: 'OKX',
-        rate: feeRates.value.okx,
-        note: exchangeRatesInfo.value.okx?.is_event ? '한시적 이벤트' : '',
-        eventDetails: exchangeRatesInfo.value.okx?.event_details || ''
-      }
-    ],
-    withdrawalFees: [{
-      name: 'OKX 라이트닝',
-      amount: withdrawalFees.value.okx_lightning,
-      amountKrw: withdrawalFees.value.okx_lightning * bitcoinPrice.value
-    }],
-    lightningServices: [{
-      name: '월렛오브사토시',
-      rate: lightningServices.value.walletofsatoshi,
-      isKyc: lightningServicesInfo.value.walletofsatoshi?.is_kyc || false,
-      isCustodial: lightningServicesInfo.value.walletofsatoshi?.is_custodial ?? true
-    }],
-    tradingFee: amount * (feeRates.value.upbit_usdt / 100) + amount * (feeRates.value.okx / 100),
-    transferFee: withdrawalFees.value.okx_lightning * bitcoinPrice.value,
-    lightningFee: amount * (lightningServices.value.walletofsatoshi / 100),
-    totalFee: 0,
-    actualAmount: 0,
-    feeRate: 0
-  })
 
   // 업비트 → OKX → Strike → 온체인 개인지갑 (문구에서 0% 언급 제거)
   newResults.push({
@@ -1397,44 +1420,6 @@ const calculateFees = () => {
 
   
 
-  // 16. 업비트 BTC → OKX → 월렛오브사토시 → 온체인 개인지갑
-  newResults.push({
-    id: 'upbit-btc-okx-lightning-walletofsatoshi',
-    title: '업비트 BTC → OKX → 월렛오브사토시 → 온체인 개인지갑',
-    description: '업비트 비트코인 직접 송금 → OKX → 라이트닝 → 월렛오브사토시 → 온체인 개인지갑',
-    exchanges: [
-      {
-        name: '업비트 (BTC)',
-        rate: feeRates.value.upbit_btc,
-        note: exchangeRatesInfo.value.upbit_btc?.is_event ? '한시적 이벤트' : '',
-        eventDetails: exchangeRatesInfo.value.upbit_btc?.event_details || ''
-      }
-    ],
-    withdrawalFees: [
-      {
-        name: '업비트 BTC 송금',
-        amount: btcTransferFee,
-        amountKrw: btcTransferFee * bitcoinPrice.value
-      },
-      {
-        name: 'OKX 라이트닝',
-        amount: withdrawalFees.value.okx_lightning,
-        amountKrw: withdrawalFees.value.okx_lightning * bitcoinPrice.value
-      }
-    ],
-    lightningServices: [{
-      name: '월렛오브사토시',
-      rate: lightningServices.value.walletofsatoshi,
-      isKyc: lightningServicesInfo.value.walletofsatoshi?.is_kyc || false,
-      isCustodial: lightningServicesInfo.value.walletofsatoshi?.is_custodial ?? true
-    }],
-    tradingFee: amount * (feeRates.value.upbit_btc / 100),
-    transferFee: btcTransferFee * bitcoinPrice.value + withdrawalFees.value.okx_lightning * bitcoinPrice.value,
-    lightningFee: amount * (lightningServices.value.walletofsatoshi / 100),
-    totalFee: 0,
-    actualAmount: 0,
-    feeRate: 0
-  })
 
   // 업비트 BTC → OKX → Strike → 온체인 개인지갑 (문구에서 0% 언급 제거)
   newResults.push({
@@ -1516,7 +1501,7 @@ const calculateFees = () => {
       result.finalTransferType = '온체인'
     } else {
       const svc = (result.lightningServices[0]?.name || '')
-      result.finalTransferType = (svc === '월렛오브사토시' || svc === 'Boltz Exchange' || svc === 'Coinos') ? '온체인' : '라이트닝'
+      result.finalTransferType = (svc === 'Coinos') ? '온체인' : '라이트닝'
     }
 
     // Derive lightning arrow fee display (cache for UI)
@@ -1727,13 +1712,9 @@ const getFinalTransferType = (result) => {
     return '온체인'
   }
 
-  // For 월렛오브사토시, Boltz Exchange, and Coinos, final transfer is onchain
+  // For Coinos, final transfer is onchain
   const lightningServiceName = result.lightningServices[0]?.name || ''
-  if (
-    lightningServiceName === '월렛오브사토시' ||
-    lightningServiceName === 'Boltz Exchange' ||
-    lightningServiceName === 'Coinos'
-  ) {
+  if (lightningServiceName === 'Coinos') {
     return '온체인'
   }
 

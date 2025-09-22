@@ -167,8 +167,113 @@ class WithdrawalFee(models.Model):
         }
 
 
+class ServiceNode(models.Model):
+    """Service nodes for routing system"""
+    SERVICE_CHOICES = [
+        ('user', '사용자'),
+        ('upbit', '업비트'),
+        ('upbit_krw', '업비트 원화'),
+        ('upbit_btc', '업비트 BTC'),
+        ('upbit_usdt', '업비트 USDT'),
+        ('bithumb', '빗썸'),
+        ('bithumb_krw', '빗썸 원화'),
+        ('bithumb_btc', '빗썸 BTC'),
+        ('bithumb_usdt', '빗썸 USDT'),
+        ('binance', '바이낸스'),
+        ('binance_usdt', '바이낸스 USDT'),
+        ('binance_btc', '바이낸스 BTC'),
+        ('okx', 'OKX'),
+        ('okx_usdt', 'OKX USDT'),
+        ('okx_btc', 'OKX BTC'),
+        ('strike', 'Strike'),
+        ('walletofsatoshi', '월렛오브사토시'),
+        ('coinos', 'Coinos'),
+        ('boltz', 'Boltz Exchange'),
+        ('personal_wallet', '개인지갑'),
+    ]
+
+    service = models.CharField(max_length=30, choices=SERVICE_CHOICES, unique=True)
+    display_name = models.CharField(max_length=100)
+    is_kyc = models.BooleanField(default=False)
+    is_custodial = models.BooleanField(default=True)
+    is_enabled = models.BooleanField(default=True)
+    description = models.TextField(blank=True, null=True)
+    website_url = models.URLField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['service']
+
+    def __str__(self):
+        kyc_indicator = " (KYC)" if self.is_kyc else " (non-KYC)"
+        custodial_indicator = " 수탁형" if self.is_custodial else " 비수탁형"
+        return f"{self.display_name}{kyc_indicator}{custodial_indicator}"
+
+    def as_dict(self):
+        return {
+            'id': self.id,
+            'service': self.service,
+            'display_name': self.display_name,
+            'is_kyc': self.is_kyc,
+            'is_custodial': self.is_custodial,
+            'is_enabled': self.is_enabled,
+            'description': self.description,
+            'website_url': self.website_url,
+            'updated_at': self.updated_at.isoformat(),
+        }
+
+
+class Route(models.Model):
+    """Routes between service nodes"""
+    ROUTE_TYPE_CHOICES = [
+        ('trading', '거래수수료'),
+        ('withdrawal_lightning', '라이트닝 출금'),
+        ('withdrawal_onchain', '온체인 출금'),
+    ]
+
+    source = models.ForeignKey(ServiceNode, on_delete=models.CASCADE, related_name='routes_from')
+    destination = models.ForeignKey(ServiceNode, on_delete=models.CASCADE, related_name='routes_to')
+    route_type = models.CharField(max_length=30, choices=ROUTE_TYPE_CHOICES)
+    fee_rate = models.DecimalField(max_digits=6, decimal_places=4, null=True, blank=True)  # Percentage fee
+    fee_fixed = models.DecimalField(max_digits=10, decimal_places=8, null=True, blank=True)  # Fixed BTC fee
+    is_enabled = models.BooleanField(default=True)
+    description = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('source', 'destination', 'route_type')
+        ordering = ['source', 'destination', 'route_type']
+
+    def __str__(self):
+        fee_str = ""
+        if self.fee_rate:
+            fee_str += f"{self.fee_rate}%"
+        if self.fee_fixed:
+            if fee_str:
+                fee_str += f" + {self.fee_fixed} BTC"
+            else:
+                fee_str = f"{self.fee_fixed} BTC"
+        return f"{self.source.display_name} → {self.destination.display_name} ({self.get_route_type_display()}): {fee_str}"
+
+    def as_dict(self):
+        return {
+            'id': self.id,
+            'source': self.source.as_dict(),
+            'destination': self.destination.as_dict(),
+            'route_type': self.route_type,
+            'route_type_display': self.get_route_type_display(),
+            'fee_rate': float(self.fee_rate) if self.fee_rate else None,
+            'fee_fixed': float(self.fee_fixed) if self.fee_fixed else None,
+            'is_enabled': self.is_enabled,
+            'description': self.description,
+            'updated_at': self.updated_at.isoformat(),
+        }
+
+
 class LightningService(models.Model):
-    """Lightning network service fees"""
+    """Lightning network service fees - DEPRECATED, use ServiceNode and Route instead"""
     SERVICE_CHOICES = [
         ('boltz', 'Boltz Exchange'),
         ('coinos', 'Coinos'),
@@ -202,3 +307,18 @@ class LightningService(models.Model):
             'description': self.description,
             'updated_at': self.updated_at.isoformat(),
         }
+
+
+class RoutingSnapshot(models.Model):
+    """Persisted snapshot of routing graph (service nodes + routes) for reset."""
+    name = models.CharField(max_length=100, unique=True)
+    nodes_json = models.JSONField()
+    routes_json = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return f"RoutingSnapshot<{self.name}> updated={self.updated_at.isoformat()}"

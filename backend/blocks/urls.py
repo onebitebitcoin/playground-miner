@@ -24,4 +24,9 @@ urlpatterns = [
     # Lightning service endpoints
     path('lightning-services', views.lightning_services_view, name='lightning_services'),
     path('lightning-services/admin', views.admin_lightning_services_view, name='admin_lightning_services'),
+    # New routing system endpoints
+    path('service-nodes/admin', views.admin_service_nodes_view, name='admin_service_nodes'),
+    path('routes/admin', views.admin_routes_view, name='admin_routes'),
+    path('optimal-paths', views.get_optimal_paths_view, name='optimal_paths'),
+    path('routing-snapshot', views.routing_snapshot_view, name='routing_snapshot'),
 ]

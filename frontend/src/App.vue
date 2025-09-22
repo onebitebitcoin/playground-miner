@@ -71,7 +71,7 @@
       <main class="flex-1 overflow-auto bg-gray-50">
         <!-- Mobile nav tabs -->
         <div class="md:hidden border-b border-gray-200 bg-white px-4 py-2">
-          <div class="flex gap-1 overflow-x-auto scrollbar-hide">
+          <div class="flex gap-1 overflow-x-auto">
             <button
               v-for="item in menuItems"
               :key="item.key"

@@ -56,7 +56,7 @@ const routes = [
     path: '/admin',
     name: 'admin',
     component: AdminPage,
-    meta: { requiresNickname: true, requiresAdmin: true }
+    meta: { requiresNickname: true }
   }
 ]
 
@@ -72,9 +72,6 @@ router.beforeEach((to, from, next) => {
 
   if (to.meta.requiresNickname && !nickname) {
     next('/nickname')
-  } else if (to.meta.requiresAdmin && !isAdmin) {
-    // Prevent non-admin access to admin route
-    next('/mining')
   } else if (to.meta.requiresNoNickname && nickname) {
     next('/mining')
   } else {
