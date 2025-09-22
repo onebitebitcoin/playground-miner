@@ -143,7 +143,7 @@ sudo mkdir -p "$SECRETS_DIR"
 KEY_FILE="$SECRETS_DIR/mnemonic.key"
 if [ ! -f "$KEY_FILE" ]; then
   echo "Generating persistent MNEMONIC_ENCRYPTION_KEY..."
-  KEY=$(python - <<'PY'
+  KEY=$(python3 - <<'PY'
 from cryptography.fernet import Fernet
 print(Fernet.generate_key().decode())
 PY
