@@ -94,17 +94,18 @@ def seed_lightning_services():
 def seed_mnemonics(count=10):
     """Seed valid BIP39 mnemonics for the pool (12-word)."""
     try:
-        from bip_utils import Bip39MnemonicGenerator, Bip39WordsNum
+        from mnemonic import Mnemonic as MnemonicGenerator
     except Exception:
-        # If bip-utils is not available, skip
+        # If mnemonic library is not available, skip
         return 0
     created = 0
     # only create if there are no unassigned mnemonics at all
     if Mnemonic.objects.filter(is_assigned=False).exists():
         return 0
+    mnemo = MnemonicGenerator("english")
     for i in range(int(count)):
-        m = Bip39MnemonicGenerator().FromWordsNumber(Bip39WordsNum.WORDS_NUM_12)
-        Mnemonic.objects.create(username=f'seed-{i+1}', mnemonic=str(m), is_assigned=False)
+        m = mnemo.generate(strength=128)  # 128 bits = 12 words
+        Mnemonic.objects.create(username=f'seed-{i+1}', mnemonic=m, is_assigned=False)
         created += 1
     return created
 

@@ -19,7 +19,7 @@ def derive_bip84_addresses(mnemonic: str, account: int = 0, change: int = 0, sta
     """
     Derive BIP84 (P2WPKH bech32) Bitcoin mainnet addresses from a mnemonic.
     Path: m/84'/0'/account'/change/index
-    Uses bip_utils (no DB, no side effects).
+    Uses bitcoinlib (no DB, no side effects).
     """
     mnorm = _normalize_mnemonic(mnemonic)
 
@@ -109,7 +109,7 @@ def derive_master_fingerprint(mnemonic: str) -> str:
 
 def derive_bip84_account_zpub(mnemonic: str, account: int = 0) -> str:
     """Return BIP84 account public extended key (zpub) for m/84'/0'/account'.
-    Uses bip_utils to avoid any DB usage.
+    Uses bitcoinlib to avoid any DB usage.
     """
     mnorm = _normalize_mnemonic(mnemonic)
 

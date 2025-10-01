@@ -249,9 +249,10 @@ def generate_mnemonic_view(request):
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
     try:
-        from bip_utils import Bip39MnemonicGenerator, Bip39WordsNum
-        mnemonic = Bip39MnemonicGenerator().FromWordsNumber(Bip39WordsNum.WORDS_NUM_12)
-        return JsonResponse({'ok': True, 'mnemonic': str(mnemonic)})
+        from mnemonic import Mnemonic
+        mnemo = Mnemonic("english")
+        mnemonic = mnemo.generate(strength=128)  # 128 bits = 12 words
+        return JsonResponse({'ok': True, 'mnemonic': mnemonic})
     except Exception as e:
         return JsonResponse({'ok': False, 'error': f'failed to generate: {e}'}, status=500)
 
