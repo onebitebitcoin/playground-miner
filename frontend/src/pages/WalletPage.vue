@@ -57,16 +57,19 @@
               </svg>
               <span class="sr-only">잔액 새로고침</span>
             </button>
-            <div v-if="assignedBalanceSats !== null" class="text-sm text-gray-700 ml-1">
-              잔액: <span class="font-semibold">{{ assignedBalanceSats.toLocaleString() }} sats</span>
-              <span class="text-gray-500">({{ formatBtc(assignedBalanceSats) }})</span>
+            <div class="text-sm text-gray-700 ml-1">
+              <template v-if="assignedBalanceLoading">잔액 조회중...</template>
+              <template v-else-if="assignedBalanceSats !== null">
+                잔액: <span class="font-semibold">{{ assignedBalanceSats.toLocaleString() }} sats</span>
+                <span class="text-gray-500">({{ formatBtc(assignedBalanceSats) }})</span>
+              </template>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Step 2: Generate New Mnemonic -->
-      <div class="bg-white border border-gray-200 rounded-lg p-6">
+      <!-- Step 2: Generate New Mnemonic (visible after assignment) -->
+      <div v-if="assignedMnemonicId" class="bg-white border border-gray-200 rounded-lg p-6">
         <h2 class="text-xl font-semibold text-gray-900 mb-4">2단계: 새 니모닉 생성</h2>
         <p class="text-gray-600 mb-4">새로운 니모닉을 자동 생성하거나 수동으로 입력합니다</p>
 
@@ -244,6 +247,7 @@ import {
   apiGenerateMnemonic,
   apiSaveMnemonic,
   apiGetMnemonicBalance,
+  apiGetOnchainBalanceById,
   apiValidateMnemonic
 } from '../api'
 
@@ -468,7 +472,16 @@ const refreshAssignedBalance = async () => {
   if (!assignedMnemonicId.value) return
   assignedBalanceLoading.value = true
   try {
-    await fetchAssignedBalance()
+    // Use on-chain scan similar to admin to get latest balance
+    const res = await apiGetOnchainBalanceById(assignedMnemonicId.value, { count: 20 })
+    if (res.success) {
+      const total = res.total_sats || 0
+      assignedBalanceSats.value = total
+    } else {
+      showErrorMessage(res.error || '온체인 잔액 조회 실패')
+    }
+  } catch (_) {
+    showErrorMessage('네트워크 오류가 발생했습니다')
   } finally {
     assignedBalanceLoading.value = false
   }
