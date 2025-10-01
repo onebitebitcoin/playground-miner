@@ -75,6 +75,15 @@
             <h2 class="text-xl font-semibold text-gray-900">2단계: 새 니모닉 생성</h2>
           </div>
           <div class="flex items-center gap-2">
+            <!-- Eye: show details (QR, zpub, MFP, addresses) after validation -->
+            <button v-if="walletMnemonicValidity === true" @click="openWalletMnemonicDetail"
+                    class="p-2 rounded text-gray-700 hover:text-gray-900" title="자세히 보기">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+              </svg>
+              <span class="sr-only">자세히 보기</span>
+            </button>
             <!-- Plus: auto-generate and fill 12 words -->
             <button @click="generateAndFillWalletMnemonic" class="p-2 rounded text-gray-700 hover:text-gray-900" title="자동 생성">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -218,6 +227,136 @@
       </div>
     </div>
 
+    <!-- Step 2 Mnemonic Detail Modal -->
+    <div v-if="showMnemonicDetail" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 md:p-4" @click="showMnemonicDetail = false">
+      <div class="bg-white rounded-lg p-4 md:p-6 max-w-lg w-full max-h-[90vh] md:max-h-[80vh] overflow-y-auto" @click.stop>
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-lg md:text-xl font-semibold text-gray-900">자세히 보기</h2>
+          <button @click="showMnemonicDetail = false" class="text-gray-400 hover:text-gray-600">
+            <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Mnemonic Words Section -->
+        <div class="mb-4 md:mb-6">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-base md:text-lg font-medium text-gray-900">시드 문구</h3>
+            <div class="flex items-center gap-1 md:gap-2">
+              <button @click="toggleDetailMnemonicQr" class="p-1.5 md:p-2 rounded text-gray-700 hover:text-gray-900" title="QR 코드 토글">
+                <svg class="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
+                </svg>
+                <span class="sr-only">QR 코드</span>
+              </button>
+              <button @click="copyDetailMnemonic" class="p-1.5 md:p-2 rounded text-gray-700 hover:text-gray-900" title="시드 문구 복사">
+                <svg class="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="9" y="7" width="11" height="13" rx="2" ry="2"></rect>
+                  <rect x="4" y="4" width="11" height="13" rx="2" ry="2"></rect>
+                </svg>
+                <span class="sr-only">시드 문구 복사</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Mnemonic QR Code -->
+          <div v-if="detailShowMnemonicQr" class="text-center mb-4">
+            <div ref="detailMnemonicQrContainer" class="flex justify-center"></div>
+          </div>
+
+          <div class="bg-gray-50 p-3 md:p-4 rounded-lg">
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 md:gap-2 mb-4">
+              <div v-for="(word, index) in (detailMnemonic || '').split(' ')" :key="index"
+                   class="flex items-center space-x-1 md:space-x-2 p-1.5 md:p-2 bg-white rounded border">
+                <span class="text-xs text-gray-500 font-medium w-3 md:w-4">{{ index + 1 }}</span>
+                <span class="text-xs md:text-sm font-mono">{{ word }}</span>
+              </div>
+            </div>
+
+            <!-- Full text display -->
+            <div class="border-t pt-3 md:pt-4">
+              <p class="text-xs md:text-sm text-gray-700 font-mono break-all">{{ detailMnemonic }}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- zpub Section -->
+        <div class="mb-6">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-lg font-medium text-gray-900">zpub</h3>
+            <div class="flex items-center gap-2">
+              <button @click="toggleDetailZpubQr" class="p-2 rounded text-gray-700 hover:text-gray-900" :disabled="!detailZpub" title="QR 코드 토글">
+                <svg class="w-5 h-5" :class="{ 'opacity-50': !detailZpub }" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
+                </svg>
+                <span class="sr-only">QR 코드</span>
+              </button>
+              <button @click="copyDetailZpub" class="p-2 rounded text-gray-700 hover:text-gray-900" :disabled="!detailZpub" title="zpub 복사">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="9" y="7" width="11" height="13" rx="2" ry="2"></rect>
+                  <rect x="4" y="4" width="11" height="13" rx="2" ry="2"></rect>
+                </svg>
+                <span class="sr-only">zpub 복사</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Zpub QR Code -->
+          <div v-if="detailShowZpubQr" class="text-center mb-4">
+            <div ref="detailZpubQrContainer" class="flex justify-center"></div>
+          </div>
+
+          <div class="bg-gray-50 p-4 rounded-lg">
+            <p class="text-sm text-gray-700 font-mono break-all whitespace-normal">{{ detailZpub || '—' }}</p>
+          </div>
+        </div>
+
+        <!-- Master Fingerprint -->
+        <div class="mb-6">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-lg font-medium text-gray-900">Master Fingerprint</h3>
+            <button @click="copyDetailMfp" class="p-2 rounded text-gray-700 hover:text-gray-900" :disabled="!detailMfp" title="MFP 복사">
+              <svg class="w-5 h-5" :class="{ 'opacity-50': !detailMfp }" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <rect x="9" y="7" width="11" height="13" rx="2" ry="2"></rect>
+                <rect x="4" y="4" width="11" height="13" rx="2" ry="2"></rect>
+              </svg>
+              <span class="sr-only">MFP 복사</span>
+            </button>
+          </div>
+          <div class="bg-gray-50 p-4 rounded-lg">
+            <p class="text-sm text-gray-700 font-mono">{{ detailMfp || '—' }}</p>
+          </div>
+        </div>
+
+        <!-- Addresses -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-lg font-medium text-gray-900">주소</h3>
+            <button @click="detailRefreshAddresses" class="p-2 rounded text-gray-700 hover:text-gray-900" title="주소 새로고침">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span class="sr-only">주소 새로고침</span>
+            </button>
+          </div>
+          <div v-if="detailAddresses.length === 0" class="text-sm text-gray-500 px-2 py-3">표시할 주소가 없습니다</div>
+          <div v-else class="space-y-1">
+            <div v-for="(addr, idx) in detailAddresses.slice(0, 10)" :key="idx" class="flex items-center justify-between bg-white rounded border px-2 py-1">
+              <span class="text-xs md:text-sm font-mono break-all">{{ addr }}</span>
+              <button @click="copyAddressString(addr)" class="p-2 rounded text-gray-700 hover:text-gray-900" title="주소 복사">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="9" y="7" width="11" height="13" rx="2" ry="2"></rect>
+                  <rect x="4" y="4" width="11" height="13" rx="2" ry="2"></rect>
+                </svg>
+                <span class="sr-only">주소 복사</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Success Message -->
     <div v-if="successMessage" class="fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg">
       {{ successMessage }}
@@ -240,6 +379,8 @@ import {
   apiGetMnemonicBalance,
   apiGetOnchainBalanceById,
   apiSetMnemonicBalance,
+  apiGetMnemonicZpub,
+  apiGetMnemonicAddress,
   apiValidateMnemonic
 } from '../api'
 
@@ -555,6 +696,107 @@ const copyToClipboard = async (text) => {
   }
 }
 
+// Detail modal state (admin-like)
+const showMnemonicDetail = ref(false)
+const detailMnemonic = ref('')
+const detailZpub = ref('')
+const detailMfp = ref('')
+const detailAddresses = ref([])
+const detailAddressStartIndex = ref(0)
+const detailShowMnemonicQr = ref(false)
+const detailShowZpubQr = ref(false)
+const detailMnemonicQrContainer = ref(null)
+const detailZpubQrContainer = ref(null)
+
+const ensureSavedIdForCurrentMnemonic = async () => {
+  const text = (manualMnemonicText.value || mnemonicWords.value.join(' ')).trim()
+  if (!text) return null
+  // If existing saved mnemonic matches, reuse id
+  if (savedMnemonicId.value && newMnemonic.value && newMnemonic.value.trim() === text) return savedMnemonicId.value
+  // Else, save to pool like admin
+  try {
+    const username = `manual_${Date.now()}`
+    const res = await apiSaveMnemonic(text, username)
+    if (res.success) {
+      newMnemonic.value = text
+      savedMnemonicId.value = res.id || null
+      return savedMnemonicId.value
+    }
+  } catch (_) {}
+  return null
+}
+
+const openWalletMnemonicDetail = async () => {
+  const text = (manualMnemonicText.value || mnemonicWords.value.join(' ')).trim()
+  if (!text || walletMnemonicValidity.value !== true) { showErrorMessage('먼저 유효성 검사를 완료하세요'); return }
+  const id = await ensureSavedIdForCurrentMnemonic()
+  if (!id) { showErrorMessage('니모닉 저장 실패'); return }
+
+  detailMnemonic.value = text
+  detailZpub.value = ''
+  detailMfp.value = ''
+  detailAddresses.value = []
+  detailAddressStartIndex.value = 0
+  detailShowMnemonicQr.value = false
+  detailShowZpubQr.value = false
+  showMnemonicDetail.value = true
+
+  try {
+    const res = await apiGetMnemonicZpub(getAdminUsername() || getCurrentUsername(), id, 0)
+    if (res.success) {
+      detailZpub.value = res.zpub || ''
+      detailMfp.value = res.master_fingerprint || ''
+    }
+  } catch (_) {}
+  try { await detailLoadAddresses(id) } catch (_) {}
+}
+
+const detailLoadAddresses = async (id) => {
+  const start = Number(detailAddressStartIndex.value || 0)
+  const username = getAdminUsername() || getCurrentUsername()
+  const reqs = Array.from({ length: 10 }, (_, i) => apiGetMnemonicAddress(username, id, { index: start + i, account: 0, change: 0 }))
+  const results = await Promise.allSettled(reqs)
+  const addrs = []
+  for (const r of results) {
+    if (r.status === 'fulfilled' && r.value?.success && r.value.address) addrs.push(r.value.address)
+  }
+  detailAddresses.value = addrs
+}
+
+const detailRefreshAddresses = async () => {
+  if (!savedMnemonicId.value) return
+  detailAddressStartIndex.value = Number(detailAddressStartIndex.value || 0) + 10
+  await detailLoadAddresses(savedMnemonicId.value)
+}
+
+const toggleDetailMnemonicQr = async () => {
+  detailShowMnemonicQr.value = !detailShowMnemonicQr.value
+  await nextTick()
+  if (detailShowMnemonicQr.value && detailMnemonicQrContainer.value) {
+    detailMnemonicQrContainer.value.innerHTML = ''
+    try {
+      const canvas = await QRCode.toCanvas(detailMnemonic.value, { width: 200, margin: 2, color: { dark: '#000000', light: '#FFFFFF' } })
+      detailMnemonicQrContainer.value.appendChild(canvas)
+    } catch (_) {}
+  }
+}
+
+const toggleDetailZpubQr = async () => {
+  if (!detailZpub.value) return
+  detailShowZpubQr.value = !detailShowZpubQr.value
+  await nextTick()
+  if (detailShowZpubQr.value && detailZpubQrContainer.value) {
+    detailZpubQrContainer.value.innerHTML = ''
+    try {
+      const canvas = await QRCode.toCanvas(detailZpub.value, { width: 200, margin: 2, color: { dark: '#000000', light: '#FFFFFF' } })
+      detailZpubQrContainer.value.appendChild(canvas)
+    } catch (_) {}
+  }
+}
+
+const copyDetailMnemonic = async () => { await copyToClipboard(detailMnemonic.value) }
+const copyDetailZpub = async () => { if (detailZpub.value) await copyToClipboard(detailZpub.value) }
+const copyDetailMfp = async () => { if (detailMfp.value) await copyToClipboard(detailMfp.value) }
 // Admin-like helpers for Step 2
 const generateAndFillWalletMnemonic = async () => {
   try {
