@@ -6,6 +6,7 @@ from django.db.models import Max
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from .models import Block, Nickname, Mnemonic, ExchangeRate, WithdrawalFee, LightningService, ServiceNode, Route, RoutingSnapshot, SidebarConfig
+import hashlib
 from .broadcast import broadcaster
 from .btc import derive_bip84_addresses, fetch_blockstream_balances, calc_total_sats, derive_bip84_account_zpub, derive_master_fingerprint, _normalize_mnemonic
 from mnemonic import Mnemonic as MnemonicValidator
@@ -1479,3 +1480,67 @@ def admin_update_sidebar_config_view(request):
 
     config.save()
     return JsonResponse({'ok': True, 'config': config.as_dict()})
+
+
+# Wallet password endpoints
+@csrf_exempt
+def admin_set_wallet_password_view(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+    import os
+    expected = os.environ.get('INIT_TOKEN') or os.environ.get('ADMIN_TOKEN') or '0000'
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        payload = {}
+    token = payload.get('token') or request.headers.get('X-Admin-Token')
+    if expected and token != expected:
+        return JsonResponse({'ok': False, 'error': 'unauthorized'}, status=401)
+    password = (payload.get('password') or '').strip()
+    if not password:
+        # Clear password
+        h = ''
+        plain = ''
+    else:
+        h = hashlib.sha256(password.encode('utf-8')).hexdigest()
+        plain = password
+    config, _ = SidebarConfig.objects.get_or_create(id=1)
+    config.wallet_password_hash = h
+    config.wallet_password_plain = plain
+    config.save()
+    return JsonResponse({'ok': True, 'wallet_password_set': bool(h)})
+
+
+@csrf_exempt
+def wallet_password_check_view(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        payload = {}
+    password = (payload.get('password') or '').strip()
+    config, _ = SidebarConfig.objects.get_or_create(id=1)
+    h = hashlib.sha256(password.encode('utf-8')).hexdigest() if password else ''
+    if not config.wallet_password_hash:
+        return JsonResponse({'ok': False, 'error': 'not_set'})
+    if h and h == config.wallet_password_hash:
+        return JsonResponse({'ok': True})
+    return JsonResponse({'ok': False, 'error': 'invalid'})
+
+
+@csrf_exempt
+def admin_get_wallet_password_view(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+    import os
+    expected = os.environ.get('INIT_TOKEN') or os.environ.get('ADMIN_TOKEN') or '0000'
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        payload = {}
+    token = payload.get('token') or request.headers.get('X-Admin-Token')
+    if expected and token != expected:
+        return JsonResponse({'ok': False, 'error': 'unauthorized'}, status=401)
+    config, _ = SidebarConfig.objects.get_or_create(id=1)
+    return JsonResponse({'ok': True, 'password': config.wallet_password_plain or ''})

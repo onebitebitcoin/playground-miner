@@ -175,6 +175,21 @@
             </div>
           </div>
 
+          <!-- Wallet Password Settings (simple inline) -->
+          <div class="mb-4">
+            <div class="flex items-center gap-3 flex-nowrap">
+              <span class="text-sm text-gray-700">지갑 비밀번호</span>
+              <input v-model="walletPasswordInput" type="text" placeholder="새 비밀번호 설정"
+                     class="w-56 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+              <button @click="saveWalletPassword" :disabled="!adminResetPassword || savingWalletPassword"
+                      class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 whitespace-nowrap">
+                {{ savingWalletPassword ? '저장 중...' : '저장' }}
+              </button>
+              <span class="text-sm text-gray-500">현재: <span class="font-mono text-gray-800">{{ currentWalletPassword || '미설정' }}</span></span>
+            </div>
+            <div v-if="walletPasswordMessage" class="mt-2 text-sm" :class="walletPasswordMessage.includes('성공') ? 'text-green-700' : 'text-red-600'">{{ walletPasswordMessage }}</div>
+          </div>
+
           <!-- Mnemonic Pool Status -->
           <div class="space-y-6">
             <div class="bg-white rounded-lg shadow-md p-4 md:p-6 h-[700px]">
@@ -811,6 +826,8 @@ import {
   apiGetOnchainBalanceById,
   apiSetMnemonicBalance,
   apiUnassignMnemonic,
+  apiSetWalletPassword,
+  apiGetWalletPassword,
   apiGetServiceNodes,
   apiUpdateServiceNode,
   apiGetRoutes,
@@ -867,6 +884,11 @@ const adminMnemonicChecking = ref(false)
 const adminMnemonicUnknown = ref([])
 const adminMnemonicErrorCode = ref('')
 const balancesLoading = ref(false)
+// Wallet password state
+const walletPasswordInput = ref('')
+const savingWalletPassword = ref(false)
+const walletPasswordMessage = ref('')
+const currentWalletPassword = ref('')
 
 // Modal state for mnemonic display
 const showMnemonicModal = ref(false)
@@ -883,6 +905,18 @@ const showMnemonicQr = ref(false)
 const showZpubQr = ref(false)
 
 // (fee management removed)
+
+// Load current wallet password when admin token changes
+watch(adminResetPassword, async (val) => {
+  if (val && val.trim()) {
+    try {
+      const res = await apiGetWalletPassword(val)
+      if (res.success) currentWalletPassword.value = res.password || ''
+    } catch (_) {}
+  } else {
+    currentWalletPassword.value = ''
+  }
+})
 
 // Routing management state
 const serviceNodes = ref([])
@@ -1588,6 +1622,26 @@ const copyAddressInModal = async () => {
       showErrorMessage(res.error || '주소 생성 실패')
     }
   } catch (_) { showErrorMessage('요청 실패') }
+}
+
+// Wallet password setters
+const saveWalletPassword = async () => {
+  walletPasswordMessage.value = ''
+  if (!adminResetPassword.value) { walletPasswordMessage.value = '관리자 비밀번호(토큰)를 입력하세요'; return }
+  savingWalletPassword.value = true
+  try {
+    const res = await apiSetWalletPassword(adminResetPassword.value, walletPasswordInput.value || '')
+    if (res.success) {
+      walletPasswordMessage.value = res.wallet_password_set ? '비밀번호 설정 성공' : '비밀번호 해제 성공'
+      walletPasswordInput.value = ''
+    } else {
+      walletPasswordMessage.value = res.error || '설정 실패'
+    }
+  } catch (_) {
+    walletPasswordMessage.value = '요청 실패'
+  } finally {
+    savingWalletPassword.value = false
+  }
 }
 
 

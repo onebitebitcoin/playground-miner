@@ -329,6 +329,55 @@ export async function apiGetAdminExchangeRates(username) {
   }
 }
 
+// Wallet password APIs
+export async function apiSetWalletPassword(adminToken, password) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/wallet/password/admin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ token: adminToken, password })
+    })
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    if (!res.ok) return { success: false, error: data?.error || `서버 오류(${res.status})` }
+    return { success: data.ok, wallet_password_set: data.wallet_password_set }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiCheckWalletPassword(password) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/wallet/password/check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ password })
+    })
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    if (!res.ok) return { success: false, error: data?.error || `서버 오류(${res.status})` }
+    return { success: data.ok, error: data?.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiGetWalletPassword(adminToken) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/wallet/password/admin/get`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ token: adminToken })
+    })
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    if (!res.ok) return { success: false, error: data?.error || `서버 오류(${res.status})` }
+    return { success: data.ok, password: data.password }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
 export async function apiUpdateExchangeRate(username, exchange, feeRate, isEvent, description, eventDetails = '') {
   try {
     const res = await fetch(`${BASE_URL}/api/exchange-rates/admin`, {

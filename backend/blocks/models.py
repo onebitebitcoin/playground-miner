@@ -335,6 +335,10 @@ class SidebarConfig(models.Model):
     show_utxo = models.BooleanField(default=True)
     show_wallet = models.BooleanField(default=True)
     show_fee = models.BooleanField(default=True)
+    # Optional wallet password protection (stored as SHA256 hex)
+    wallet_password_hash = models.CharField(max_length=128, blank=True, default='')
+    # For admin visibility (demo purpose): store plaintext as well
+    wallet_password_plain = models.CharField(max_length=128, blank=True, default='')
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -351,5 +355,6 @@ class SidebarConfig(models.Model):
             'show_utxo': self.show_utxo,
             'show_wallet': self.show_wallet,
             'show_fee': self.show_fee,
+            'wallet_password_set': bool(self.wallet_password_hash),
             'updated_at': self.updated_at.isoformat(),
         }

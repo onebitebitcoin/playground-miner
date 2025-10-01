@@ -40,4 +40,8 @@ urlpatterns = [
     # Sidebar config endpoints
     path('sidebar-config', views.sidebar_config_view, name='sidebar_config'),
     path('sidebar-config/admin', views.admin_update_sidebar_config_view, name='admin_sidebar_config'),
+    # Wallet password
+    path('wallet/password/admin', views.admin_set_wallet_password_view, name='admin_set_wallet_password'),
+    path('wallet/password/check', views.wallet_password_check_view, name='wallet_password_check'),
+    path('wallet/password/admin/get', views.admin_get_wallet_password_view, name='admin_get_wallet_password'),
 ]

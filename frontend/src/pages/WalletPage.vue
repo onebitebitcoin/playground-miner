@@ -1,13 +1,35 @@
 <template>
   <div class="max-w-4xl mx-auto">
+    <!-- Password Gate -->
+    <div v-if="!walletUnlocked" class="bg-white border border-gray-200 rounded-lg p-6 max-w-md mx-auto mt-6">
+      <h2 class="text-xl font-semibold text-gray-900 mb-3">지갑 비밀번호</h2>
+      <p class="text-gray-600 text-sm mb-4">관리자 페이지에서 설정한 비밀번호를 입력하세요.</p>
+      <div class="flex items-center gap-2 mb-2 flex-nowrap">
+        <input v-model="walletPassword" type="password" placeholder="비밀번호"
+               class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+        <button @click="unlockWallet" :disabled="walletUnlocking"
+                class="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
+                title="입장">
+          <svg v-if="walletUnlocking" class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+          <span class="sr-only">입장</span>
+        </button>
+      </div>
+      <div v-if="walletUnlockError" class="text-sm text-red-600">{{ walletUnlockError }}</div>
+    </div>
+
     <!-- Header -->
-    <div class="mb-6">
+    <div v-if="walletUnlocked" class="mb-6">
       <h1 class="text-2xl font-bold text-gray-900 mb-2">비트코인 지갑</h1>
       <p class="text-gray-600">니모닉을 관리하고 새로운 지갑을 생성하세요</p>
     </div>
 
     <!-- Main Content -->
-    <div class="grid md:grid-cols-2 gap-6">
+    <div v-if="walletUnlocked" class="grid md:grid-cols-2 gap-6">
       <!-- Step 1: Request Existing Mnemonic -->
       <div class="bg-white border border-gray-200 rounded-lg p-6">
         <h2 class="text-xl font-semibold text-gray-900 mb-4">1단계: 기존 니모닉 요청</h2>
@@ -372,6 +394,7 @@ import {
   apiSetMnemonicBalance,
   apiGetMnemonicZpub,
   apiGetMnemonicAddress,
+  apiCheckWalletPassword,
   apiValidateMnemonic
 } from '../api'
 
@@ -397,6 +420,11 @@ const walletMnemonicValidity = ref(null)
 const walletMnemonicWordCount = ref(0)
 const walletMnemonicUnknown = ref([])
 const walletMnemonicErrorCode = ref('')
+// Wallet password gate state
+const walletUnlocked = ref(false)
+const walletPassword = ref('')
+const walletUnlocking = ref(false)
+const walletUnlockError = ref('')
 
 // Balance loading states
 const assignedBalanceLoading = ref(false)
@@ -844,6 +872,26 @@ const clearWalletManualMnemonic = () => {
   walletMnemonicUnknown.value = []
   walletMnemonicErrorCode.value = ''
   mnemonicError.value = ''
+}
+
+// Unlock wallet
+const unlockWallet = async () => {
+  walletUnlockError.value = ''
+  walletUnlocking.value = true
+  try {
+    const res = await apiCheckWalletPassword(walletPassword.value || '')
+    if (res.success) {
+      walletUnlocked.value = true
+      walletPassword.value = ''
+    } else {
+      if (res.error === 'not_set') walletUnlockError.value = '비밀번호가 설정되지 않았습니다. 관리자에 문의하세요.'
+      else walletUnlockError.value = '비밀번호가 올바르지 않습니다'
+    }
+  } catch (_) {
+    walletUnlockError.value = '확인 실패'
+  } finally {
+    walletUnlocking.value = false
+  }
 }
 
 // Utility functions
