@@ -107,13 +107,32 @@
                       <input
                         :id="`admin-word-${i}`"
                         v-model="adminMnemonicWords[i-1]"
-                        @input="updateAdminManualMnemonic"
+                        @input="handleWordInput(i-1, $event)"
+                        @keydown="handleKeyDown(i-1, $event)"
                         @paste="handleAdminPaste($event, i-1)"
+                        @blur="setTimeout(() => closeAutocomplete(), 200)"
                         type="text"
                         :placeholder="`단어 ${i}`"
+                        autocomplete="off"
                         class="w-full px-2 py-2 text-xs sm:text-sm border border-gray-200 rounded focus:ring-2 focus:ring-gray-500 focus:border-gray-500 outline-none"
                         :class="{ 'border-red-300': manualPoolError || (adminMnemonicUnknown && adminMnemonicUnknown.length && adminMnemonicUnknown.includes((adminMnemonicWords[i-1]||'').trim().toLowerCase())) }"
                       />
+
+                      <!-- Autocomplete dropdown -->
+                      <div
+                        v-if="autocompleteIndex === i-1 && autocompleteSuggestions.length > 0"
+                        class="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto"
+                      >
+                        <div
+                          v-for="(suggestion, idx) in autocompleteSuggestions"
+                          :key="suggestion"
+                          @click="selectSuggestion(i-1, suggestion)"
+                          class="px-3 py-2 cursor-pointer text-sm hover:bg-blue-50 transition-colors"
+                          :class="{ 'bg-blue-100': idx === autocompleteSelectedIndex }"
+                        >
+                          {{ suggestion }}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -779,6 +798,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import * as bip39 from 'bip39'
 import {
   apiRequestMnemonic,
   apiGenerateMnemonic,
@@ -833,6 +853,12 @@ const sidebarConfigLoading = ref(false)
 // Mnemonic management state
 const manualPoolMnemonicText = ref('')
 const adminMnemonicWords = ref(Array(12).fill(''))
+
+// BIP39 autocomplete state
+const bip39Wordlist = bip39.wordlists.english
+const autocompleteIndex = ref(-1)
+const autocompleteSuggestions = ref([])
+const autocompleteSelectedIndex = ref(0)
 const manualPoolError = ref('')
 const adminMnemonics = ref([])
 const adminMnemonicValidity = ref(null)
@@ -953,6 +979,14 @@ const fetchOnchain = async (mnemonic) => {
       const total = res.total_sats || 0
       mnemonic._onchain_total = total
       mnemonic.balance_sats = total
+
+      // Update in adminMnemonics array to ensure reactivity
+      const index = adminMnemonics.value.findIndex(m => m.id === mnemonic.id)
+      if (index !== -1) {
+        adminMnemonics.value[index].balance_sats = total
+        adminMnemonics.value[index]._onchain_total = total
+      }
+
       // 서버에도 즉시 업데이트(관리자일 때만)
       const adminUser = getAdminUsername()
       if (adminUser) {
@@ -964,6 +998,11 @@ const fetchOnchain = async (mnemonic) => {
   } catch (_) {}
   finally {
     mnemonic._loading_balance = false
+    // Update loading state in adminMnemonics array
+    const index = adminMnemonics.value.findIndex(m => m.id === mnemonic.id)
+    if (index !== -1) {
+      adminMnemonics.value[index]._loading_balance = false
+    }
   }
 }
 
@@ -1182,6 +1221,89 @@ const applyPreset = (presetType) => {
 }
 
 // Mnemonic management functions
+// BIP39 autocomplete functions
+const handleWordInput = (index, event) => {
+  const input = event.target.value.toLowerCase().trim()
+
+  if (input.length === 0) {
+    autocompleteIndex.value = -1
+    autocompleteSuggestions.value = []
+    return
+  }
+
+  // Filter words that start with the input
+  const suggestions = bip39Wordlist.filter(word => word.startsWith(input))
+
+  if (suggestions.length > 0) {
+    autocompleteIndex.value = index
+    autocompleteSuggestions.value = suggestions.slice(0, 8) // Limit to 8 suggestions
+    autocompleteSelectedIndex.value = 0
+  } else {
+    autocompleteIndex.value = -1
+    autocompleteSuggestions.value = []
+  }
+
+  updateAdminManualMnemonic()
+}
+
+const selectSuggestion = (index, word) => {
+  adminMnemonicWords.value[index] = word
+  autocompleteIndex.value = -1
+  autocompleteSuggestions.value = []
+  autocompleteSelectedIndex.value = 0
+  updateAdminManualMnemonic()
+
+  // Focus next input
+  nextTick(() => {
+    const nextIndex = index + 1
+    if (nextIndex < 12) {
+      const nextInput = document.getElementById(`admin-word-${nextIndex + 1}`)
+      if (nextInput) nextInput.focus()
+    }
+  })
+}
+
+const handleKeyDown = (index, event) => {
+  if (autocompleteIndex.value !== index || autocompleteSuggestions.value.length === 0) {
+    return
+  }
+
+  switch (event.key) {
+    case 'ArrowDown':
+      event.preventDefault()
+      autocompleteSelectedIndex.value = Math.min(
+        autocompleteSelectedIndex.value + 1,
+        autocompleteSuggestions.value.length - 1
+      )
+      break
+    case 'ArrowUp':
+      event.preventDefault()
+      autocompleteSelectedIndex.value = Math.max(autocompleteSelectedIndex.value - 1, 0)
+      break
+    case 'Enter':
+      event.preventDefault()
+      selectSuggestion(index, autocompleteSuggestions.value[autocompleteSelectedIndex.value])
+      break
+    case 'Escape':
+      event.preventDefault()
+      autocompleteIndex.value = -1
+      autocompleteSuggestions.value = []
+      break
+    case 'Tab':
+      if (autocompleteSuggestions.value.length > 0) {
+        event.preventDefault()
+        selectSuggestion(index, autocompleteSuggestions.value[autocompleteSelectedIndex.value])
+      }
+      break
+  }
+}
+
+const closeAutocomplete = () => {
+  autocompleteIndex.value = -1
+  autocompleteSuggestions.value = []
+  autocompleteSelectedIndex.value = 0
+}
+
 const updateAdminManualMnemonic = () => {
   const words = adminMnemonicWords.value.filter(w => w.trim().length > 0)
   manualPoolMnemonicText.value = adminMnemonicWords.value.join(' ').trim()
@@ -1235,16 +1357,28 @@ const addManualMnemonicToPool = async () => {
     if (response.success) {
       showSuccessMessage('니모닉이 풀에 추가되었습니다')
 
+      // Clear input fields immediately
+      clearAdminManualMnemonic()
+
+      // Reload the full list
       await loadData()
 
       // Auto-load balance for the newly added mnemonic
       const newMnemonic = adminMnemonics.value.find(m => m.id === response.id)
       if (newMnemonic) {
         try {
+          // Set loading state immediately for UI feedback
+          newMnemonic._loading_balance = true
+
           await fetchOnchain(newMnemonic)
+
+          showSuccess('잔액 조회 완료')
         } catch (error) {
           console.error(`Failed to load balance for new manual mnemonic ${newMnemonic.id}:`, error)
+          showError('잔액 조회 실패')
         }
+      } else {
+        console.warn('새로 추가된 니모닉을 찾을 수 없습니다. ID:', response.id)
       }
     } else {
       manualPoolError.value = response.error || '니모닉 저장에 실패했습니다'
