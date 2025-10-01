@@ -330,12 +330,12 @@ export async function apiGetAdminExchangeRates(username) {
 }
 
 // Wallet password APIs
-export async function apiSetWalletPassword(adminToken, password) {
+export async function apiSetWalletPassword(password) {
   try {
     const res = await fetch(`${BASE_URL}/api/wallet/password/admin`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ token: adminToken, password })
+      body: JSON.stringify({ password })
     })
     let data = null
     try { data = await res.json() } catch (_) {}
@@ -362,12 +362,11 @@ export async function apiCheckWalletPassword(password) {
   }
 }
 
-export async function apiGetWalletPassword(adminToken) {
+export async function apiGetWalletPassword() {
   try {
     const res = await fetch(`${BASE_URL}/api/wallet/password/admin/get`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ token: adminToken })
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
     })
     let data = null
     try { data = await res.json() } catch (_) {}
