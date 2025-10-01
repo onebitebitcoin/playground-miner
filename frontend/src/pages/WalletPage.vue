@@ -36,9 +36,9 @@
         
 
         <button @click="requestExistingMnemonic"
-                :disabled="loading"
+                :disabled="step1Loading"
                 class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-          {{ loading ? '요청 중...' : '니모닉 받기' }}
+          {{ step1Loading ? '요청 중...' : '니모닉 받기' }}
         </button>
 
       <div v-if="assignedMnemonic" class="mt-4 p-3 bg-green-50 border border-green-200 rounded">
@@ -161,56 +161,16 @@
 
               <div v-if="mnemonicError" class="text-sm text-red-600">{{ mnemonicError }}</div>
 
-              <button @click="saveManualMnemonic"
-                      :disabled="loading || !isValidMnemonicInput"
-                      class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
-                {{ loading ? '저장 중...' : '니모닉 저장하기' }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Generated/Saved Mnemonic Display -->
-          <div v-if="newMnemonic" class="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
-            <p class="text-sm text-blue-800 mb-2">새 니모닉이 생성되었습니다:</p>
-            <div class="font-mono text-sm bg-white p-2 rounded border break-all">
-              {{ newMnemonic }}
-            </div>
-            <div class="mt-2 flex flex-wrap items-center gap-2">
-              <!-- QR icon button -->
-              <button @click="showQRCode(newMnemonic)"
-                      class="p-1.5 rounded text-gray-700 hover:text-gray-900"
-                      title="QR 코드 보기">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
-                </svg>
-                <span class="sr-only">QR 코드</span>
-              </button>
-              <!-- Copy icon button -->
-              <button @click="copyToClipboard(newMnemonic)"
-                      class="p-1.5 rounded text-gray-700 hover:text-gray-900"
-                      title="복사">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="9" y="7" width="11" height="13" rx="2" ry="2"></rect>
-                  <rect x="4" y="4" width="11" height="13" rx="2" ry="2"></rect>
-                </svg>
-                <span class="sr-only">복사</span>
-              </button>
-              <!-- Refresh balance icon -->
-              <button v-if="savedMnemonicId" @click="refreshSavedBalance"
-                      :disabled="savedBalanceLoading"
-                      class="p-1.5 rounded text-blue-600 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="잔액 새로고침">
-                <svg v-if="savedBalanceLoading" class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <span class="sr-only">잔액 새로고침</span>
-              </button>
-              <div v-if="savedBalanceSats !== null" class="text-sm text-gray-700 ml-1">
-                잔액: <span class="font-semibold">{{ savedBalanceSats.toLocaleString() }} sats</span>
-                <span class="text-gray-500">({{ formatBtc(savedBalanceSats) }})</span>
+              <div>
+                <button v-if="!step2Saved"
+                        @click="saveManualMnemonic"
+                        :disabled="step2Loading || !isValidMnemonicInput"
+                        class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
+                  {{ step2Loading ? '저장 중...' : '니모닉 저장하기' }}
+                </button>
+                <div v-else class="w-full px-4 py-2 bg-green-50 text-green-700 rounded-lg text-center font-medium">
+                  니모닉 저장 완료
+                </div>
               </div>
             </div>
           </div>
@@ -399,13 +359,15 @@ import {
 } from '../api'
 
 // State
-const loading = ref(false)
+const step1Loading = ref(false)
+const step2Loading = ref(false)
 const assignedMnemonic = ref('')
 const assignedMnemonicId = ref(null)
 const assignedBalanceSats = ref(null)
 const newMnemonic = ref('')
 const savedMnemonicId = ref(null)
 const savedBalanceSats = ref(null)
+const step2Saved = ref(false)
 // Admin-like input UI (no tabs)
 const manualMnemonic = ref('')
 const mnemonicWords = ref(Array(12).fill(''))
@@ -524,7 +486,7 @@ const handlePaste = (event, startIndex) => {
 
 // API functions
 const requestExistingMnemonic = async () => {
-  loading.value = true
+  step1Loading.value = true
   try {
     const response = await apiRequestMnemonic(getCurrentUsername())
 
@@ -540,12 +502,12 @@ const requestExistingMnemonic = async () => {
   } catch (error) {
     showErrorMessage('네트워크 오류가 발생했습니다')
   } finally {
-    loading.value = false
+    step1Loading.value = false
   }
 }
 
 const generateNewMnemonic = async () => {
-  loading.value = true
+  step2Loading.value = true
   try {
     const response = await apiGenerateMnemonic()
 
@@ -558,7 +520,7 @@ const generateNewMnemonic = async () => {
   } catch (error) {
     showErrorMessage('네트워크 오류가 발생했습니다')
   } finally {
-    loading.value = false
+    step2Loading.value = false
   }
 }
 
@@ -572,7 +534,7 @@ const saveManualMnemonic = async () => {
     return
   }
 
-  loading.value = true
+  step2Loading.value = true
   try {
     // Match admin pool-add behavior: save with a pool-specific username
     const username = `manual_${Date.now()}`
@@ -581,38 +543,16 @@ const saveManualMnemonic = async () => {
     if (response.success) {
       newMnemonic.value = finalMnemonic
       savedMnemonicId.value = response.id || null
-
-      // Immediately perform on-chain scan like admin and update DB balance
-      if (savedMnemonicId.value) {
-        savedBalanceLoading.value = true
-        try {
-          const res = await apiGetOnchainBalanceById(savedMnemonicId.value, { count: 20 })
-          if (res.success) {
-            const total = res.total_sats || 0
-            savedBalanceSats.value = total
-            try {
-              const updUser = getAdminUsername() || getCurrentUsername()
-              await apiSetMnemonicBalance(updUser, savedMnemonicId.value, total)
-            } catch (_) {}
-          }
-        } finally {
-          savedBalanceLoading.value = false
-        }
-      }
-
-      showSuccessMessage('니모닉이 풀에 추가되었습니다')
-
-      // Clear inputs
-      mnemonicWords.value = Array(12).fill('')
-      manualMnemonicText.value = ''
-      manualMnemonic.value = ''
+      // Show saved state (hide button) without clearing inputs
+      step2Saved.value = true
+      showSuccessMessage('니모닉 저장 완료')
     } else {
       mnemonicError.value = response.error || '니모닉 저장에 실패했습니다'
     }
   } catch (error) {
     mnemonicError.value = '네트워크 오류가 발생했습니다'
   } finally {
-    loading.value = false
+    step2Loading.value = false
   }
 }
 
@@ -749,8 +689,10 @@ const ensureSavedIdForCurrentMnemonic = async () => {
 const openWalletMnemonicDetail = async () => {
   const text = (manualMnemonicText.value || mnemonicWords.value.join(' ')).trim()
   if (!text || walletMnemonicValidity.value !== true) { showErrorMessage('먼저 유효성 검사를 완료하세요'); return }
+
+  // Temporarily save to get ID for zpub/addresses (won't duplicate if already saved)
   const id = await ensureSavedIdForCurrentMnemonic()
-  if (!id) { showErrorMessage('니모닉 저장 실패'); return }
+  if (!id) { showErrorMessage('니모닉 처리 실패'); return }
 
   detailMnemonic.value = text
   detailId.value = id
@@ -856,6 +798,7 @@ const generateAndFillWalletMnemonic = async () => {
       walletMnemonicUnknown.value = []
       walletMnemonicErrorCode.value = ''
       mnemonicError.value = ''
+      step2Saved.value = false
     } else {
       showErrorMessage(response.error || '니모닉 생성에 실패했습니다')
     }
@@ -872,6 +815,7 @@ const clearWalletManualMnemonic = () => {
   walletMnemonicUnknown.value = []
   walletMnemonicErrorCode.value = ''
   mnemonicError.value = ''
+  step2Saved.value = false
 }
 
 // Unlock wallet

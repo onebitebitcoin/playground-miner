@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-[calc(100vh-70px)] flex items-center justify-center p-4 bg-gray-50">
+  <div class="min-h-[calc(100vh-70px)] w-full flex items-center justify-center px-3 py-4 bg-gray-50 overflow-y-auto">
     <div class="max-w-sm w-full space-y-8">
       <!-- Header -->
       <div class="text-center">
@@ -369,4 +369,3 @@ async function submit() {
 
 <style scoped>
 </style>
-

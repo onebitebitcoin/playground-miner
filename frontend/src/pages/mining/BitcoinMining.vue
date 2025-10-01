@@ -309,7 +309,7 @@
 </template>
 
 <script setup>
-import { onMounted, onBeforeUnmount, reactive, ref, computed } from 'vue'
+import { onMounted, onBeforeUnmount, onUnmounted, reactive, ref, computed } from 'vue'
 import { fetchStatus, fetchBlocks, postMine, connectEvents, connectBlockStream, apiInitReset } from '../../api'
 import MiningAnim from '../../components/MiningAnim.vue'
 import BlockGrid from '../../components/BlockGrid.vue'
@@ -327,7 +327,9 @@ let es = null
 let wsWrapper = null
 const broadcastMsg = ref('')
 const peers = ref([])
-let pollTimer = null
+const pollTimer = ref(null)
+// Component active flag to prevent polling outside mining page
+const isActive = ref(false)
 const savedNick = localStorage.getItem('nickname') || ''
 const highlighted = new Set()
 const showBlocksModal = ref(false)
@@ -337,8 +339,8 @@ const notifications = ref([])
 const notificationId = ref(0)
 
 function startPolling() {
-  if (pollTimer) return
-  pollTimer = setInterval(async () => {
+  if (pollTimer.value || !isActive.value) return
+  pollTimer.value = setInterval(async () => {
     try {
       const s = await fetchStatus()
       const prev = status.height
@@ -352,9 +354,10 @@ function startPolling() {
 }
 
 function stopPolling() {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
+  if (pollTimer.value) {
+    clearInterval(pollTimer.value)
+    pollTimer.value = null
+    console.log('Polling stopped')
   }
 }
 
@@ -490,11 +493,14 @@ function applyBlocks(list) {
 }
 
 onMounted(async () => {
+  isActive.value = true
   if (savedNick) miner.value = savedNick
   const s = await fetchStatus()
   applyStatus(s)
   const b = await fetchBlocks()
   applyBlocks(b.blocks)
+  // Ensure polling starts on mining page
+  startPolling()
 
   // Always connect without nickname to ensure guest connection
   console.log('Connecting to SSE stream...') // Debug log
@@ -503,8 +509,8 @@ onMounted(async () => {
   try {
     wsWrapper = connectEvents((payload) => handleMessage(payload), null) // Don't pass nickname
     if (wsWrapper.kind === 'ws') {
-      // Stop polling when WS is open (handled in onopen)
-      try { wsWrapper.socket.onopen = () => stopPolling() } catch (_) {}
+      // Keep polling even if WS opens; only stop on unmount
+      try { wsWrapper.socket.onopen = () => {} } catch (_) {}
     } else if (wsWrapper.kind === 'sse') {
       es = wsWrapper.socket
     }
@@ -526,8 +532,7 @@ onMounted(async () => {
         console.log('Setting peers from snapshot:', payload.peers) // Debug log
         peers.value = payload.peers
       }
-      // 실시간 연결 정상화 시 폴링 중지
-      stopPolling()
+      // Keep polling active on mining page
     } else if (payload.type === 'block') {
       // 새 블록 추가
       addOrUpdateBlock(payload.block)
@@ -567,24 +572,62 @@ onMounted(async () => {
   // SSE 오류 시 폴링으로 폴백, 연결되면 중지
   if (es) {
     try {
-      es.onerror = () => startPolling()
-      es.onopen = () => stopPolling()
+      es.onerror = () => { if (isActive.value) startPolling() }
+      // Do not stop polling on open; restrict to page lifecycle
+      es.onopen = () => {}
     } catch (_) {}
   } else if (wsWrapper && wsWrapper.kind === 'ws') {
     try {
-      wsWrapper.socket.onerror = () => startPolling()
-      wsWrapper.socket.onclose = () => startPolling()
+      wsWrapper.socket.onerror = () => { if (isActive.value) startPolling() }
+      wsWrapper.socket.onclose = () => { if (isActive.value) startPolling() }
     } catch (_) {}
   }
 })
 
 onBeforeUnmount(() => {
+  isActive.value = false
   stopMining = true
-  if (es) es.close()
+  // Detach and close connections safely
+  try {
+    if (es) {
+      try { es.onopen = null; es.onmessage = null; es.onerror = null } catch (_) {}
+      es.close()
+    }
+  } catch (_) {}
   if (wsWrapper && wsWrapper.kind === 'ws') {
-    try { wsWrapper.socket.close() } catch (_) {}
+    try {
+      wsWrapper.socket.onopen = null
+      wsWrapper.socket.onmessage = null
+      wsWrapper.socket.onclose = null
+      wsWrapper.socket.onerror = null
+      wsWrapper.socket.close()
+    } catch (_) {}
   }
+  es = null
+  wsWrapper = null
   stopPolling()
+})
+
+onUnmounted(() => {
+  // Double-check cleanup on unmount
+  stopPolling()
+  try {
+    if (es) {
+      try { es.onopen = null; es.onmessage = null; es.onerror = null } catch (_) {}
+      es.close()
+    }
+  } catch (_) {}
+  if (wsWrapper && wsWrapper.kind === 'ws') {
+    try {
+      wsWrapper.socket.onopen = null
+      wsWrapper.socket.onmessage = null
+      wsWrapper.socket.onclose = null
+      wsWrapper.socket.onerror = null
+      wsWrapper.socket.close()
+    } catch (_) {}
+  }
+  es = null
+  wsWrapper = null
 })
 </script>
 

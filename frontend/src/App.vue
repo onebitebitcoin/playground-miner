@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gray-50">
+  <div class="min-h-screen bg-gray-50 flex flex-col">
     <!-- Clean header -->
     <header class="border-b border-gray-200 bg-white shadow-sm">
       <div class="w-full px-2 sm:px-4 py-3 sm:py-4 flex items-center justify-between">
@@ -60,14 +60,14 @@
     </header>
 
     <!-- Nickname setup page (full width, no sidebar) -->
-    <div v-if="isNicknameSetup" class="min-h-[calc(100vh-80px)]">
+    <div v-if="isNicknameSetup" class="flex-1 overflow-y-auto min-h-0">
       <router-view />
     </div>
 
     <!-- Main app with sidebar -->
-    <div v-else class="flex min-h-[calc(100vh-70px)]">
+    <div v-else class="flex flex-1 min-h-0">
       <!-- Sidebar -->
-      <div class="hidden md:block">
+      <div class="hidden md:flex md:flex-col md:h-full md:flex-shrink-0">
         <Sidebar
           :items="menuItems"
           :active="currentRouteName"
@@ -77,9 +77,9 @@
 
 
       <!-- Main Content -->
-      <main class="flex-1 overflow-auto bg-gray-50">
+      <main class="flex-1 min-h-0 overflow-y-auto bg-gray-50">
         <!-- Mobile nav tabs -->
-        <div class="md:hidden border-b border-gray-200 bg-white px-4 py-2">
+        <div class="md:hidden border-b border-gray-200 bg-white px-3 py-2">
           <div class="flex gap-1 overflow-x-auto">
             <button
               v-for="item in menuItems"
@@ -95,7 +95,7 @@
           </div>
         </div>
 
-        <div class="p-4 sm:p-6">
+        <div class="px-3 py-4 sm:px-6 sm:py-6">
           <router-view />
         </div>
       </main>

@@ -504,8 +504,7 @@ def admin_unassign_mnemonic_view(request):
 @csrf_exempt
 def admin_mnemonic_xpub_view(request):
     """Admin: return BIP84 account zpub for a mnemonic id."""
-    if not is_admin(request):
-        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+    # Allow access to all users (was admin-only)
     if request.method != 'GET':
         return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
     try:
@@ -540,8 +539,7 @@ def admin_mnemonic_address_view(request):
     """Admin: return a BIP84 bech32 receive address for a mnemonic id.
     Optional query params: index (default 0), account (default 0), change (default 0).
     """
-    if not is_admin(request):
-        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+    # Allow access to all users (was admin-only)
     if request.method != 'GET':
         return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
 
