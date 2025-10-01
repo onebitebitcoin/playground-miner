@@ -414,15 +414,33 @@ const saveManualMnemonic = async () => {
 
   loading.value = true
   try {
-    const username = getCurrentUsername()
+    // Match admin pool-add behavior: save with a pool-specific username
+    const username = `manual_${Date.now()}`
     const response = await apiSaveMnemonic(finalMnemonic, username)
 
     if (response.success) {
       newMnemonic.value = finalMnemonic
       savedMnemonicId.value = response.id || null
-      // Fetch only stored DB balance initially (no on-chain scan)
-      if (savedMnemonicId.value) await fetchSavedBalance()
-      showSuccessMessage('니모닉이 저장되었습니다')
+
+      // Immediately perform on-chain scan like admin and update DB balance
+      if (savedMnemonicId.value) {
+        savedBalanceLoading.value = true
+        try {
+          const res = await apiGetOnchainBalanceById(savedMnemonicId.value, { count: 20 })
+          if (res.success) {
+            const total = res.total_sats || 0
+            savedBalanceSats.value = total
+            try {
+              const updUser = getAdminUsername() || getCurrentUsername()
+              await apiSetMnemonicBalance(updUser, savedMnemonicId.value, total)
+            } catch (_) {}
+          }
+        } finally {
+          savedBalanceLoading.value = false
+        }
+      }
+
+      showSuccessMessage('니모닉이 풀에 추가되었습니다')
 
       // Clear inputs
       mnemonicWords.value = Array(12).fill('')
