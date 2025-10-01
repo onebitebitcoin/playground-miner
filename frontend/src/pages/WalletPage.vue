@@ -70,41 +70,33 @@
 
       <!-- Step 2: Generate New Mnemonic (visible after assignment) -->
       <div v-if="assignedMnemonicId" class="bg-white border border-gray-200 rounded-lg p-6">
-        <h2 class="text-xl font-semibold text-gray-900 mb-4">2단계: 새 니모닉 생성</h2>
-        <p class="text-gray-600 mb-4">새로운 니모닉을 자동 생성하거나 수동으로 입력합니다</p>
-
-        <div class="space-y-4">
-          <!-- Tab Selection -->
-          <div class="border-b border-gray-200 mb-4">
-            <nav class="-mb-px flex">
-              <button @click="switchGenerationMode('auto')"
-                      :class="generationMode === 'auto'
-                        ? 'border-blue-500 text-blue-600 border-b-2 font-medium'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-                      class="w-1/2 py-2 px-1 text-center border-b-2 text-sm">
-                자동 생성
-              </button>
-              <button @click="switchGenerationMode('manual')"
-                      :class="generationMode === 'manual'
-                        ? 'border-blue-500 text-blue-600 border-b-2 font-medium'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-                      class="w-1/2 py-2 px-1 text-center border-b-2 text-sm">
-                수동 입력
-              </button>
-            </nav>
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-900">2단계: 새 니모닉 생성</h2>
+            <p class="text-gray-600">관리자 인터페이스와 동일한 입력 방식</p>
           </div>
-
-          <!-- Auto Generation -->
-          <div v-if="generationMode === 'auto'">
-            <button @click="generateNewMnemonic"
-                    :disabled="loading"
-                    class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
-              {{ loading ? '생성 중...' : '자동 생성하기' }}
+          <div class="flex items-center gap-2">
+            <!-- Plus: auto-generate and fill 12 words -->
+            <button @click="generateAndFillWalletMnemonic" class="p-2 rounded text-gray-700 hover:text-gray-900" title="자동 생성">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 12h12" />
+              </svg>
+              <span class="sr-only">자동 생성</span>
+            </button>
+            <!-- Trash: clear 12 words -->
+            <button @click="clearWalletManualMnemonic" class="p-2 rounded text-gray-700 hover:text-gray-900" title="지우기">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m-3 0h14" />
+              </svg>
+              <span class="sr-only">지우기</span>
             </button>
           </div>
+        </div>
 
-          <!-- Manual Input -->
-          <div v-if="generationMode === 'manual'">
+        <div class="space-y-4">
+          <!-- Manual Input (admin-like) -->
+          <div>
             <div class="space-y-4">
               <!-- Individual word inputs -->
               <div class="grid grid-cols-3 gap-2">
@@ -259,7 +251,7 @@ const assignedBalanceSats = ref(null)
 const newMnemonic = ref('')
 const savedMnemonicId = ref(null)
 const savedBalanceSats = ref(null)
-const generationMode = ref('auto')
+// Admin-like input UI (no tabs)
 const manualMnemonic = ref('')
 const mnemonicWords = ref(Array(12).fill(''))
 const manualMnemonicText = ref('')
@@ -308,11 +300,7 @@ const validateMnemonic = (mnemonic) => {
   return null
 }
 
-// Generation mode switching
-const switchGenerationMode = (mode) => {
-  generationMode.value = mode
-  mnemonicError.value = ''
-}
+// Removed generation mode/tabs; using single admin-like interface
 
 // Manual mnemonic input handling
 const updateManualMnemonic = () => {
@@ -534,6 +522,40 @@ const copyToClipboard = async (text) => {
   } catch (error) {
     showErrorMessage('복사에 실패했습니다')
   }
+}
+
+// Admin-like helpers for Step 2
+const generateAndFillWalletMnemonic = async () => {
+  try {
+    const response = await apiGenerateMnemonic()
+    if (response.success && response.mnemonic) {
+      const words = (response.mnemonic || '').trim().split(/\s+/)
+      for (let i = 0; i < 12; i++) {
+        mnemonicWords.value[i] = words[i] || ''
+      }
+      manualMnemonicText.value = words.slice(0, 12).join(' ')
+      // Reset validation state
+      walletMnemonicValidity.value = null
+      walletMnemonicWordCount.value = 0
+      walletMnemonicUnknown.value = []
+      walletMnemonicErrorCode.value = ''
+      mnemonicError.value = ''
+    } else {
+      showErrorMessage(response.error || '니모닉 생성에 실패했습니다')
+    }
+  } catch (_) {
+    showErrorMessage('네트워크 오류가 발생했습니다')
+  }
+}
+
+const clearWalletManualMnemonic = () => {
+  manualMnemonicText.value = ''
+  mnemonicWords.value = Array(12).fill('')
+  walletMnemonicValidity.value = null
+  walletMnemonicWordCount.value = 0
+  walletMnemonicUnknown.value = []
+  walletMnemonicErrorCode.value = ''
+  mnemonicError.value = ''
 }
 
 // Utility functions
