@@ -240,6 +240,7 @@ import {
   apiSaveMnemonic,
   apiGetMnemonicBalance,
   apiGetOnchainBalanceById,
+  apiSetMnemonicBalance,
   apiValidateMnemonic
 } from '../api'
 
@@ -282,6 +283,13 @@ const isValidMnemonicInput = computed(() => {
 // Utility functions
 const getCurrentUsername = () => {
   return localStorage.getItem('nickname') || 'anonymous'
+}
+
+// If admin is logged in, return 'admin' to allow DB updates
+const getAdminUsername = () => {
+  const nickname = localStorage.getItem('nickname')
+  const adminStatus = localStorage.getItem('isAdmin')
+  return nickname === 'admin' && adminStatus === 'true' ? 'admin' : ''
 }
 
 // Mnemonic validation
@@ -465,6 +473,12 @@ const refreshAssignedBalance = async () => {
     if (res.success) {
       const total = res.total_sats || 0
       assignedBalanceSats.value = total
+
+      // Also update the stored DB balance if possible
+      try {
+        const username = getAdminUsername() || getCurrentUsername()
+        await apiSetMnemonicBalance(username, assignedMnemonicId.value, total)
+      } catch (_) { /* ignore update errors */ }
     } else {
       showErrorMessage(res.error || '온체인 잔액 조회 실패')
     }
