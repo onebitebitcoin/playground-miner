@@ -233,8 +233,21 @@ NGINX_CONF="/etc/nginx/sites-available/${NGINX_BASENAME}.conf"
 # ACME challenge directory (for certbot)
 sudo mkdir -p /var/www/letsencrypt
 
-# Write nginx configuration referencing training script style (HTTP->HTTPS + SSL site)
-sudo bash -c "cat > '$NGINX_CONF'" <<EOF
+# Check if SSL certificate exists
+SSL_CERT_PATH="/etc/letsencrypt/live/$CERT_DOMAIN/fullchain.pem"
+if [ -f "$SSL_CERT_PATH" ]; then
+  echo "SSL certificate found at $SSL_CERT_PATH - using HTTPS configuration"
+  USE_SSL=true
+else
+  echo "SSL certificate not found - using HTTP-only configuration"
+  echo "To enable HTTPS, run: sudo certbot --nginx -d $SERVER_NAME"
+  USE_SSL=false
+fi
+
+# Write nginx configuration
+if [ "$USE_SSL" = true ]; then
+  # HTTPS configuration (existing certificate)
+  sudo bash -c "cat > '$NGINX_CONF'" <<EOF
 server {
     listen 80;
     server_name $SERVER_NAME;
@@ -358,6 +371,119 @@ server {
     }
 }
 EOF
+else
+  # HTTP-only configuration (no certificate)
+  sudo bash -c "cat > '$NGINX_CONF'" <<EOF
+server {
+    listen 80;
+    server_name $SERVER_NAME;
+
+    access_log /var/log/nginx/${NGINX_BASENAME}.access.log;
+    error_log  /var/log/nginx/${NGINX_BASENAME}.error.log;
+
+    location ~ /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+        allow all;
+        try_files \$uri =404;
+    }
+
+    root $FRONTEND_DEPLOY_DIR;
+    index index.html;
+
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+
+    # Dedicated SSE location for HTTP/2 safety
+    location /api/stream {
+        proxy_pass http://127.0.0.1:$BACKEND_PORT/api/stream;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Connection '';
+        proxy_set_header Accept-Encoding '';
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 1d;
+        proxy_send_timeout 1d;
+        add_header X-Accel-Buffering no always;
+        add_header Cache-Control no-cache always;
+        gzip off;
+        proxy_hide_header Content-Encoding;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:$BACKEND_PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection '';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+    }
+
+    # WebSocket proxy for real-time events
+    location /ws/ {
+        proxy_pass http://127.0.0.1:$BACKEND_PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 1d;
+        proxy_send_timeout 1d;
+    }
+
+    # Static & media (if present)
+    location /static/ {
+        alias $FRONTEND_DEPLOY_DIR/staticfiles/;
+        access_log off;
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000";
+    }
+
+    location /media/ {
+        alias $FRONTEND_DEPLOY_DIR/media/;
+        access_log off;
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000";
+    }
+
+    # PWA Icons
+    location /icons/ {
+        alias $FRONTEND_DEPLOY_DIR/icons/;
+        access_log off;
+        expires 7d;
+        add_header Cache-Control "public, max-age=604800";
+
+        # Handle CORS for PWA manifest
+        add_header Access-Control-Allow-Origin "*";
+        add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS";
+        add_header Access-Control-Allow-Headers "Range";
+    }
+
+    # Manifest and Service Worker
+    location ~ ^/(manifest\.json|sw\.js)$ {
+        root $FRONTEND_DEPLOY_DIR;
+        access_log off;
+        expires 1d;
+        add_header Cache-Control "public, max-age=86400";
+
+        # Handle CORS
+        add_header Access-Control-Allow-Origin "*";
+        add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS";
+    }
+}
+EOF
+fi
 
 sudo ln -sf "$NGINX_CONF" "/etc/nginx/sites-enabled/${NGINX_BASENAME}.conf"
 sudo rm -f /etc/nginx/sites-enabled/default
@@ -382,6 +508,13 @@ echo "=== Deployment Summary ==="
 echo "Backend: systemd service $SERVICE_NAME on 127.0.0.1:$BACKEND_PORT"
 echo "Frontend: deployed to $FRONTEND_DEPLOY_DIR"
 echo "Nginx: site -> $NGINX_CONF (server_name: $SERVER_NAME)"
+echo "SSL: $( [ "$USE_SSL" = true ] && echo "ENABLED (existing certificate)" || echo "DISABLED (no certificate found)" )"
 echo "Logs: journalctl -u $SERVICE_NAME -f, /var/log/${PROJECT_NAME}-gunicorn.log"
 echo ""
-echo "Tips: set SERVER_NAME env var and add DNS A record; configure TLS via certbot if desired."
+if [ "$USE_SSL" = false ]; then
+  echo "To enable HTTPS with Let's Encrypt:"
+  echo "  sudo certbot --nginx -d $SERVER_NAME"
+  echo "  Then re-run deploy.sh to update nginx config with SSL"
+  echo ""
+fi
+echo "Tips: set SERVER_NAME env var and add DNS A record"
