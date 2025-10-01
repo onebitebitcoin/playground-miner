@@ -25,28 +25,41 @@
           {{ assignedMnemonic }}
         </div>
           <div class="mt-2 flex flex-wrap items-center gap-2">
+            <!-- QR icon button -->
             <button @click="showQRCode(assignedMnemonic)"
-                    class="text-sm px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700">
-              QR 코드 보기
+                    class="p-1.5 rounded text-gray-700 hover:text-gray-900"
+                    title="QR 코드 보기">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
+              </svg>
+              <span class="sr-only">QR 코드</span>
             </button>
+            <!-- Copy icon button -->
             <button @click="copyToClipboard(assignedMnemonic)"
-                    class="text-sm px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700">
-              복사
+                    class="p-1.5 rounded text-gray-700 hover:text-gray-900"
+                    title="복사">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <rect x="9" y="7" width="11" height="13" rx="2" ry="2"></rect>
+                <rect x="4" y="4" width="11" height="13" rx="2" ry="2"></rect>
+              </svg>
+              <span class="sr-only">복사</span>
             </button>
-            <button v-if="assignedMnemonicId" @click="fetchAssignedAllBalances"
+            <!-- Refresh balance icon -->
+            <button v-if="assignedMnemonicId" @click="refreshAssignedBalance"
                     :disabled="assignedBalanceLoading"
-                    class="text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
-              {{ assignedBalanceLoading ? '잔액 조회 중...' : '잔액 확인' }}
+                    class="p-1.5 rounded text-blue-600 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="잔액 새로고침">
+              <svg v-if="assignedBalanceLoading" class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span class="sr-only">잔액 새로고침</span>
             </button>
-            <div v-if="assignedBalanceSats !== null || assignedOnchain?.total_sats !== undefined" class="text-sm text-gray-700 ml-1">
-              <span v-if="assignedBalanceSats !== null">
-                • 풀 잔액: <span class="font-semibold">{{ assignedBalanceSats.toLocaleString() }} sats</span>
-                <span class="text-gray-500">({{ formatBtc(assignedBalanceSats) }})</span>
-              </span>
-              <span v-if="assignedOnchain?.total_sats !== undefined" class="ml-2">
-                • 온체인: <span class="font-semibold">{{ Number(assignedOnchain.total_sats).toLocaleString() }} sats</span>
-                <span class="text-gray-500">({{ formatBtc(assignedOnchain.total_sats) }})</span>
-              </span>
+            <div v-if="assignedBalanceSats !== null" class="text-sm text-gray-700 ml-1">
+              잔액: <span class="font-semibold">{{ assignedBalanceSats.toLocaleString() }} sats</span>
+              <span class="text-gray-500">({{ formatBtc(assignedBalanceSats) }})</span>
             </div>
           </div>
         </div>
@@ -147,28 +160,41 @@
               {{ newMnemonic }}
             </div>
             <div class="mt-2 flex flex-wrap items-center gap-2">
+              <!-- QR icon button -->
               <button @click="showQRCode(newMnemonic)"
-                      class="text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
-                QR 코드 보기
+                      class="p-1.5 rounded text-gray-700 hover:text-gray-900"
+                      title="QR 코드 보기">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
+                </svg>
+                <span class="sr-only">QR 코드</span>
               </button>
+              <!-- Copy icon button -->
               <button @click="copyToClipboard(newMnemonic)"
-                      class="text-sm px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700">
-                복사
+                      class="p-1.5 rounded text-gray-700 hover:text-gray-900"
+                      title="복사">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="9" y="7" width="11" height="13" rx="2" ry="2"></rect>
+                  <rect x="4" y="4" width="11" height="13" rx="2" ry="2"></rect>
+                </svg>
+                <span class="sr-only">복사</span>
               </button>
-              <button v-if="savedMnemonicId" @click="fetchSavedAllBalances"
+              <!-- Refresh balance icon -->
+              <button v-if="savedMnemonicId" @click="refreshSavedBalance"
                       :disabled="savedBalanceLoading"
-                      class="text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
-                {{ savedBalanceLoading ? '잔액 조회 중...' : '잔액 확인' }}
+                      class="p-1.5 rounded text-blue-600 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="잔액 새로고침">
+                <svg v-if="savedBalanceLoading" class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span class="sr-only">잔액 새로고침</span>
               </button>
-              <div v-if="savedBalanceSats !== null || savedOnchain?.total_sats !== undefined" class="text-sm text-gray-700 ml-1">
-                <span v-if="savedBalanceSats !== null">
-                  • 풀 잔액: <span class="font-semibold">{{ savedBalanceSats.toLocaleString() }} sats</span>
-                  <span class="text-gray-500">({{ formatBtc(savedBalanceSats) }})</span>
-                </span>
-                <span v-if="savedOnchain?.total_sats !== undefined" class="ml-2">
-                  • 온체인: <span class="font-semibold">{{ Number(savedOnchain.total_sats).toLocaleString() }} sats</span>
-                  <span class="text-gray-500">({{ formatBtc(savedOnchain.total_sats) }})</span>
-                </span>
+              <div v-if="savedBalanceSats !== null" class="text-sm text-gray-700 ml-1">
+                잔액: <span class="font-semibold">{{ savedBalanceSats.toLocaleString() }} sats</span>
+                <span class="text-gray-500">({{ formatBtc(savedBalanceSats) }})</span>
               </div>
             </div>
           </div>
@@ -218,7 +244,6 @@ import {
   apiGenerateMnemonic,
   apiSaveMnemonic,
   apiGetMnemonicBalance,
-  apiGetOnchainBalanceById,
   apiValidateMnemonic
 } from '../api'
 
@@ -347,7 +372,8 @@ const requestExistingMnemonic = async () => {
     if (response.success && response.mnemonic) {
       assignedMnemonic.value = response.mnemonic
       assignedMnemonicId.value = response.id || null
-      if (assignedMnemonicId.value) await fetchAssignedAllBalances()
+      // Fetch only stored DB balance initially (no on-chain scan)
+      if (assignedMnemonicId.value) await fetchAssignedBalance()
       showSuccessMessage('기존 니모닉이 할당되었습니다')
     } else {
       showErrorMessage(response.error || '사용 가능한 니모닉이 없습니다')
@@ -395,7 +421,8 @@ const saveManualMnemonic = async () => {
     if (response.success) {
       newMnemonic.value = finalMnemonic
       savedMnemonicId.value = response.id || null
-      if (savedMnemonicId.value) await fetchSavedAllBalances()
+      // Fetch only stored DB balance initially (no on-chain scan)
+      if (savedMnemonicId.value) await fetchSavedBalance()
       showSuccessMessage('니모닉이 저장되었습니다')
 
       // Clear inputs
@@ -436,44 +463,22 @@ const formatBtc = (sats) => {
   } catch { return `${sats} sats` }
 }
 
-// On-chain balance state and actions
-const assignedOnchain = ref(null)
-const savedOnchain = ref(null)
-
-const fetchAssignedOnchain = async () => {
+// Refresh handlers (manual)
+const refreshAssignedBalance = async () => {
   if (!assignedMnemonicId.value) return
-  const res = await apiGetOnchainBalanceById(assignedMnemonicId.value, { count: 20 })
-  if (res.success) assignedOnchain.value = res
-  else showErrorMessage(res.error || '온체인 잔액 조회 실패')
-}
-
-const fetchSavedOnchain = async () => {
-  if (!savedMnemonicId.value) return
-  const res = await apiGetOnchainBalanceById(savedMnemonicId.value, { count: 20 })
-  if (res.success) savedOnchain.value = res
-  else showErrorMessage(res.error || '온체인 잔액 조회 실패')
-}
-
-// Combined balance check functions
-const fetchAssignedAllBalances = async () => {
   assignedBalanceLoading.value = true
   try {
-    await Promise.all([
-      fetchAssignedBalance(),
-      fetchAssignedOnchain()
-    ])
+    await fetchAssignedBalance()
   } finally {
     assignedBalanceLoading.value = false
   }
 }
 
-const fetchSavedAllBalances = async () => {
+const refreshSavedBalance = async () => {
+  if (!savedMnemonicId.value) return
   savedBalanceLoading.value = true
   try {
-    await Promise.all([
-      fetchSavedBalance(),
-      fetchSavedOnchain()
-    ])
+    await fetchSavedBalance()
   } finally {
     savedBalanceLoading.value = false
   }
