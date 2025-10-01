@@ -110,7 +110,7 @@
                         @input="handleWordInput(i-1, $event)"
                         @keydown="handleKeyDown(i-1, $event)"
                         @paste="handleAdminPaste($event, i-1)"
-                        @blur="setTimeout(() => closeAutocomplete(), 200)"
+                        @blur="handleBlur"
                         type="text"
                         :placeholder="`단어 ${i}`"
                         autocomplete="off"
@@ -1302,6 +1302,10 @@ const closeAutocomplete = () => {
   autocompleteIndex.value = -1
   autocompleteSuggestions.value = []
   autocompleteSelectedIndex.value = 0
+}
+
+const handleBlur = () => {
+  setTimeout(() => closeAutocomplete(), 200)
 }
 
 const updateAdminManualMnemonic = () => {
