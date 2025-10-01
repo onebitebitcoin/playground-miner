@@ -16,12 +16,19 @@
         
         <!-- Right side: User info -->
         <div v-if="!isNicknameSetup" class="flex items-center gap-2 sm:gap-4">
-          <!-- User info -->
+          <!-- User info (desktop) -->
           <div v-if="currentNickname" class="hidden sm:flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-lg">
             <div class="h-6 w-6 rounded-full bg-gray-600 text-white flex items-center justify-center text-xs font-medium">
               {{ currentNickname.charAt(0).toUpperCase() }}
             </div>
             <span class="text-sm text-gray-700">{{ currentNickname }}</span>
+          </div>
+
+          <!-- User avatar (mobile) -->
+          <div v-if="currentNickname" class="sm:hidden flex items-center">
+            <div class="h-7 w-7 rounded-full bg-gray-700 text-white flex items-center justify-center text-xs font-medium">
+              {{ currentNickname.charAt(0).toUpperCase() }}
+            </div>
           </div>
           
           <!-- Header button: logout -->
@@ -34,6 +41,19 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
             로그아웃
+          </button>
+
+          <!-- Mobile logout icon -->
+          <button
+            v-if="currentNickname"
+            class="sm:hidden inline-flex p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors"
+            @click="logout"
+            title="로그아웃"
+            aria-label="로그아웃"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
           </button>
         </div>
       </div>

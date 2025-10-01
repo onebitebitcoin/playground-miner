@@ -60,7 +60,7 @@
                   'whitespace-nowrap py-2 px-1 border-b-2 font-medium text-xs md:text-sm'
                 ]"
               >
-                사이드바 설정
+                설정
               </button>
             </nav>
           </div>
@@ -70,7 +70,7 @@
         <div v-if="activeTab === 'mnemonics'" class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
           <!-- Mnemonic Pool Management -->
           <div class="space-y-4 md:space-y-6">
-            <div class="bg-white rounded-lg shadow-md p-4 md:p-6 h-[700px]">
+            <div class="bg-white rounded-lg shadow-md p-4 md:p-6 h-auto md:h-[700px] flex flex-col">
               <h3 class="text-base md:text-lg font-semibold text-gray-900 mb-4">니모닉 풀 관리</h3>
 
               <!-- Manual Mnemonic Add -->
@@ -179,7 +179,7 @@
 
           <!-- Mnemonic Pool Status -->
           <div class="space-y-6">
-            <div class="bg-white rounded-lg shadow-md p-4 md:p-6 h-[700px]">
+            <div class="bg-white rounded-lg shadow-md p-4 md:p-6 h-[700px] flex flex-col">
               <div class="flex items-center justify-between mb-1">
                 <h3 class="text-base md:text-lg font-semibold text-gray-900">풀 상태</h3>
                 <div class="flex items-center gap-2">
@@ -199,11 +199,11 @@
                   </button>
                 </div>
               </div>
-              <div class="text-xs md:text-sm text-gray-600 mb-3">
+              <div class="text-xs md:text-sm text-gray-600 mb-3 flex-shrink-0">
                 전체 니모닉 {{ adminMnemonics.length }} · 사용 가능 {{ availableMnemonicsCount }}
               </div>
 
-              <div class="bg-gray-50 p-2 md:p-4 rounded-lg max-h-96 overflow-y-auto">
+              <div class="bg-gray-50 p-2 md:p-4 rounded-lg overflow-y-auto flex-1 min-h-0">
                 <div v-if="adminMnemonics.length === 0" class="text-gray-500 text-center py-8 text-sm">
                   저장된 니모닉이 없습니다
                 </div>
@@ -268,36 +268,31 @@
                 </div>
               </div>
 
-              
+
             </div>
           </div>
-        </div>
-
-        <!-- Wallet Password Settings (simple inline) -->
-        <div class="mb-4 mt-8">
-          <div class="flex items-center gap-3 flex-nowrap">
-            <span class="text-sm text-gray-700">지갑 비밀번호</span>
-            <input v-model="walletPasswordInput" type="text" placeholder="새 비밀번호 설정"
-                   class="w-56 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
-            <button @click="saveWalletPassword" :disabled="savingWalletPassword"
-                    class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 whitespace-nowrap">
-              {{ savingWalletPassword ? '저장 중...' : '저장' }}
-            </button>
-            <span class="text-sm text-gray-500">현재: <span class="font-mono text-gray-800">{{ currentWalletPassword || '미설정' }}</span></span>
-          </div>
-          <div v-if="walletPasswordMessage" class="mt-2 text-sm" :class="walletPasswordMessage.includes('성공') ? 'text-green-700' : 'text-red-600'">{{ walletPasswordMessage }}</div>
         </div>
 
         <!-- Routing Tab Content (left-side tabs) -->
         <div v-if="activeTab === 'routing'">
           <div class="bg-white rounded-lg shadow-md">
+            <!-- Mobile horizontal tabs -->
+            <div class="md:hidden border-b border-gray-200 p-2">
+              <div class="flex space-x-1 overflow-x-auto">
+                <button @click="activeRoutingTab = 'nodes'" :class="[activeRoutingTab === 'nodes' ? 'bg-blue-50 text-blue-700 border-blue-500' : 'text-gray-700 border-transparent hover:bg-gray-50','px-3 py-2 rounded border-b-2 whitespace-nowrap text-sm font-medium']">서비스 노드 관리</button>
+                <button @click="activeRoutingTab = 'routes'" :class="[activeRoutingTab === 'routes' ? 'bg-blue-50 text-blue-700 border-blue-500' : 'text-gray-700 border-transparent hover:bg-gray-50','px-3 py-2 rounded border-b-2 whitespace-nowrap text-sm font-medium']">경로 관리</button>
+                <button @click="activeRoutingTab = 'final'" :class="[activeRoutingTab === 'final' ? 'bg-blue-50 text-blue-700 border-blue-500' : 'text-gray-700 border-transparent hover:bg-gray-50','px-3 py-2 rounded border-b-2 whitespace-nowrap text-sm font-medium']">최종 경로</button>
+              </div>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-4">
-              <div class="border-r border-gray-200 p-4 space-y-2">
+              <!-- Desktop left sidebar -->
+              <div class="hidden md:block border-r border-gray-200 p-4 space-y-2">
                 <button @click="activeRoutingTab = 'nodes'" :class="[activeRoutingTab === 'nodes' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'hover:bg-gray-50 text-gray-700 border border-transparent','w-full text-left px-3 py-2 rounded']">서비스 노드 관리</button>
                 <button @click="activeRoutingTab = 'routes'" :class="[activeRoutingTab === 'routes' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'hover:bg-gray-50 text-gray-700 border border-transparent','w-full text-left px-3 py-2 rounded']">경로 관리</button>
                 <button @click="activeRoutingTab = 'final'" :class="[activeRoutingTab === 'final' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'hover:bg-gray-50 text-gray-700 border border-transparent','w-full text-left px-3 py-2 rounded']">최종 경로</button>
               </div>
-              <div class="md:col-span-3 p-6">
+              <div class="md:col-span-3 p-4 md:p-6">
                 <div v-if="routingUpdateLoading" class="bg-blue-50 p-4 rounded-lg mb-4"><p class="text-blue-800">데이터를 로딩하고 있습니다...</p></div>
                 <div v-if="activeRoutingTab === 'nodes'">
                   <h3 class="text-lg font-semibold text-gray-900 mb-4">서비스 노드 관리</h3>
@@ -540,7 +535,7 @@
           </div>
         </div>
 
-        <!-- Sidebar Config Tab Content -->
+        <!-- Settings Tab Content -->
         <div v-if="activeTab === 'sidebar'">
           <div class="bg-white rounded-lg shadow-md p-6 max-w-xl">
             <h3 class="text-lg font-semibold text-gray-900 mb-2">사이드바 메뉴 설정</h3>
@@ -649,6 +644,47 @@
                     ]"
                   />
                 </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Wallet Page Settings Section -->
+          <div class="bg-white rounded-lg shadow-md p-6 max-w-xl mt-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">비밀번호 설정</h3>
+            <p class="text-sm text-gray-600 mb-4">페이지 접근 관련 비밀번호를 관리합니다.</p>
+
+            <div class="space-y-4">
+              <!-- Wallet Page Card -->
+              <div class="p-4 border border-gray-200 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                  <h4 class="font-medium text-gray-900">지갑 페이지</h4>
+                </div>
+                <div class="space-y-3">
+                  <div class="text-sm text-gray-600">
+                    현재 비밀번호: <span class="font-mono text-gray-800">{{ (currentWalletPassword && currentWalletPassword.length) ? currentWalletPassword : '설정되지 않음' }}</span>
+                  </div>
+                  <div class="flex flex-col sm:flex-row gap-2">
+                    <input
+                      v-model="walletPasswordInput"
+                      type="password"
+                      class="flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-gray-300 focus:border-gray-500 outline-none"
+                      placeholder="새 비밀번호 (빈칸 입력 시 해제)"
+                    />
+                    <button
+                      @click="saveWalletPassword"
+                      :disabled="savingWalletPassword || !isAdmin"
+                      class="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {{ savingWalletPassword ? '저장 중...' : '저장' }}
+                    </button>
+                  </div>
+                  <div v-if="!isAdmin" class="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded p-2">
+                    관리자 권한이 아닙니다. 설정은 비활성화됩니다.
+                  </div>
+                  <div v-if="walletPasswordMessage" class="text-sm" :class="walletPasswordMessage.includes('성공') ? 'text-green-700' : 'text-red-600'">
+                    {{ walletPasswordMessage }}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
