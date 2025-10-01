@@ -92,28 +92,20 @@ def seed_lightning_services():
 
 
 def seed_mnemonics(count=10):
-    # limited list used in views for demo generation
-    word_pool = [
-        'abandon','ability','able','about','above','absent','absorb','abstract','absurd','abuse','access','accident',
-        'account','accuse','achieve','acid','acoustic','acquire','across','act','action','actor','actress','actual',
-        'adapt','add','addict','address','adjust','admit','adult','advance','advice','aerobic','affair','afford',
-        'afraid','again','agent','agree','ahead','aim','air','airport','aisle','alarm','album','alcohol','alert',
-        'alien','all','alley','allow','almost','alone','alpha','already','also','alter','always','amateur','amazing',
-        'among','amount','amused','analyst','anchor','ancient','anger','angle','angry','animal','ankle','announce',
-        'annual','another','answer','antenna','antique','anxiety','any','apart','apology','appear','apple','approve',
-        'april','arch','arctic','area','arena','argue','arm','armed','armor','army','around','arrange','arrest',
-        'arrive','arrow','art','article','artist','artwork','ask','aspect','assault','asset','assist','assume','asthma'
-    ]
+    """Seed valid BIP39 mnemonics for the pool (12-word)."""
+    try:
+        from bip_utils import Bip39MnemonicGenerator, Bip39WordsNum
+    except Exception:
+        # If bip-utils is not available, skip
+        return 0
     created = 0
-    for i in range(count):
-        words = random.sample(word_pool, 12)
-        mnemonic = ' '.join(words)
-        # only create if there are no unassigned mnemonics at all
-        if not Mnemonic.objects.filter(is_assigned=False).exists():
-            Mnemonic.objects.create(username=f'seed-{i+1}', mnemonic=mnemonic, is_assigned=False)
-            created += 1
-        else:
-            break
+    # only create if there are no unassigned mnemonics at all
+    if Mnemonic.objects.filter(is_assigned=False).exists():
+        return 0
+    for i in range(int(count)):
+        m = Bip39MnemonicGenerator().FromWordsNumber(Bip39WordsNum.WORDS_NUM_12)
+        Mnemonic.objects.create(username=f'seed-{i+1}', mnemonic=str(m), is_assigned=False)
+        created += 1
     return created
 
 

@@ -5,8 +5,10 @@ from django.db import transaction
 from django.db.models import Max
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from .models import Block, Nickname, Mnemonic, ExchangeRate, WithdrawalFee, LightningService, ServiceNode, Route, RoutingSnapshot
+from .models import Block, Nickname, Mnemonic, ExchangeRate, WithdrawalFee, LightningService, ServiceNode, Route, RoutingSnapshot, SidebarConfig
 from .broadcast import broadcaster
+from .btc import derive_bip84_addresses, fetch_blockstream_balances, calc_total_sats, derive_bip84_account_zpub, derive_master_fingerprint, _normalize_mnemonic
+from mnemonic import Mnemonic as MnemonicValidator
 
 
 MAX_NONCE = 100000
@@ -211,6 +213,12 @@ def request_mnemonic_view(request):
         return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
 
     try:
+        # Try to parse requester username (optional)
+        try:
+            payload = json.loads(request.body.decode('utf-8') or '{}')
+        except Exception:
+            payload = {}
+        requester = (payload.get('username') or '').strip()[:64]
         # Find an unassigned mnemonic
         mnemonic_obj = Mnemonic.objects.filter(is_assigned=False).first()
         if not mnemonic_obj:
@@ -218,6 +226,8 @@ def request_mnemonic_view(request):
 
         # Mark as assigned
         mnemonic_obj.is_assigned = True
+        if requester:
+            mnemonic_obj.assigned_to = requester
         mnemonic_obj.save()
 
         # Return decrypted mnemonic
@@ -238,53 +248,12 @@ def request_mnemonic_view(request):
 def generate_mnemonic_view(request):
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
-
-    import random
-
-    # BIP39 word list sample (limited for demo)
-    bip39_words = [
-        'abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb', 'abstract',
-        'absurd', 'abuse', 'access', 'accident', 'account', 'accuse', 'achieve', 'acid',
-        'acoustic', 'acquire', 'across', 'act', 'action', 'actor', 'actress', 'actual',
-        'adapt', 'add', 'addict', 'address', 'adjust', 'admit', 'adult', 'advance',
-        'advice', 'aerobic', 'affair', 'afford', 'afraid', 'again', 'agent', 'agree',
-        'ahead', 'aim', 'air', 'airport', 'aisle', 'alarm', 'album', 'alcohol',
-        'alert', 'alien', 'all', 'alley', 'allow', 'almost', 'alone', 'alpha',
-        'already', 'also', 'alter', 'always', 'amateur', 'amazing', 'among', 'amount',
-        'amused', 'analyst', 'anchor', 'ancient', 'anger', 'angle', 'angry', 'animal',
-        'ankle', 'announce', 'annual', 'another', 'answer', 'antenna', 'antique', 'anxiety',
-        'any', 'apart', 'apology', 'appear', 'apple', 'approve', 'april', 'arch',
-        'arctic', 'area', 'arena', 'argue', 'arm', 'armed', 'armor', 'army',
-        'around', 'arrange', 'arrest', 'arrive', 'arrow', 'art', 'article', 'artist',
-        'artwork', 'ask', 'aspect', 'assault', 'asset', 'assist', 'assume', 'asthma',
-        'athlete', 'atom', 'attack', 'attend', 'attitude', 'attract', 'auction', 'audit',
-        'august', 'aunt', 'author', 'auto', 'autumn', 'average', 'avocado', 'avoid',
-        'awake', 'aware', 'away', 'awesome', 'awful', 'awkward', 'axis', 'baby',
-        'bachelor', 'bacon', 'badge', 'bag', 'balance', 'balcony', 'ball', 'bamboo',
-        'banana', 'banner', 'bar', 'barely', 'bargain', 'barrel', 'base', 'basic',
-        'basket', 'battle', 'beach', 'bean', 'beauty', 'because', 'become', 'beef',
-        'before', 'begin', 'behave', 'behind', 'believe', 'below', 'belt', 'bench',
-        'benefit', 'best', 'betray', 'better', 'between', 'beyond', 'bicycle', 'bid',
-        'bike', 'bind', 'biology', 'bird', 'birth', 'bitter', 'black', 'blade',
-        'blame', 'blanket', 'blast', 'bleak', 'bless', 'blind', 'blood', 'blossom',
-        'blow', 'blue', 'blur', 'blush', 'board', 'boat', 'body', 'boil',
-        'bomb', 'bone', 'bonus', 'book', 'boost', 'border', 'boring', 'borrow',
-        'boss', 'bottom', 'bounce', 'box', 'boy', 'bracket', 'brain', 'brand',
-        'brass', 'brave', 'bread', 'breeze', 'brick', 'bridge', 'brief', 'bright',
-        'bring', 'brisk', 'broccoli', 'broken', 'bronze', 'broom', 'brother', 'brown',
-        'brush', 'bubble', 'buddy', 'budget', 'buffalo', 'build', 'bulb', 'bulk',
-        'bullet', 'bundle', 'bunker', 'burden', 'burger', 'burst', 'bus', 'business',
-        'busy', 'butter', 'buyer', 'buzz', 'cabbage', 'cabin', 'cable', 'cactus'
-    ]
-
-    # Generate 12 random words
-    mnemonic_words = random.sample(bip39_words, 12)
-    mnemonic = ' '.join(mnemonic_words)
-
-    return JsonResponse({
-        'ok': True,
-        'mnemonic': mnemonic
-    })
+    try:
+        from bip_utils import Bip39MnemonicGenerator, Bip39WordsNum
+        mnemonic = Bip39MnemonicGenerator().FromWordsNumber(Bip39WordsNum.WORDS_NUM_12)
+        return JsonResponse({'ok': True, 'mnemonic': str(mnemonic)})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': f'failed to generate: {e}'}, status=500)
 
 
 @csrf_exempt
@@ -302,10 +271,21 @@ def save_mnemonic_view(request):
     if not mnemonic or not username:
         return JsonResponse({'ok': False, 'error': 'Mnemonic and username required'}, status=400)
 
-    # Validate mnemonic (12 words)
-    words = mnemonic.split()
-    if len(words) != 12:
-        return JsonResponse({'ok': False, 'error': 'Mnemonic must contain exactly 12 words'}, status=400)
+    # Validate mnemonic is BIP39-valid (use same logic as validate_mnemonic_view)
+    try:
+        from .btc import _normalize_mnemonic
+        from mnemonic import Mnemonic as MnemonicValidator
+        mnorm = _normalize_mnemonic(mnemonic)
+        words = [w for w in mnorm.split(' ') if w]
+        if len(words) not in (12, 15, 18, 21, 24):
+            return JsonResponse({'ok': False, 'error': 'Invalid BIP39 mnemonic (word count)'}, status=400)
+        mnemo = MnemonicValidator('english')
+        if not mnemo.check(mnorm):
+            return JsonResponse({'ok': False, 'error': 'Invalid BIP39 mnemonic (checksum)'}, status=400)
+        # Overwrite with normalized mnemonic to keep consistent
+        mnemonic = mnorm
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': f'Validation failed: {e}'}, status=400)
 
     try:
         # Save mnemonic - it will be encrypted automatically by the model
@@ -345,6 +325,289 @@ def admin_mnemonics_view(request):
         'ok': True,
         'mnemonics': mnemonic_list
     })
+
+
+def _parse_int(value, default=None):
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+@csrf_exempt
+def mnemonic_balance_view(request):
+    """Get balance (in sats) for a mnemonic by id."""
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+
+    mid = _parse_int(request.GET.get('id'))
+    if not mid:
+        return JsonResponse({'ok': False, 'error': 'id required'}, status=400)
+    try:
+        m = Mnemonic.objects.get(id=mid)
+        return JsonResponse({'ok': True, 'id': m.id, 'balance_sats': int(m.balance_sats or 0)})
+    except Mnemonic.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'not found'}, status=404)
+
+
+@csrf_exempt
+def admin_set_mnemonic_balance_view(request):
+    """Admin endpoint to set balance for a mnemonic in sats."""
+    if not is_admin(request):
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+    try:
+        data = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        data = {}
+    mid = _parse_int(data.get('id'))
+    balance_sats = _parse_int(data.get('balance_sats'))
+    if not mid or balance_sats is None or balance_sats < 0:
+        return JsonResponse({'ok': False, 'error': 'id and non-negative balance_sats required'}, status=400)
+    try:
+        m = Mnemonic.objects.get(id=mid)
+        m.balance_sats = balance_sats
+        m.save()
+        return JsonResponse({'ok': True, 'mnemonic': m.as_dict()})
+    except Mnemonic.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'not found'}, status=404)
+
+
+@csrf_exempt
+def mnemonic_onchain_balance_view(request):
+    """
+    Calculate on-chain balance for a mnemonic by deriving BIP84 addresses and querying
+    a public explorer (Blockstream). Does not reveal the mnemonic over the wire.
+
+    GET params:
+      - id: mnemonic id (required)
+      - count: number of addresses per chain from index 0 (default 20, max 100)
+      - account: BIP84 account index (default 0)
+      - include_mempool: '1' to include mempool deltas (default 1)
+      - both_chains: '1' to check both external (0) and internal (1) chains (default 1)
+    """
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+    try:
+        mid = int(request.GET.get('id', '0'))
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'id required'}, status=400)
+
+    try:
+        count = max(1, min(int(request.GET.get('count', '20')), 100))
+    except Exception:
+        count = 20
+    try:
+        account = max(0, int(request.GET.get('account', '0')))
+    except Exception:
+        account = 0
+
+    # Check both external and internal chains by default (BIP44 standard)
+    both_chains = str(request.GET.get('both_chains', '1')) in ('1', 'true', 'True')
+    include_mempool = str(request.GET.get('include_mempool', '1')) in ('1', 'true', 'True')
+
+    try:
+        m = Mnemonic.objects.get(id=mid)
+    except Mnemonic.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'not found'}, status=404)
+
+    # Decrypt on server only
+    try:
+        mnemonic_plain = m.get_mnemonic()
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'decrypt failed'}, status=500)
+
+    try:
+        # Collect addresses from both chains
+        all_addresses = []
+
+        # External chain (receiving addresses)
+        addresses_external = derive_bip84_addresses(
+            mnemonic_plain, account=account, change=0, start=0, count=count
+        )
+        all_addresses.extend(addresses_external)
+
+        # Internal chain (change addresses) - only if both_chains is True
+        if both_chains:
+            addresses_internal = derive_bip84_addresses(
+                mnemonic_plain, account=account, change=1, start=0, count=count
+            )
+            all_addresses.extend(addresses_internal)
+
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': f'address derivation failed: {e}'}, status=400)
+
+    try:
+        by_addr = fetch_blockstream_balances(all_addresses, include_mempool=include_mempool)
+        total = calc_total_sats(by_addr)
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': f'explorer failed: {e}'}, status=502)
+
+    return JsonResponse({
+        'ok': True,
+        'total_sats': total,
+        'by_address': by_addr,
+        'count': len(all_addresses),
+        'external_count': len(addresses_external) if not both_chains else count,
+        'internal_count': len(addresses_internal) if both_chains else 0
+    })
+
+
+@csrf_exempt
+def admin_delete_mnemonic_view(request):
+    """Admin: delete a mnemonic by id."""
+    if not is_admin(request):
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+    if request.method not in ('POST', 'DELETE'):
+        return JsonResponse({'ok': False, 'error': 'POST or DELETE only'}, status=405)
+    try:
+        data = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        data = {}
+    try:
+        mid = int(data.get('id'))
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'id required'}, status=400)
+    deleted, _ = Mnemonic.objects.filter(id=mid).delete()
+    return JsonResponse({'ok': True, 'deleted': deleted})
+
+
+@csrf_exempt
+def admin_unassign_mnemonic_view(request):
+    """Admin: unassign a mnemonic by id (clear assigned_to and mark as not assigned)."""
+    if not is_admin(request):
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+    try:
+        data = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        data = {}
+    try:
+        mid = int(data.get('id'))
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'id required'}, status=400)
+    try:
+        m = Mnemonic.objects.get(id=mid)
+    except Mnemonic.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'not found'}, status=404)
+    m.is_assigned = False
+    m.assigned_to = ''
+    m.save(update_fields=['is_assigned', 'assigned_to'])
+    return JsonResponse({'ok': True, 'mnemonic': m.as_dict()})
+
+
+@csrf_exempt
+def admin_mnemonic_xpub_view(request):
+    """Admin: return BIP84 account zpub for a mnemonic id."""
+    if not is_admin(request):
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+    try:
+        mid = int(request.GET.get('id', '0'))
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'id required'}, status=400)
+    try:
+        account = max(0, int(request.GET.get('account', '0')))
+    except Exception:
+        account = 0
+    try:
+        m = Mnemonic.objects.get(id=mid)
+    except Mnemonic.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'not found'}, status=404)
+    try:
+        mnemonic_plain = m.get_mnemonic()
+        zpub = derive_bip84_account_zpub(mnemonic_plain, account=account)
+        # Also calculate master fingerprint
+        try:
+            mfp = derive_master_fingerprint(mnemonic_plain)
+        except Exception:
+            mfp = None
+        return JsonResponse({'ok': True, 'zpub': zpub, 'account': account, 'master_fingerprint': mfp})
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Error generating zpub/mfp: {e}")
+        return JsonResponse({'ok': False, 'error': 'zpub generation failed'}, status=400)
+
+
+@csrf_exempt
+def admin_mnemonic_address_view(request):
+    """Admin: return a BIP84 bech32 receive address for a mnemonic id.
+    Optional query params: index (default 0), account (default 0), change (default 0).
+    """
+    if not is_admin(request):
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+
+    try:
+        mid = int(request.GET.get('id', '0'))
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'id required'}, status=400)
+
+    try:
+        index = max(0, int(request.GET.get('index', '0')))
+    except Exception:
+        index = 0
+    try:
+        account = max(0, int(request.GET.get('account', '0')))
+    except Exception:
+        account = 0
+    try:
+        change = max(0, int(request.GET.get('change', '0')))
+    except Exception:
+        change = 0
+
+    try:
+        m = Mnemonic.objects.get(id=mid)
+    except Mnemonic.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'not found'}, status=404)
+
+    try:
+        addresses = derive_bip84_addresses(m.get_mnemonic(), account=account, change=change, start=index, count=1)
+        if not addresses:
+            return JsonResponse({'ok': False, 'error': 'address derivation failed'}, status=500)
+        return JsonResponse({'ok': True, 'address': addresses[0], 'index': index, 'account': account, 'change': change})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': f'address derivation failed: {e}'}, status=400)
+
+
+@csrf_exempt
+def validate_mnemonic_view(request):
+    """Validate a BIP39 mnemonic (English) and return a normalized form and details."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+    try:
+        data = json.loads(request.body or '{}')
+        mnemonic = (data.get('mnemonic') or '').strip()
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'invalid json'}, status=400)
+
+    mnorm = _normalize_mnemonic(mnemonic)
+    words = [w for w in mnorm.split(' ') if w]
+
+    # Initialize mnemonic validator
+    mnemo = MnemonicValidator('english')
+
+    # Check for unknown words
+    unknown = [w for w in words if w not in mnemo.wordlist]
+
+    if len(words) not in (12, 15, 18, 21, 24):
+        return JsonResponse({'ok': False, 'valid': False, 'error': 'invalid_word_count', 'word_count': len(words), 'normalized': mnorm, 'unknown_words': unknown})
+
+    try:
+        # Use mnemonic library for validation
+        valid = mnemo.check(mnorm)
+        resp = {'ok': True, 'valid': bool(valid), 'word_count': len(words), 'normalized': mnorm, 'unknown_words': unknown}
+
+        if not valid and len(unknown) == 0:
+            # All words valid but checksum failed
+            resp['error'] = 'checksum_failed'
+        return JsonResponse(resp)
+    except Exception:
+        return JsonResponse({'ok': True, 'valid': False, 'word_count': len(words), 'normalized': mnorm, 'unknown_words': unknown})
 
 
 def is_admin(request):
@@ -1176,3 +1439,42 @@ def routing_snapshot_view(request):
         return JsonResponse({'ok': False, 'error': 'Invalid action'}, status=400)
 
     return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+def sidebar_config_view(request):
+    """Get current sidebar configuration"""
+    config, _ = SidebarConfig.objects.get_or_create(id=1, defaults={
+        'show_mining': True,
+        'show_utxo': True,
+        'show_wallet': True,
+        'show_fee': True
+    })
+    return JsonResponse({'ok': True, 'config': config.as_dict()})
+
+
+@csrf_exempt
+def admin_update_sidebar_config_view(request):
+    """Admin: update sidebar configuration"""
+    if not is_admin(request):
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+
+    try:
+        data = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    config, _ = SidebarConfig.objects.get_or_create(id=1)
+
+    if 'show_mining' in data:
+        config.show_mining = bool(data['show_mining'])
+    if 'show_utxo' in data:
+        config.show_utxo = bool(data['show_utxo'])
+    if 'show_wallet' in data:
+        config.show_wallet = bool(data['show_wallet'])
+    if 'show_fee' in data:
+        config.show_fee = bool(data['show_fee'])
+
+    config.save()
+    return JsonResponse({'ok': True, 'config': config.as_dict()})

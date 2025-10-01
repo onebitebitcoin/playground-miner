@@ -39,6 +39,9 @@ class Mnemonic(models.Model):
     username = models.CharField(max_length=64)
     mnemonic = models.TextField()  # Stores encrypted mnemonic
     is_assigned = models.BooleanField(default=False)
+    # Username of the user to whom this mnemonic has been assigned (if any)
+    assigned_to = models.CharField(max_length=64, blank=True, null=True)
+    balance_sats = models.BigIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
@@ -88,6 +91,8 @@ class Mnemonic(models.Model):
             'username': self.username,
             'mnemonic': decrypted_mnemonic,
             'is_assigned': self.is_assigned,
+            'assigned_to': self.assigned_to or '',
+            'balance_sats': int(self.balance_sats or 0),
             'created_at': self.created_at.isoformat(),
         }
 
@@ -322,3 +327,29 @@ class RoutingSnapshot(models.Model):
 
     def __str__(self):
         return f"RoutingSnapshot<{self.name}> updated={self.updated_at.isoformat()}"
+
+
+class SidebarConfig(models.Model):
+    """Configuration for sidebar menu visibility"""
+    show_mining = models.BooleanField(default=True)
+    show_utxo = models.BooleanField(default=True)
+    show_wallet = models.BooleanField(default=True)
+    show_fee = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Only allow one config row
+        db_table = 'blocks_sidebar_config'
+
+    def __str__(self):
+        return f"SidebarConfig (mining={self.show_mining}, utxo={self.show_utxo}, wallet={self.show_wallet}, fee={self.show_fee})"
+
+    def as_dict(self):
+        return {
+            'show_mining': self.show_mining,
+            'show_utxo': self.show_utxo,
+            'show_wallet': self.show_wallet,
+            'show_fee': self.show_fee,
+            'updated_at': self.updated_at.isoformat(),
+        }

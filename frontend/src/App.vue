@@ -14,7 +14,7 @@
           </div>
         </div>
         
-        <!-- Right side: User info + Header buttons -->
+        <!-- Right side: User info -->
         <div v-if="!isNicknameSetup" class="flex items-center gap-2 sm:gap-4">
           <!-- User info -->
           <div v-if="currentNickname" class="hidden sm:flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-lg">
@@ -23,9 +23,8 @@
             </div>
             <span class="text-sm text-gray-700">{{ currentNickname }}</span>
           </div>
-
-          <!-- Header buttons -->
-          <div class="flex items-center gap-1 sm:gap-2">
+          
+          <!-- Header button: logout -->
           <button
             v-if="currentNickname"
             class="hidden sm:inline-flex px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
@@ -36,16 +35,6 @@
             </svg>
             로그아웃
           </button>
-          <button
-            class="px-2 py-1.5 sm:px-3 text-xs sm:text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-            @click="showResetDialog"
-          >
-            <svg class="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            초기화
-          </button>
-          </div>
         </div>
       </div>
     </header>
@@ -92,37 +81,7 @@
       </main>
     </div>
 
-    <!-- Reset Dialog -->
-    <div v-if="resetDialogOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div class="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-4 sm:p-6">
-        <div class="flex items-center mb-4">
-          <div class="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center mr-3">
-            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
-          </div>
-          <h3 class="text-lg font-semibold text-gray-900">초기화 확인</h3>
-        </div>
-        <p class="text-gray-600 mb-4">모든 블록 데이터가 삭제됩니다. 계속하시려면 비밀번호를 입력해주세요.</p>
-        <input
-          v-model="resetPassword"
-          type="password"
-          placeholder="비밀번호 입력"
-          class="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-gray-900 outline-none mb-4"
-          @keyup.enter="confirmReset"
-        />
-        <div class="flex gap-3">
-          <button
-            @click="resetDialogOpen = false; resetPassword = ''"
-            class="flex-1 px-4 py-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors font-medium"
-          >취소</button>
-          <button
-            @click="confirmReset"
-            class="flex-1 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors font-medium"
-          >초기화</button>
-        </div>
-      </div>
-    </div>
+    
   </div>
 </template>
 
@@ -130,17 +89,37 @@
 import { computed, ref as vueRef, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import Sidebar from './components/Sidebar.vue'
-import { apiInitReset } from './api'
+import { apiGetSidebarConfig } from './api'
 
 const router = useRouter()
 const route = useRoute()
 
+const sidebarConfig = vueRef({
+  show_mining: true,
+  show_utxo: true,
+  show_wallet: true,
+  show_fee: true
+})
+
 const menuItems = computed(() => {
-  const items = [
-    { key: 'mining', label: '비트코인 채굴' },
-    { key: 'utxo', label: 'UTXO' },
-    { key: 'fee', label: '수수료 계산' },
-  ]
+  const items = []
+
+  // Add menu items based on sidebar config
+  if (sidebarConfig.value.show_mining) {
+    items.push({ key: 'mining', label: '비트코인 채굴' })
+  }
+
+  if (sidebarConfig.value.show_utxo) {
+    items.push({ key: 'utxo', label: 'UTXO' })
+  }
+
+  if (sidebarConfig.value.show_wallet) {
+    items.push({ key: 'wallet', label: '지갑' })
+  }
+
+  if (sidebarConfig.value.show_fee) {
+    items.push({ key: 'fee', label: '수수료 계산' })
+  }
 
   // Add admin menu only for admin users
   const nickname = localStorage.getItem('nickname')
@@ -159,25 +138,42 @@ const isNicknameSetup = computed(() => route.name === 'nickname')
 // Mobile menu state
 const mobileMenuOpen = vueRef(false)
 
-// Reset dialog state
-const resetDialogOpen = vueRef(false)
-const resetPassword = vueRef('')
 
 // Current nickname
 const currentNickname = vueRef(localStorage.getItem('nickname') || '')
 
+// Load sidebar config
+const loadSidebarConfig = async () => {
+  try {
+    const result = await apiGetSidebarConfig()
+    if (result.success && result.config) {
+      sidebarConfig.value = result.config
+    }
+  } catch (error) {
+    console.error('Failed to load sidebar config:', error)
+  }
+}
+
 // Update nickname when localStorage changes
 onMounted(() => {
+  // Load sidebar config on mount
+  loadSidebarConfig()
+
   // Listen for storage changes
   window.addEventListener('storage', (e) => {
     if (e.key === 'nickname') {
       currentNickname.value = e.newValue || ''
     }
   })
-  
+
   // Also listen for custom events for same-tab updates
   window.addEventListener('nicknameChanged', (e) => {
     currentNickname.value = e.detail || ''
+  })
+
+  // Listen for sidebar config updates
+  window.addEventListener('sidebarConfigUpdated', () => {
+    loadSidebarConfig()
   })
 })
 
@@ -200,32 +196,6 @@ function logout() {
   // Navigate to nickname setup page
   router.push({ name: 'nickname' })
   mobileMenuOpen.value = false
-}
-
-function showResetDialog() {
-  resetDialogOpen.value = true
-  mobileMenuOpen.value = false
-}
-
-async function confirmReset() {
-  if (resetPassword.value !== '0000') {
-    alert('비밀번호가 올바르지 않습니다.')
-    return
-  }
-  
-  try {
-    const res = await apiInitReset('0000')
-    if (res && res.ok) {
-      alert('초기화가 완료되었습니다.')
-      resetDialogOpen.value = false
-      resetPassword.value = ''
-      window.location.reload()
-    } else {
-      alert(res?.error || '초기화에 실패했습니다.')
-    }
-  } catch (e) {
-    alert('네트워크 오류가 발생했습니다.')
-  }
 }
 
 </script>

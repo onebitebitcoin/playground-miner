@@ -16,15 +16,15 @@
         <button @click="requestExistingMnemonic"
                 :disabled="loading"
                 class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-          {{ loading ? '요청 중...' : '기존 니모닉 요청하기' }}
+          {{ loading ? '요청 중...' : '니모닉 받기' }}
         </button>
 
-        <div v-if="assignedMnemonic" class="mt-4 p-3 bg-green-50 border border-green-200 rounded">
-          <p class="text-sm text-green-800 mb-2">니모닉이 할당되었습니다:</p>
-          <div class="font-mono text-sm bg-white p-2 rounded border break-all">
-            {{ assignedMnemonic }}
-          </div>
-          <div class="mt-2 flex gap-2">
+      <div v-if="assignedMnemonic" class="mt-4 p-3 bg-green-50 border border-green-200 rounded">
+        <p class="text-sm text-green-800 mb-2">니모닉이 할당되었습니다:</p>
+        <div class="font-mono text-sm bg-white p-2 rounded border break-all">
+          {{ assignedMnemonic }}
+        </div>
+          <div class="mt-2 flex flex-wrap items-center gap-2">
             <button @click="showQRCode(assignedMnemonic)"
                     class="text-sm px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700">
               QR 코드 보기
@@ -33,6 +33,21 @@
                     class="text-sm px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700">
               복사
             </button>
+            <button v-if="assignedMnemonicId" @click="fetchAssignedAllBalances"
+                    :disabled="assignedBalanceLoading"
+                    class="text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
+              {{ assignedBalanceLoading ? '잔액 조회 중...' : '잔액 확인' }}
+            </button>
+            <div v-if="assignedBalanceSats !== null || assignedOnchain?.total_sats !== undefined" class="text-sm text-gray-700 ml-1">
+              <span v-if="assignedBalanceSats !== null">
+                • 풀 잔액: <span class="font-semibold">{{ assignedBalanceSats.toLocaleString() }} sats</span>
+                <span class="text-gray-500">({{ formatBtc(assignedBalanceSats) }})</span>
+              </span>
+              <span v-if="assignedOnchain?.total_sats !== undefined" class="ml-2">
+                • 온체인: <span class="font-semibold">{{ Number(assignedOnchain.total_sats).toLocaleString() }} sats</span>
+                <span class="text-gray-500">({{ formatBtc(assignedOnchain.total_sats) }})</span>
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -43,18 +58,24 @@
         <p class="text-gray-600 mb-4">새로운 니모닉을 자동 생성하거나 수동으로 입력합니다</p>
 
         <div class="space-y-4">
-          <!-- Mode Selection -->
-          <div class="flex gap-2">
-            <button @click="switchGenerationMode('auto')"
-                    :class="generationMode === 'auto' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
-                    class="flex-1 px-3 py-2 rounded text-sm">
-              자동 생성
-            </button>
-            <button @click="switchGenerationMode('manual')"
-                    :class="generationMode === 'manual' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
-                    class="flex-1 px-3 py-2 rounded text-sm">
-              수동 입력
-            </button>
+          <!-- Tab Selection -->
+          <div class="border-b border-gray-200 mb-4">
+            <nav class="-mb-px flex">
+              <button @click="switchGenerationMode('auto')"
+                      :class="generationMode === 'auto'
+                        ? 'border-blue-500 text-blue-600 border-b-2 font-medium'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                      class="w-1/2 py-2 px-1 text-center border-b-2 text-sm">
+                자동 생성
+              </button>
+              <button @click="switchGenerationMode('manual')"
+                      :class="generationMode === 'manual'
+                        ? 'border-blue-500 text-blue-600 border-b-2 font-medium'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                      class="w-1/2 py-2 px-1 text-center border-b-2 text-sm">
+                수동 입력
+              </button>
+            </nav>
           </div>
 
           <!-- Auto Generation -->
@@ -83,22 +104,31 @@
                     type="text"
                     :placeholder="`단어 ${i}`"
                     class="w-full px-2 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    :class="{ 'border-red-300': mnemonicError }"
+                    :class="{ 'border-red-300': mnemonicError || (walletMnemonicUnknown && walletMnemonicUnknown.length && walletMnemonicUnknown.includes((mnemonicWords[i-1]||'').trim().toLowerCase())) }"
                   />
                 </div>
               </div>
 
-              <!-- Alternative textarea input -->
-              <div class="border-t pt-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                  또는 한번에 입력:
-                </label>
-                <textarea v-model="manualMnemonicText"
-                          @input="updateFromTextarea"
-                          placeholder="12개의 영어 단어를 공백으로 구분하여 입력하세요"
-                          class="w-full h-16 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                          :class="{ 'border-red-300': mnemonicError }"></textarea>
+          <!-- Alternative textarea input -->
+          <div class="border-t pt-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              또는 한번에 입력:
+            </label>
+            <textarea v-model="manualMnemonicText"
+                      @input="updateFromTextarea"
+                      placeholder="12/15/18/21/24개의 영어 단어를 공백으로 구분하여 입력하세요"
+                      class="w-full h-16 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                      :class="{ 'border-red-300': mnemonicError }"></textarea>
+            <div class="mt-2 space-y-2">
+              <button @click="checkWalletMnemonic" class="w-full px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900">유효성 검사</button>
+              <div v-if="walletMnemonicValidity !== null" :class="walletMnemonicValidity ? 'text-green-700' : 'text-red-600'" class="text-sm">
+                {{ walletMnemonicValidity ? '유효한 BIP39 니모닉' : '유효하지 않은 니모닉' }}
+                <span v-if="walletMnemonicWordCount"> ({{ walletMnemonicWordCount }}단어)</span>
+                <span v-if="!walletMnemonicValidity && walletMnemonicUnknown && walletMnemonicUnknown.length" class="ml-2 text-xs text-red-600">[{{ walletMnemonicUnknown.join(', ') }}]</span>
+                <span v-if="!walletMnemonicValidity && (!walletMnemonicUnknown || walletMnemonicUnknown.length === 0) && walletMnemonicErrorCode === 'checksum_failed'" class="ml-2 text-xs text-red-600">(체크섬 불일치)</span>
               </div>
+            </div>
+          </div>
 
               <div v-if="mnemonicError" class="text-sm text-red-600">{{ mnemonicError }}</div>
 
@@ -116,7 +146,7 @@
             <div class="font-mono text-sm bg-white p-2 rounded border break-all">
               {{ newMnemonic }}
             </div>
-            <div class="mt-2 flex gap-2">
+            <div class="mt-2 flex flex-wrap items-center gap-2">
               <button @click="showQRCode(newMnemonic)"
                       class="text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
                 QR 코드 보기
@@ -125,6 +155,21 @@
                       class="text-sm px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700">
                 복사
               </button>
+              <button v-if="savedMnemonicId" @click="fetchSavedAllBalances"
+                      :disabled="savedBalanceLoading"
+                      class="text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
+                {{ savedBalanceLoading ? '잔액 조회 중...' : '잔액 확인' }}
+              </button>
+              <div v-if="savedBalanceSats !== null || savedOnchain?.total_sats !== undefined" class="text-sm text-gray-700 ml-1">
+                <span v-if="savedBalanceSats !== null">
+                  • 풀 잔액: <span class="font-semibold">{{ savedBalanceSats.toLocaleString() }} sats</span>
+                  <span class="text-gray-500">({{ formatBtc(savedBalanceSats) }})</span>
+                </span>
+                <span v-if="savedOnchain?.total_sats !== undefined" class="ml-2">
+                  • 온체인: <span class="font-semibold">{{ Number(savedOnchain.total_sats).toLocaleString() }} sats</span>
+                  <span class="text-gray-500">({{ formatBtc(savedOnchain.total_sats) }})</span>
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -171,13 +216,20 @@ import QRCode from 'qrcode'
 import {
   apiRequestMnemonic,
   apiGenerateMnemonic,
-  apiSaveMnemonic
+  apiSaveMnemonic,
+  apiGetMnemonicBalance,
+  apiGetOnchainBalanceById,
+  apiValidateMnemonic
 } from '../api'
 
 // State
 const loading = ref(false)
 const assignedMnemonic = ref('')
+const assignedMnemonicId = ref(null)
+const assignedBalanceSats = ref(null)
 const newMnemonic = ref('')
+const savedMnemonicId = ref(null)
+const savedBalanceSats = ref(null)
 const generationMode = ref('auto')
 const manualMnemonic = ref('')
 const mnemonicWords = ref(Array(12).fill(''))
@@ -188,12 +240,23 @@ const currentMnemonic = ref('')
 const qrCodeContainer = ref(null)
 const successMessage = ref('')
 const errorMessage = ref('')
+const walletMnemonicValidity = ref(null)
+const walletMnemonicWordCount = ref(0)
+const walletMnemonicUnknown = ref([])
+const walletMnemonicErrorCode = ref('')
+
+// Balance loading states
+const assignedBalanceLoading = ref(false)
+const savedBalanceLoading = ref(false)
 
 // Computed for valid mnemonic input
 const isValidMnemonicInput = computed(() => {
   const words = mnemonicWords.value.filter(w => w.trim().length > 0)
   return words.length === 12 || (manualMnemonicText.value.trim().split(/\s+/).length === 12)
 })
+
+
+
 
 // Utility functions
 const getCurrentUsername = () => {
@@ -227,6 +290,14 @@ const updateManualMnemonic = () => {
   const words = mnemonicWords.value.filter(w => w.trim().length > 0)
   manualMnemonic.value = words.join(' ')
   manualMnemonicText.value = mnemonicWords.value.join(' ').trim()
+
+  // Auto-validate when 12 words are entered
+  if (words.length === 12) {
+    checkWalletMnemonic()
+  } else {
+    walletMnemonicValidity.value = null
+    walletMnemonicWordCount.value = 0
+  }
 }
 
 const updateFromTextarea = () => {
@@ -237,6 +308,14 @@ const updateFromTextarea = () => {
   }
 
   manualMnemonic.value = words.slice(0, 12).join(' ')
+
+  // Auto-validate when 12 words are entered
+  if (words.length === 12) {
+    checkWalletMnemonic()
+  } else {
+    walletMnemonicValidity.value = null
+    walletMnemonicWordCount.value = 0
+  }
 }
 
 const handlePaste = (event, startIndex) => {
@@ -244,8 +323,16 @@ const handlePaste = (event, startIndex) => {
   const pastedText = (event.clipboardData || window.clipboardData).getData('text')
   const words = pastedText.trim().split(/\s+/).filter(w => w.length > 0)
 
-  for (let i = 0; i < 12; i++) {
-    mnemonicWords.value[i] = words[i] || ''
+  // If multiple words are pasted, fill from index 0
+  if (words.length > 1) {
+    for (let i = 0; i < 12; i++) {
+      mnemonicWords.value[i] = words[i] || ''
+    }
+  } else {
+    // If single word is pasted, put it at the current field
+    if (words.length === 1) {
+      mnemonicWords.value[startIndex] = words[0]
+    }
   }
 
   updateManualMnemonic()
@@ -255,11 +342,12 @@ const handlePaste = (event, startIndex) => {
 const requestExistingMnemonic = async () => {
   loading.value = true
   try {
-    const username = getCurrentUsername()
-    const response = await apiRequestMnemonic(username)
+    const response = await apiRequestMnemonic(getCurrentUsername())
 
-    if (response.ok && response.mnemonic) {
+    if (response.success && response.mnemonic) {
       assignedMnemonic.value = response.mnemonic
+      assignedMnemonicId.value = response.id || null
+      if (assignedMnemonicId.value) await fetchAssignedAllBalances()
       showSuccessMessage('기존 니모닉이 할당되었습니다')
     } else {
       showErrorMessage(response.error || '사용 가능한 니모닉이 없습니다')
@@ -276,11 +364,11 @@ const generateNewMnemonic = async () => {
   try {
     const response = await apiGenerateMnemonic()
 
-    if (response.ok && response.mnemonic) {
+    if (response.success && response.mnemonic) {
       newMnemonic.value = response.mnemonic
       showSuccessMessage('새 니모닉이 생성되었습니다')
     } else {
-      showErrorMessage('니모닉 생성에 실패했습니다')
+      showErrorMessage(response.error || '니모닉 생성에 실패했습니다')
     }
   } catch (error) {
     showErrorMessage('네트워크 오류가 발생했습니다')
@@ -302,10 +390,12 @@ const saveManualMnemonic = async () => {
   loading.value = true
   try {
     const username = getCurrentUsername()
-    const response = await apiSaveMnemonic(username, finalMnemonic)
+    const response = await apiSaveMnemonic(finalMnemonic, username)
 
-    if (response.ok) {
+    if (response.success) {
       newMnemonic.value = finalMnemonic
+      savedMnemonicId.value = response.id || null
+      if (savedMnemonicId.value) await fetchSavedAllBalances()
       showSuccessMessage('니모닉이 저장되었습니다')
 
       // Clear inputs
@@ -321,6 +411,74 @@ const saveManualMnemonic = async () => {
     loading.value = false
   }
 }
+
+// Balance helpers
+const fetchAssignedBalance = async () => {
+  try {
+    if (!assignedMnemonicId.value) return
+    const res = await apiGetMnemonicBalance(assignedMnemonicId.value)
+    if (res.success) assignedBalanceSats.value = res.balance_sats
+  } catch (_) {}
+}
+
+const fetchSavedBalance = async () => {
+  try {
+    if (!savedMnemonicId.value) return
+    const res = await apiGetMnemonicBalance(savedMnemonicId.value)
+    if (res.success) savedBalanceSats.value = res.balance_sats
+  } catch (_) {}
+}
+
+const formatBtc = (sats) => {
+  try {
+    const btc = (Number(sats || 0) / 1e8)
+    return `${btc.toFixed(8)} BTC`
+  } catch { return `${sats} sats` }
+}
+
+// On-chain balance state and actions
+const assignedOnchain = ref(null)
+const savedOnchain = ref(null)
+
+const fetchAssignedOnchain = async () => {
+  if (!assignedMnemonicId.value) return
+  const res = await apiGetOnchainBalanceById(assignedMnemonicId.value, { count: 20 })
+  if (res.success) assignedOnchain.value = res
+  else showErrorMessage(res.error || '온체인 잔액 조회 실패')
+}
+
+const fetchSavedOnchain = async () => {
+  if (!savedMnemonicId.value) return
+  const res = await apiGetOnchainBalanceById(savedMnemonicId.value, { count: 20 })
+  if (res.success) savedOnchain.value = res
+  else showErrorMessage(res.error || '온체인 잔액 조회 실패')
+}
+
+// Combined balance check functions
+const fetchAssignedAllBalances = async () => {
+  assignedBalanceLoading.value = true
+  try {
+    await Promise.all([
+      fetchAssignedBalance(),
+      fetchAssignedOnchain()
+    ])
+  } finally {
+    assignedBalanceLoading.value = false
+  }
+}
+
+const fetchSavedAllBalances = async () => {
+  savedBalanceLoading.value = true
+  try {
+    await Promise.all([
+      fetchSavedBalance(),
+      fetchSavedOnchain()
+    ])
+  } finally {
+    savedBalanceLoading.value = false
+  }
+}
+
 
 // QR Code functionality
 const showQRCode = async (mnemonic) => {
@@ -373,5 +531,43 @@ const showErrorMessage = (message) => {
   setTimeout(() => {
     errorMessage.value = ''
   }, 3000)
+}
+
+const checkWalletMnemonic = async () => {
+  const text = (manualMnemonicText.value || mnemonicWords.value.join(' ')).trim()
+  if (!text) { 
+    walletMnemonicValidity.value = null; 
+    walletMnemonicWordCount.value = 0; 
+    showErrorMessage('니모닉을 입력하세요')
+    return 
+  }
+  const res = await apiValidateMnemonic(text)
+  if (res.success) {
+    walletMnemonicValidity.value = !!res.valid
+    walletMnemonicWordCount.value = res.word_count || 0
+    walletMnemonicErrorCode.value = res.error || ''
+    if (!res.valid) {
+      let msg = '유효하지 않은 니모닉입니다'
+      if (res.error === 'invalid_word_count') msg = '단어 개수가 올바르지 않습니다 (12/15/18/21/24)'
+      else if (res.error === 'checksum_failed') msg = '체크섬이 일치하지 않습니다'
+      const unknown = (res.unknown_words || [])
+      if (unknown.length) {
+        msg += `: [${unknown.join(', ')}]`
+      }
+      walletMnemonicUnknown.value = unknown
+      mnemonicError.value = msg
+      showErrorMessage(msg)
+    } else {
+      walletMnemonicUnknown.value = []
+      walletMnemonicErrorCode.value = ''
+      mnemonicError.value = ''
+      showSuccessMessage('유효성 검사에 문제가 없습니다')
+    }
+  } else {
+    walletMnemonicUnknown.value = res.unknown_words || []
+    const msg = walletMnemonicUnknown.value.length ? `유효하지 않은 단어: [${walletMnemonicUnknown.value.join(', ')}]` : (res.error || '검증 실패')
+    mnemonicError.value = msg
+    showErrorMessage(msg)
+  }
 }
 </script>

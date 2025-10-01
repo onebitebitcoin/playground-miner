@@ -15,6 +15,14 @@ urlpatterns = [
     path('mnemonic/generate', views.generate_mnemonic_view, name='generate_mnemonic'),
     path('mnemonic/save', views.save_mnemonic_view, name='save_mnemonic'),
     path('mnemonic/admin', views.admin_mnemonics_view, name='admin_mnemonics'),
+    path('mnemonic/balance', views.mnemonic_balance_view, name='mnemonic_balance'),
+    path('mnemonic/admin/balance', views.admin_set_mnemonic_balance_view, name='admin_mnemonic_balance'),
+    path('mnemonic/balance/onchain', views.mnemonic_onchain_balance_view, name='mnemonic_onchain_balance'),
+    path('mnemonic/admin/delete', views.admin_delete_mnemonic_view, name='admin_delete_mnemonic'),
+    path('mnemonic/admin/xpub', views.admin_mnemonic_xpub_view, name='admin_mnemonic_xpub'),
+    path('mnemonic/admin/address', views.admin_mnemonic_address_view, name='admin_mnemonic_address'),
+    path('mnemonic/admin/unassign', views.admin_unassign_mnemonic_view, name='admin_mnemonic_unassign'),
+    path('mnemonic/validate', views.validate_mnemonic_view, name='validate_mnemonic'),
     # Exchange rate endpoints
     path('exchange-rates', views.exchange_rates_view, name='exchange_rates'),
     path('exchange-rates/admin', views.admin_exchange_rates_view, name='admin_exchange_rates'),
@@ -29,4 +37,7 @@ urlpatterns = [
     path('routes/admin', views.admin_routes_view, name='admin_routes'),
     path('optimal-paths', views.get_optimal_paths_view, name='optimal_paths'),
     path('routing-snapshot', views.routing_snapshot_view, name='routing_snapshot'),
+    # Sidebar config endpoints
+    path('sidebar-config', views.sidebar_config_view, name='sidebar_config'),
+    path('sidebar-config/admin', views.admin_update_sidebar_config_view, name='admin_sidebar_config'),
 ]

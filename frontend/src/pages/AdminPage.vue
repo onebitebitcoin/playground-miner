@@ -2,9 +2,9 @@
   <div class="min-h-screen bg-gray-50 p-4">
     <div class="max-w-6xl mx-auto">
       <!-- Header -->
-      <div class="mb-8">
-        <h1 class="text-3xl font-bold text-gray-900 mb-2">관리자 패널</h1>
-        <p class="text-gray-600">시스템 설정을 관리하고 데이터를 모니터링하세요.</p>
+      <div class="mb-6 md:mb-8">
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900 mb-2">관리자 페이지</h1>
+        <p class="text-sm md:text-base text-gray-600">시스템 설정을 관리하고 데이터를 모니터링하세요.</p>
       </div>
 
       <!-- Access notice (no longer blocks content) -->
@@ -17,17 +17,28 @@
         <!-- Admin Tabs -->
         <div class="mb-6">
           <div class="border-b border-gray-200">
-            <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+            <nav class="-mb-px flex space-x-4 md:space-x-8 overflow-x-auto" aria-label="Tabs">
+              <button
+                @click="activeTab = 'mining'"
+                :class="[
+                  activeTab === 'mining'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
+                  'whitespace-nowrap py-2 px-1 border-b-2 font-medium text-xs md:text-sm'
+                ]"
+              >
+                비트코인 채굴
+              </button>
               <button
                 @click="activeTab = 'mnemonics'"
                 :class="[
                   activeTab === 'mnemonics'
                     ? 'border-blue-500 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
-                  'whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm'
+                  'whitespace-nowrap py-2 px-1 border-b-2 font-medium text-xs md:text-sm'
                 ]"
               >
-                니모닉 관리
+                지갑
               </button>
               <button
                 @click="activeTab = 'routing'"
@@ -35,51 +46,62 @@
                   activeTab === 'routing'
                     ? 'border-blue-500 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
-                  'whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm'
+                  'whitespace-nowrap py-2 px-1 border-b-2 font-medium text-xs md:text-sm'
                 ]"
               >
-                라우팅 관리
+                수수료 계산
+              </button>
+              <button
+                @click="activeTab = 'sidebar'"
+                :class="[
+                  activeTab === 'sidebar'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
+                  'whitespace-nowrap py-2 px-1 border-b-2 font-medium text-xs md:text-sm'
+                ]"
+              >
+                사이드바 설정
               </button>
             </nav>
           </div>
         </div>
 
         <!-- Mnemonics Tab Content -->
-        <div v-if="activeTab === 'mnemonics'" class="grid lg:grid-cols-2 gap-8">
+        <div v-if="activeTab === 'mnemonics'" class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
           <!-- Mnemonic Pool Management -->
-          <div class="space-y-6">
-            <div class="bg-white rounded-lg shadow-md p-6">
-              <h3 class="text-lg font-semibold text-gray-900 mb-4">니모닉 풀 관리</h3>
-
-              <!-- Auto Generate Pool -->
-              <div class="bg-blue-50 p-4 rounded-lg mb-4">
-                <h4 class="font-medium text-blue-800 mb-3">자동 생성 풀</h4>
-                <div class="space-y-3">
-                  <div class="flex gap-2">
-                    <input v-model="mnemonicCount"
-                           type="number"
-                           min="1"
-                           max="50"
-                           placeholder="생성할 개수"
-                           class="flex-1 px-3 py-2 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                    <button @click="addMnemonicPool"
-                            :disabled="loading || !mnemonicCount || mnemonicCount < 1"
-                            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                      {{ loading ? '생성 중...' : '풀 추가' }}
-                    </button>
-                  </div>
-                  <p class="text-sm text-blue-600">자동으로 생성된 니모닉을 풀에 추가합니다</p>
-                </div>
-              </div>
+          <div class="space-y-4 md:space-y-6">
+            <div class="bg-white rounded-lg shadow-md p-4 md:p-6">
+              <h3 class="text-base md:text-lg font-semibold text-gray-900 mb-4">니모닉 풀 관리</h3>
 
               <!-- Manual Mnemonic Add -->
-              <div class="bg-green-50 p-4 rounded-lg">
-                <h4 class="font-medium text-green-800 mb-3">개별 니모닉 추가</h4>
+              <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <div class="flex items-center justify-between mb-3">
+                  <h4 class="font-medium text-gray-800">개별 니모닉 추가</h4>
+                  <div class="flex items-center gap-1">
+                    <button @click="generateAndFillAdminMnemonic"
+                            class="p-2 rounded text-gray-700 hover:text-gray-900"
+                            title="자동 생성">
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 12h12" />
+                      </svg>
+                      <span class="sr-only">자동 생성</span>
+                    </button>
+                    <button @click="clearAdminManualMnemonic"
+                            class="p-2 rounded text-gray-700 hover:text-gray-900"
+                            title="지우기">
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V5a2 2 0 00-2-2H9a2 2 0 00-2 2v2m-3 0h14" />
+                      </svg>
+                      <span class="sr-only">지우기</span>
+                    </button>
+                  </div>
+                </div>
                 <div class="space-y-3">
                   <!-- Individual word inputs -->
-                  <div class="grid grid-cols-3 gap-2">
+                  <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     <div v-for="i in 12" :key="i" class="relative">
-                      <label :for="`admin-word-${i}`" class="block text-xs font-medium text-green-600 mb-1">
+                      <label :for="`admin-word-${i}`" class="block text-xs font-medium text-gray-600 mb-1">
                         {{ i }}
                       </label>
                       <input
@@ -89,22 +111,35 @@
                         @paste="handleAdminPaste($event, i-1)"
                         type="text"
                         :placeholder="`단어 ${i}`"
-                        class="w-full px-2 py-2 text-sm border border-green-200 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                        :class="{ 'border-red-300': manualPoolError }"
+                        class="w-full px-2 py-2 text-xs sm:text-sm border border-gray-200 rounded focus:ring-2 focus:ring-gray-500 focus:border-gray-500 outline-none"
+                        :class="{ 'border-red-300': manualPoolError || (adminMnemonicUnknown && adminMnemonicUnknown.length && adminMnemonicUnknown.includes((adminMnemonicWords[i-1]||'').trim().toLowerCase())) }"
                       />
                     </div>
                   </div>
 
                   <!-- Alternative textarea input -->
-                  <div class="border-t border-green-200 pt-3">
-                    <label class="block text-sm font-medium text-green-700 mb-2">
+                  <div class="border-t border-gray-200 pt-3">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
                       또는 한번에 입력:
                     </label>
                     <textarea v-model="manualPoolMnemonicText"
                               @input="updateAdminFromTextarea"
-                              placeholder="12개의 영어 단어를 공백으로 구분하여 입력"
-                              class="w-full h-16 px-3 py-2 text-sm border border-green-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none resize-none"
+                              placeholder="12/15/18/21/24개의 영어 단어를 공백으로 구분하여 입력"
+                              class="w-full h-16 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 outline-none resize-none"
                               :class="{ 'border-red-300': manualPoolError }"></textarea>
+                    <div class="mt-2 space-y-2">
+                      <button @click="checkAdminMnemonic"
+                              :disabled="adminMnemonicChecking"
+                              class="w-full px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed">
+                        {{ adminMnemonicChecking ? '검사 중...' : '유효성 검사' }}
+                      </button>
+                      <div v-if="adminMnemonicValidity !== null" :class="adminMnemonicValidity ? 'text-green-700' : 'text-red-600'" class="text-sm">
+                        {{ adminMnemonicValidity ? '유효한 BIP39 니모닉' : '유효하지 않은 니모닉' }}
+                        <span v-if="adminMnemonicWordCount"> ({{ adminMnemonicWordCount }}단어)</span>
+                        <span v-if="!adminMnemonicValidity && adminMnemonicUnknown && adminMnemonicUnknown.length" class="ml-2 text-xs text-red-600">[{{ adminMnemonicUnknown.join(', ') }}]</span>
+                        <span v-if="!adminMnemonicValidity && (!adminMnemonicUnknown || adminMnemonicUnknown.length === 0) && adminMnemonicErrorCode === 'checksum_failed'" class="ml-2 text-xs text-red-600">(체크섬 불일치)</span>
+                      </div>
+                    </div>
                   </div>
 
                   <div v-if="manualPoolError" class="text-red-600 text-sm">
@@ -114,7 +149,7 @@
                   <button @click="addManualMnemonicToPool"
                           :disabled="loading || !isValidAdminMnemonicInput"
                           class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                    {{ loading ? '추가 중...' : '풀에 추가' }}
+                    {{ loading ? '추가 중...' : '니모닉 풀 추가' }}
                   </button>
                 </div>
               </div>
@@ -123,52 +158,96 @@
 
           <!-- Mnemonic Pool Status -->
           <div class="space-y-6">
-            <div class="bg-white rounded-lg shadow-md p-6">
-              <h3 class="text-lg font-semibold text-gray-900 mb-4">풀 상태</h3>
+            <div class="bg-white rounded-lg shadow-md p-4 md:p-6">
+              <div class="flex items-center justify-between mb-1">
+                <h3 class="text-base md:text-lg font-semibold text-gray-900">풀 상태</h3>
+                <div class="flex items-center gap-2">
+                  <button @click="loadAllMnemonicBalances"
+                          :disabled="balancesLoading || adminMnemonics.length === 0"
+                          class="p-2 rounded text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="잔액 업데이트">
+                    <template v-if="balancesLoading">
+                      <div class="w-4 h-4 md:w-5 md:h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                    </template>
+                    <template v-else>
+                      <svg class="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </template>
+                    <span class="sr-only">잔액 업데이트</span>
+                  </button>
+                </div>
+              </div>
+              <div class="text-xs md:text-sm text-gray-600 mb-3">
+                전체 니모닉 {{ adminMnemonics.length }} · 사용 가능 {{ availableMnemonicsCount }}
+              </div>
 
-              <div class="bg-gray-50 p-4 rounded-lg max-h-96 overflow-y-auto">
-                <div v-if="adminMnemonics.length === 0" class="text-gray-500 text-center py-8">
+              <div class="bg-gray-50 p-2 md:p-4 rounded-lg max-h-96 overflow-y-auto">
+                <div v-if="adminMnemonics.length === 0" class="text-gray-500 text-center py-8 text-sm">
                   저장된 니모닉이 없습니다
                 </div>
                 <div v-else class="space-y-2">
                   <div v-for="mnemonic in adminMnemonics" :key="mnemonic.id"
-                       class="flex justify-between items-center p-3 bg-white rounded border">
-                    <div class="flex-1">
-                      <div class="flex items-center gap-2">
-                        <span class="text-sm font-medium text-gray-900">{{ mnemonic.username }}</span>
-                        <span v-if="mnemonic.is_assigned"
-                              class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                          할당됨
-                        </span>
-                        <span v-else
-                              class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                          대기중
+                       class="flex flex-col sm:flex-row sm:items-start sm:justify-between p-2 md:p-3 bg-white rounded border gap-2 sm:gap-3">
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-2 flex-wrap mb-1">
+                        <span class="text-xs text-gray-500">ID {{ mnemonic.id }}</span>
+                        <span v-if="mnemonic.is_assigned" class="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">{{ mnemonic.assigned_to || '미상' }}</span>
+                        <span v-else class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">대기중</span>
+                      </div>
+                      <span class="text-xs text-gray-500 block mb-1">{{ formatDate(mnemonic.created_at) }}</span>
+                      <div class="text-xs md:text-sm text-gray-700 flex flex-wrap items-center gap-1">
+                        <span v-if="mnemonic._loading_balance">조회중...</span>
+                        <span v-else class="flex flex-wrap items-center gap-1">
+                          <span class="font-medium">{{ Number(mnemonic.balance_sats || 0).toLocaleString() }} sats</span>
+                          <span class="text-gray-500 text-xs">({{ formatBtc(mnemonic.balance_sats) }})</span>
                         </span>
                       </div>
-                      <span class="text-sm text-gray-500">{{ formatDate(mnemonic.created_at) }}</span>
+
+
                     </div>
-                    <button @click="showMnemonicInAdmin(mnemonic.mnemonic)"
-                            class="text-sm text-blue-600 hover:text-blue-800">
-                      보기
-                    </button>
+                    <div class="shrink-0 flex sm:flex-col items-center sm:items-end gap-1">
+                      <div class="flex items-center gap-1">
+                        <button @click="fetchOnchain(mnemonic)"
+                                :disabled="mnemonic._loading_balance"
+                                class="p-1.5 md:p-2 rounded text-blue-600 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="잔액 새로고침">
+                          <svg v-if="mnemonic._loading_balance" class="w-4 h-4 md:w-5 md:h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          <svg v-else class="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                        </button>
+                        <button v-if="mnemonic.is_assigned" @click="unassignMnemonic(mnemonic)"
+                                class="p-1.5 md:p-2 rounded text-amber-700 hover:text-amber-800"
+                                title="할당 해제">
+                          <svg class="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12h6m0 0l-3 3m3-3l-3-3M9 7a4 4 0 110 8 4 4 0 010-8z" />
+                          </svg>
+                        </button>
+                      <button @click="showMnemonicInAdmin(mnemonic)"
+                              class="p-1.5 md:p-2 rounded text-gray-700 hover:text-gray-900"
+                              title="보기">
+                          <svg class="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                          </svg>
+                        </button>
+                        <button @click="deleteMnemonic(mnemonic)"
+                                class="p-1.5 md:p-2 rounded text-red-600 hover:text-red-700"
+                                title="삭제">
+                          <svg class="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m-3 0h14"></path>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <!-- Pool Statistics -->
-              <div class="bg-yellow-50 p-4 rounded-lg mt-4">
-                <h4 class="font-medium text-yellow-800 mb-2">통계</h4>
-                <div class="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span class="text-yellow-700">전체 니모닉:</span>
-                    <span class="font-medium ml-1">{{ adminMnemonics.length }}</span>
-                  </div>
-                  <div>
-                    <span class="text-yellow-700">사용 가능:</span>
-                    <span class="font-medium ml-1">{{ availableMnemonicsCount }}</span>
-                  </div>
-                </div>
-              </div>
+              
             </div>
           </div>
         </div>
@@ -405,6 +484,140 @@
             </div>
           </div>
         </div>
+
+        <!-- Mining Tab Content -->
+        <div v-if="activeTab === 'mining'">
+          <div class="bg-white rounded-lg shadow-md p-6 max-w-xl">
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">채굴 데이터 초기화</h3>
+            <p class="text-sm text-gray-600 mb-4">모든 블록 데이터를 삭제합니다. 관리자만 실행할 수 있습니다.</p>
+            <div class="space-y-3">
+              <input v-model="adminResetPassword" type="password" placeholder="관리자 비밀번호 입력"
+                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900" />
+              <div class="flex gap-2">
+                <button @click="confirmAdminReset" :disabled="!isAdmin || adminResetLoading"
+                        class="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50">
+                  {{ adminResetLoading ? '초기화 중...' : '초기화' }}
+                </button>
+                <span v-if="!isAdmin" class="text-sm text-gray-500 self-center">관리자 모드가 아닙니다</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sidebar Config Tab Content -->
+        <div v-if="activeTab === 'sidebar'">
+          <div class="bg-white rounded-lg shadow-md p-6 max-w-xl">
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">사이드바 메뉴 설정</h3>
+            <p class="text-sm text-gray-600 mb-4">사용자에게 보여질 사이드바 메뉴를 설정합니다.</p>
+
+            <div v-if="sidebarConfigLoading" class="text-center py-8 text-gray-500">
+              로딩 중...
+            </div>
+
+            <div v-else class="space-y-4">
+              <!-- Mining Toggle -->
+              <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                <div>
+                  <h4 class="font-medium text-gray-900">비트코인 채굴</h4>
+                  <p class="text-sm text-gray-500">채굴 페이지 메뉴 표시</p>
+                </div>
+                <button
+                  @click="toggleSidebarItem('show_mining')"
+                  :class="[
+                    sidebarConfig.show_mining
+                      ? 'bg-blue-600'
+                      : 'bg-gray-300',
+                    'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2'
+                  ]"
+                  :disabled="!isAdmin"
+                >
+                  <span
+                    :class="[
+                      sidebarConfig.show_mining ? 'translate-x-6' : 'translate-x-1',
+                      'inline-block h-4 w-4 transform rounded-full bg-white transition-transform'
+                    ]"
+                  />
+                </button>
+              </div>
+
+              <!-- UTXO Toggle -->
+              <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                <div>
+                  <h4 class="font-medium text-gray-900">UTXO</h4>
+                  <p class="text-sm text-gray-500">UTXO 페이지 메뉴 표시</p>
+                </div>
+                <button
+                  @click="toggleSidebarItem('show_utxo')"
+                  :class="[
+                    sidebarConfig.show_utxo
+                      ? 'bg-blue-600'
+                      : 'bg-gray-300',
+                    'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2'
+                  ]"
+                  :disabled="!isAdmin"
+                >
+                  <span
+                    :class="[
+                      sidebarConfig.show_utxo ? 'translate-x-6' : 'translate-x-1',
+                      'inline-block h-4 w-4 transform rounded-full bg-white transition-transform'
+                    ]"
+                  />
+                </button>
+              </div>
+
+              <!-- Wallet Toggle -->
+              <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                <div>
+                  <h4 class="font-medium text-gray-900">지갑</h4>
+                  <p class="text-sm text-gray-500">지갑 페이지 메뉴 표시</p>
+                </div>
+                <button
+                  @click="toggleSidebarItem('show_wallet')"
+                  :class="[
+                    sidebarConfig.show_wallet
+                      ? 'bg-blue-600'
+                      : 'bg-gray-300',
+                    'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2'
+                  ]"
+                  :disabled="!isAdmin"
+                >
+                  <span
+                    :class="[
+                      sidebarConfig.show_wallet ? 'translate-x-6' : 'translate-x-1',
+                      'inline-block h-4 w-4 transform rounded-full bg-white transition-transform'
+                    ]"
+                  />
+                </button>
+              </div>
+
+              <!-- Fee Calculator Toggle -->
+              <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                <div>
+                  <h4 class="font-medium text-gray-900">수수료 계산</h4>
+                  <p class="text-sm text-gray-500">수수료 계산 페이지 메뉴 표시</p>
+                </div>
+                <button
+                  @click="toggleSidebarItem('show_fee')"
+                  :class="[
+                    sidebarConfig.show_fee
+                      ? 'bg-blue-600'
+                      : 'bg-gray-300',
+                    'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2'
+                  ]"
+                  :disabled="!isAdmin"
+                >
+                  <span
+                    :class="[
+                      sidebarConfig.show_fee ? 'translate-x-6' : 'translate-x-1',
+                      'inline-block h-4 w-4 transform rounded-full bg-white transition-transform'
+                    ]"
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- Success Message -->
@@ -416,17 +629,168 @@
       <div v-if="errorMessage" class="fixed bottom-4 right-4 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg">
         {{ errorMessage }}
       </div>
+
+      <!-- Mnemonic Display Modal -->
+      <div v-if="showMnemonicModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 md:p-4" @click="showMnemonicModal = false">
+        <div class="bg-white rounded-lg p-4 md:p-6 max-w-lg w-full max-h-[90vh] md:max-h-[80vh] overflow-y-auto" @click.stop>
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg md:text-xl font-semibold text-gray-900">자세히 보기</h2>
+            <button @click="showMnemonicModal = false" class="text-gray-400 hover:text-gray-600">
+              <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Mnemonic Words Section -->
+          <div class="mb-4 md:mb-6">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-base md:text-lg font-medium text-gray-900">시드 문구</h3>
+              <div class="flex items-center gap-1 md:gap-2">
+                <button @click="toggleMnemonicQr" class="p-1.5 md:p-2 rounded text-gray-700 hover:text-gray-900" title="QR 코드 토글">
+                  <svg class="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
+                  </svg>
+                  <span class="sr-only">QR 코드</span>
+                </button>
+                <button @click="copyMnemonicToClipboard" class="p-1.5 md:p-2 rounded text-gray-700 hover:text-gray-900" title="시드 문구 복사">
+                  <svg class="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="9" y="7" width="11" height="13" rx="2" ry="2"></rect>
+                    <rect x="4" y="4" width="11" height="13" rx="2" ry="2"></rect>
+                  </svg>
+                  <span class="sr-only">시드 문구 복사</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Mnemonic QR Code -->
+            <div v-if="showMnemonicQr" class="text-center mb-4">
+              <div ref="mnemonicQrContainer" class="flex justify-center">
+                <!-- QR code will be inserted here -->
+              </div>
+            </div>
+
+            <div class="bg-gray-50 p-3 md:p-4 rounded-lg">
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 md:gap-2 mb-4">
+                <div v-for="(word, index) in currentDisplayMnemonic.split(' ')" :key="index"
+                     class="flex items-center space-x-1 md:space-x-2 p-1.5 md:p-2 bg-white rounded border">
+                  <span class="text-xs text-gray-500 font-medium w-3 md:w-4">{{ index + 1 }}</span>
+                  <span class="text-xs md:text-sm font-mono">{{ word }}</span>
+                </div>
+              </div>
+
+              <!-- Full text display -->
+              <div class="border-t pt-3 md:pt-4">
+                <p class="text-xs md:text-sm text-gray-700 font-mono break-all">{{ currentDisplayMnemonic }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- zpub Section -->
+          <div class="mb-6">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-lg font-medium text-gray-900">zpub</h3>
+              <div class="flex items-center gap-2">
+                <button @click="toggleZpubQr" class="p-2 rounded text-gray-700 hover:text-gray-900" :disabled="!modalZpub" title="QR 코드 토글">
+                  <svg class="w-5 h-5" :class="{ 'opacity-50': !modalZpub }" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
+                  </svg>
+                  <span class="sr-only">QR 코드</span>
+                </button>
+                <button @click="copyZpubInModal" class="p-2 rounded text-gray-700 hover:text-gray-900" title="zpub 복사">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="9" y="7" width="11" height="13" rx="2" ry="2"></rect>
+                    <rect x="4" y="4" width="11" height="13" rx="2" ry="2"></rect>
+                  </svg>
+                  <span class="sr-only">zpub 복사</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Zpub QR Code -->
+            <div v-if="showZpubQr" class="text-center mb-4">
+              <div ref="zpubQrContainer" class="flex justify-center">
+                <!-- QR code will be inserted here -->
+              </div>
+            </div>
+
+            <div class="bg-gray-50 p-4 rounded-lg">
+              <p class="text-sm text-gray-700 font-mono break-all whitespace-normal">{{ modalZpub || '—' }}</p>
+            </div>
+          </div>
+
+          <!-- Master Fingerprint Section -->
+          <div class="mb-6">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-lg font-medium text-gray-900">마스터 핑거프린트 (MFP)</h3>
+              <button @click="copyMfpToClipboard" class="p-2 rounded text-gray-700 hover:text-gray-900" :disabled="!modalMasterFingerprint" title="MFP 복사">
+                <svg class="w-5 h-5" :class="{ 'opacity-50': !modalMasterFingerprint }" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="9" y="7" width="11" height="13" rx="2" ry="2"></rect>
+                  <rect x="4" y="4" width="11" height="13" rx="2" ry="2"></rect>
+                </svg>
+                <span class="sr-only">MFP 복사</span>
+              </button>
+            </div>
+            <div class="bg-gray-50 p-4 rounded-lg">
+              <p class="text-sm text-gray-700 font-mono">{{ modalMasterFingerprint || '—' }}</p>
+            </div>
+          </div>
+
+          <!-- Addresses Section -->
+          <div class="mb-6">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-lg font-medium text-gray-900">주소</h3>
+              <button @click="refreshAddressesInModal" class="p-2 rounded text-gray-700 hover:text-gray-900" title="주소 새로고침">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span class="sr-only">주소 새로고침</span>
+              </button>
+            </div>
+            <div class="bg-gray-50 p-2 rounded-lg">
+              <div v-if="modalAddresses.length === 0" class="text-sm text-gray-500 px-2 py-3">표시할 주소가 없습니다</div>
+              <div v-else class="space-y-1">
+                <div v-for="(addr, idx) in modalAddresses.slice(0, 10)" :key="idx" class="flex items-center justify-between bg-white rounded border px-2 py-1">
+                  <span class="text-sm font-mono text-gray-800 break-all pr-2">{{ addr }}</span>
+                  <button @click="copyAddressString(addr)" class="p-2 rounded text-gray-700 hover:text-gray-900" title="주소 복사">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <rect x="9" y="7" width="11" height="13" rx="2" ry="2"></rect>
+                      <rect x="4" y="4" width="11" height="13" rx="2" ry="2"></rect>
+                    </svg>
+                    <span class="sr-only">주소 복사</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex flex-wrap items-center justify-end gap-2">
+            <button @click="showMnemonicModal = false"
+                    class="px-3 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 text-sm">
+              닫기
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import {
   apiRequestMnemonic,
   apiGenerateMnemonic,
   apiSaveMnemonic,
   apiGetAdminMnemonics,
+  apiValidateMnemonic,
+  apiDeleteMnemonic,
+  apiGetMnemonicZpub,
+  apiGetMnemonicAddress,
+  apiGetOnchainBalanceById,
+  apiSetMnemonicBalance,
+  apiUnassignMnemonic,
   apiGetServiceNodes,
   apiUpdateServiceNode,
   apiGetRoutes,
@@ -435,22 +799,62 @@ import {
   apiGetOptimalPaths,
   apiGetRoutingSnapshotInfo,
   apiSaveRoutingSnapshot,
-  apiResetRoutingFromSnapshot
+  apiResetRoutingFromSnapshot,
+  apiGetSidebarConfig,
+  apiUpdateSidebarConfig
 } from '../api'
+import { useNotification } from '../composables/useNotification'
+import { copyToClipboard } from '../composables/useClipboard'
+import { generateQRCode } from '../composables/useQRCode'
+import { formatBtc, formatDate, formatKrw } from '../utils/formatters'
+import { validateMnemonic, parseMnemonicWords } from '../utils/validation'
+
+// Composables
+const { successMessage, errorMessage, showSuccess, showError } = useNotification()
 
 // State
 const loading = ref(false)
-const successMessage = ref('')
-const errorMessage = ref('')
 const activeTab = ref('mnemonics')
 const activeRoutingTab = ref('nodes')
 
+// Admin mining reset state
+const adminResetPassword = ref('')
+const adminResetLoading = ref(false)
+
+// Sidebar config state
+const sidebarConfig = ref({
+  show_mining: true,
+  show_utxo: true,
+  show_wallet: true,
+  show_fee: true
+})
+const sidebarConfigLoading = ref(false)
+
 // Mnemonic management state
-const mnemonicCount = ref(10)
 const manualPoolMnemonicText = ref('')
 const adminMnemonicWords = ref(Array(12).fill(''))
 const manualPoolError = ref('')
 const adminMnemonics = ref([])
+const adminMnemonicValidity = ref(null)
+const adminMnemonicWordCount = ref(0)
+const adminMnemonicChecking = ref(false)
+const adminMnemonicUnknown = ref([])
+const adminMnemonicErrorCode = ref('')
+const balancesLoading = ref(false)
+
+// Modal state for mnemonic display
+const showMnemonicModal = ref(false)
+const currentDisplayMnemonic = ref('')
+const currentDisplayId = ref(null)
+const modalZpub = ref('')
+const modalMasterFingerprint = ref('')
+const modalAddress = ref('')
+const modalAddresses = ref([])
+const modalAddressStartIndex = ref(0)
+const mnemonicQrContainer = ref(null)
+const zpubQrContainer = ref(null)
+const showMnemonicQr = ref(false)
+const showZpubQr = ref(false)
 
 // (fee management removed)
 
@@ -501,6 +905,12 @@ const availableMnemonicsCount = computed(() => {
   return adminMnemonics.value.filter(m => !m.is_assigned).length
 })
 
+const getAdminUsername = () => {
+  const nickname = localStorage.getItem('nickname')
+  const adminStatus = localStorage.getItem('isAdmin')
+  return nickname === 'admin' && adminStatus === 'true' ? 'admin' : ''
+}
+
 const isValidAdminMnemonicInput = computed(() => {
   const words = adminMnemonicWords.value.filter(w => w.trim().length > 0)
   return words.length === 12 || (manualPoolMnemonicText.value.trim().split(/\s+/).length === 12)
@@ -529,47 +939,122 @@ const getCurrentUsername = () => {
   return localStorage.getItem('nickname') || 'anonymous'
 }
 
-// Ensure admin endpoints always receive 'admin' to satisfy backend check
-const getAdminUsername = () => {
-  return isAdmin.value ? 'admin' : getCurrentUsername()
-}
+// Alias for backward compatibility
+const showSuccessMessage = showSuccess
+const showErrorMessage = showError
 
-// (admin debug view removed)
-
-const validateMnemonic = (mnemonic) => {
-  const words = mnemonic.trim().split(/\s+/)
-  if (words.length !== 12) {
-    return '니모닉은 정확히 12개의 단어로 구성되어야 합니다'
-  }
-
-  for (const word of words) {
-    if (!/^[a-z]+$/.test(word)) {
-      return '모든 단어는 영어 소문자여야 합니다'
-    }
-  }
-
-  return null
-}
-
-const showSuccessMessage = (message) => {
-  successMessage.value = message
-  setTimeout(() => {
-    successMessage.value = ''
-  }, 3000)
-}
-
-const showErrorMessage = (message) => {
-  errorMessage.value = message
-  setTimeout(() => {
-    errorMessage.value = ''
-  }, 3000)
-}
-
-const formatDate = (dateString) => {
+// On-chain helpers (per mnemonic)
+const fetchOnchain = async (mnemonic) => {
   try {
-    return new Date(dateString).toLocaleString('ko-KR')
-  } catch {
-    return dateString
+    mnemonic._loading_balance = true
+    const res = await apiGetOnchainBalanceById(mnemonic.id, { count: 20 })
+    if (res.success) {
+      // 자동 반영: 온체인 잔액을 풀 잔액에 바로 반영
+      const total = res.total_sats || 0
+      mnemonic._onchain_total = total
+      mnemonic.balance_sats = total
+      // 서버에도 즉시 업데이트(관리자일 때만)
+      const adminUser = getAdminUsername()
+      if (adminUser) {
+        try { await apiSetMnemonicBalance(adminUser, mnemonic.id, total) } catch (_) {}
+      }
+    } else {
+      showErrorMessage(res.error || '온체인 조회 실패')
+    }
+  } catch (_) {}
+  finally {
+    mnemonic._loading_balance = false
+  }
+}
+
+// applyOnchainToPool는 더 이상 필요하지 않으나, 참조 제거로 미사용 처리됨
+
+const copyZpub = async (mnemonic) => {
+  try {
+    const res = await apiGetMnemonicZpub(getAdminUsername(), mnemonic.id, 0)
+    if (res.success && res.zpub) {
+      mnemonic._zpub = res.zpub
+      try {
+        await navigator.clipboard.writeText(res.zpub)
+        showSuccessMessage('zpub 이 복사되었습니다')
+      } catch (_) {
+        showSuccessMessage('zpub 생성 완료 (클립보드 권한 없음)')
+      }
+    } else {
+      showErrorMessage(res.error || 'zpub 조회 실패')
+    }
+  } catch (_) {
+    showErrorMessage('요청 실패')
+  }
+}
+
+const copyReceiveAddress = async (mnemonic) => {
+  try {
+    const res = await apiGetMnemonicAddress(getAdminUsername(), mnemonic.id, { index: 0, account: 0, change: 0 })
+    if (res.success && res.address) {
+      mnemonic._address = res.address
+      try {
+        await navigator.clipboard.writeText(res.address)
+        showSuccessMessage('주소가 복사되었습니다')
+      } catch (_) {
+        showSuccessMessage('주소 생성 완료 (클립보드 권한 없음)')
+      }
+    } else {
+      showErrorMessage(res.error || '주소 생성 실패')
+    }
+  } catch (_) {
+    showErrorMessage('요청 실패')
+  }
+}
+
+const unassignMnemonic = async (mnemonic) => {
+  try {
+    const res = await apiUnassignMnemonic(getAdminUsername(), mnemonic.id)
+    if (res.success) {
+      mnemonic.is_assigned = false
+      mnemonic.assigned_to = ''
+      showSuccessMessage('할당이 해제되었습니다')
+    } else {
+      showErrorMessage(res.error || '할당 해제 실패')
+    }
+  } catch (_) {
+    showErrorMessage('네트워크 오류')
+  }
+}
+
+const deleteMnemonic = async (mnemonic) => {
+  if (!confirm('이 니모닉을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return
+  try {
+    const res = await apiDeleteMnemonic(getAdminUsername(), mnemonic.id)
+    if (res.success) {
+      adminMnemonics.value = adminMnemonics.value.filter(m => m.id !== mnemonic.id)
+      showSuccessMessage('니모닉이 삭제되었습니다')
+    } else {
+      showErrorMessage(res.error || '삭제 실패')
+    }
+  } catch (_) {
+    showErrorMessage('요청 실패')
+  }
+}
+
+const copyPoolMnemonic = async (mnemonic) => {
+  try {
+    if (!mnemonic?.mnemonic) { showErrorMessage('니모닉이 비어 있습니다'); return }
+    await navigator.clipboard.writeText(mnemonic.mnemonic)
+    showSuccessMessage('니모닉이 클립보드에 복사되었습니다')
+  } catch (_) {
+    // Fallback: create a temporary textarea to copy
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = mnemonic.mnemonic
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+      showSuccessMessage('니모닉이 클립보드에 복사되었습니다')
+    } catch (_) {
+      showErrorMessage('복사 실패')
+    }
   }
 }
 
@@ -715,44 +1200,22 @@ const handleAdminPaste = (event, startIndex) => {
   const pastedText = (event.clipboardData || window.clipboardData).getData('text')
   const words = pastedText.trim().split(/\s+/).filter(w => w.length > 0)
 
-  for (let i = 0; i < 12; i++) {
-    adminMnemonicWords.value[i] = words[i] || ''
+  // If multiple words are pasted, fill from index 0
+  if (words.length > 1) {
+    for (let i = 0; i < 12; i++) {
+      adminMnemonicWords.value[i] = words[i] || ''
+    }
+  } else {
+    // If single word is pasted, put it at the current field
+    if (words.length === 1) {
+      adminMnemonicWords.value[startIndex] = words[0]
+    }
   }
 
   updateAdminManualMnemonic()
 }
 
-const addMnemonicPool = async () => {
-  if (!mnemonicCount.value || mnemonicCount.value < 1) return
-
-  loading.value = true
-  let addedCount = 0
-
-  try {
-    for (let i = 0; i < mnemonicCount.value; i++) {
-      const username = `pool_${Date.now()}_${i}`
-      const response = await apiGenerateMnemonic()
-
-      if (response.success && response.mnemonic) {
-        const saveResponse = await apiSaveMnemonic(response.mnemonic, username)
-        if (saveResponse.success) {
-          addedCount++
-        }
-      }
-    }
-
-    if (addedCount > 0) {
-      showSuccessMessage(`${addedCount}개의 니모닉이 풀에 추가되었습니다`)
-      await loadAdminData()
-    } else {
-      showErrorMessage('니모닉 추가에 실패했습니다')
-    }
-  } catch (error) {
-    showErrorMessage('네트워크 오류가 발생했습니다')
-  } finally {
-    loading.value = false
-  }
-}
+// Removed addMnemonicPool (auto pool create)
 
 const addManualMnemonicToPool = async () => {
   manualPoolError.value = ''
@@ -772,11 +1235,17 @@ const addManualMnemonicToPool = async () => {
     if (response.success) {
       showSuccessMessage('니모닉이 풀에 추가되었습니다')
 
-      // Clear all inputs
-      manualPoolMnemonicText.value = ''
-      adminMnemonicWords.value = Array(12).fill('')
+      await loadData()
 
-      await loadAdminData()
+      // Auto-load balance for the newly added mnemonic
+      const newMnemonic = adminMnemonics.value.find(m => m.id === response.id)
+      if (newMnemonic) {
+        try {
+          await fetchOnchain(newMnemonic)
+        } catch (error) {
+          console.error(`Failed to load balance for new manual mnemonic ${newMnemonic.id}:`, error)
+        }
+      }
     } else {
       manualPoolError.value = response.error || '니모닉 저장에 실패했습니다'
     }
@@ -787,8 +1256,200 @@ const addManualMnemonicToPool = async () => {
   }
 }
 
-const showMnemonicInAdmin = (mnemonic) => {
-  alert(`니모닉: ${mnemonic}`)
+// Auto-generate a mnemonic and fill the manual inputs
+const generateAndFillAdminMnemonic = async () => {
+  try {
+    const response = await apiGenerateMnemonic()
+    if (response.success && response.mnemonic) {
+      const words = (response.mnemonic || '').trim().split(/\s+/)
+      // Fill 12 inputs
+      for (let i = 0; i < 12; i++) {
+        adminMnemonicWords.value[i] = words[i] || ''
+      }
+      manualPoolMnemonicText.value = words.slice(0, 12).join(' ')
+      // Reset validation state
+      adminMnemonicValidity.value = null
+      adminMnemonicWordCount.value = 0
+      adminMnemonicUnknown.value = []
+      adminMnemonicErrorCode.value = ''
+      manualPoolError.value = ''
+    } else {
+      showErrorMessage(response.error || '니모닉 생성에 실패했습니다')
+    }
+  } catch (e) {
+    showErrorMessage('네트워크 오류가 발생했습니다')
+  }
+}
+
+const clearAdminManualMnemonic = () => {
+  manualPoolMnemonicText.value = ''
+  adminMnemonicWords.value = Array(12).fill('')
+  adminMnemonicValidity.value = null
+  adminMnemonicWordCount.value = 0
+  adminMnemonicUnknown.value = []
+  adminMnemonicErrorCode.value = ''
+  manualPoolError.value = ''
+}
+
+const checkAdminMnemonic = async () => {
+  const text = (manualPoolMnemonicText.value || adminMnemonicWords.value.join(' ')).trim()
+  if (!text) { adminMnemonicValidity.value = null; adminMnemonicWordCount.value = 0; showErrorMessage('니모닉을 입력하세요'); return }
+  adminMnemonicChecking.value = true
+  try {
+  const res = await apiValidateMnemonic(text)
+  if (res.success) {
+    adminMnemonicValidity.value = !!res.valid
+    adminMnemonicWordCount.value = res.word_count || 0
+    adminMnemonicErrorCode.value = res.error || ''
+    if (!res.valid) {
+      let msg = '유효하지 않은 니모닉입니다'
+      if (res.error === 'invalid_word_count') msg = '단어 개수가 올바르지 않습니다 (12/15/18/21/24)'
+      else if (res.error === 'checksum_failed') msg = '체크섬이 일치하지 않습니다'
+      const unknown = (res.unknown_words || [])
+      if (unknown.length) {
+        msg += `: [${unknown.join(', ')}]`
+      }
+      adminMnemonicUnknown.value = unknown
+      manualPoolError.value = msg
+      showErrorMessage(msg)
+    } else {
+      adminMnemonicUnknown.value = []
+      adminMnemonicErrorCode.value = ''
+      manualPoolError.value = ''
+      showSuccessMessage('유효성 검사에 문제가 없습니다')
+      }
+  } else {
+    adminMnemonicUnknown.value = res.unknown_words || []
+    const msg = adminMnemonicUnknown.value.length ? `유효하지 않은 단어: [${adminMnemonicUnknown.value.join(', ')}]` : (res.error || '검증 실패')
+    manualPoolError.value = msg
+    showErrorMessage(msg)
+  }
+  } finally {
+    adminMnemonicChecking.value = false
+  }
+}
+
+const showMnemonicInAdmin = async (m) => {
+  // m is the mnemonic object from the list
+  currentDisplayMnemonic.value = m.mnemonic
+  currentDisplayId.value = m.id
+  modalZpub.value = ''
+  modalMasterFingerprint.value = ''
+  modalAddress.value = ''
+  modalAddressStartIndex.value = 0
+  modalAddresses.value = []
+  showMnemonicQr.value = false
+  showZpubQr.value = false
+  showMnemonicModal.value = true
+  // Preload zpub and first 10 addresses
+  try {
+    const res = await apiGetMnemonicZpub(getAdminUsername(), currentDisplayId.value, 0)
+    if (res.success && res.zpub) {
+      modalZpub.value = res.zpub
+      modalMasterFingerprint.value = res.master_fingerprint || ''
+    }
+  } catch (_) {}
+  try { await loadAddressesInModal() } catch (_) {}
+}
+
+const toggleMnemonicQr = async () => {
+  showMnemonicQr.value = !showMnemonicQr.value
+  if (showMnemonicQr.value && mnemonicQrContainer.value) {
+    await generateQRCode(mnemonicQrContainer.value, currentDisplayMnemonic.value)
+  }
+}
+
+const toggleZpubQr = async () => {
+  if (!modalZpub.value) return
+  showZpubQr.value = !showZpubQr.value
+  if (showZpubQr.value && zpubQrContainer.value) {
+    await generateQRCode(zpubQrContainer.value, modalZpub.value)
+  }
+}
+
+const copyMnemonicToClipboard = async () => {
+  await copyToClipboard(
+    currentDisplayMnemonic.value,
+    () => showSuccess('니모닉이 클립보드에 복사되었습니다'),
+    showError
+  )
+}
+
+const copyZpubInModal = async () => {
+  if (modalZpub.value) {
+    await copyToClipboard(modalZpub.value, () => showSuccess('zpub이 복사되었습니다'), showError)
+    return
+  }
+
+  if (!currentDisplayId.value) {
+    showError('잘못된 상태')
+    return
+  }
+
+  try {
+    const res = await apiGetMnemonicZpub(getAdminUsername(), currentDisplayId.value, 0)
+    if (res.success && res.zpub) {
+      modalZpub.value = res.zpub
+      modalMasterFingerprint.value = res.master_fingerprint || ''
+      await copyToClipboard(res.zpub, () => showSuccess('zpub이 복사되었습니다'), showError)
+    } else {
+      showError(res.error || 'zpub 조회 실패')
+    }
+  } catch {
+    showError('요청 실패')
+  }
+}
+
+const copyMfpToClipboard = async () => {
+  await copyToClipboard(
+    modalMasterFingerprint.value,
+    () => showSuccess('MFP가 클립보드에 복사되었습니다'),
+    showError
+  )
+}
+
+const loadAddressesInModal = async () => {
+  const id = currentDisplayId.value
+  if (!id) return
+  try {
+    const username = getAdminUsername()
+    const start = Number(modalAddressStartIndex.value || 0)
+    const reqs = Array.from({ length: 10 }, (_, i) => apiGetMnemonicAddress(username, id, { index: start + i, account: 0, change: 0 }))
+    const results = await Promise.allSettled(reqs)
+    const addrs = []
+    for (const r of results) {
+      if (r.status === 'fulfilled' && r.value?.success && r.value.address) addrs.push(r.value.address)
+    }
+    modalAddresses.value = addrs
+  } catch (_) { /* ignore */ }
+}
+
+const refreshAddressesInModal = async () => {
+  modalAddressStartIndex.value = Number(modalAddressStartIndex.value || 0) + 10
+  await loadAddressesInModal()
+}
+
+const copyAddressString = async (addr) => {
+  try {
+    await navigator.clipboard.writeText(addr)
+    showSuccessMessage('주소가 복사되었습니다')
+  } catch (_) {
+    showErrorMessage('클립보드 복사 실패')
+  }
+}
+
+const copyAddressInModal = async () => {
+  try {
+    if (!currentDisplayId.value) { showErrorMessage('잘못된 상태'); return }
+    const res = await apiGetMnemonicAddress(getAdminUsername(), currentDisplayId.value, { index: 0, account: 0, change: 0 })
+    if (res.success && res.address) {
+      modalAddress.value = res.address
+      try { await navigator.clipboard.writeText(res.address); showSuccessMessage('주소가 복사되었습니다') }
+      catch (_) { showSuccessMessage('주소 생성 완료 (클립보드 권한 없음)') }
+    } else {
+      showErrorMessage(res.error || '주소 생성 실패')
+    }
+  } catch (_) { showErrorMessage('요청 실패') }
 }
 
 
@@ -1110,7 +1771,11 @@ const loadData = async () => {
       // Mnemonics for admin only
       try {
         const res = await apiGetAdminMnemonics(username)
-        if (res.success) adminMnemonics.value = res.mnemonics
+        if (res.success) {
+          adminMnemonics.value = res.mnemonics
+          // Note: Don't auto-load all balances here for better performance
+          // Users can use the refresh-all button or individual refresh buttons
+        }
       } catch (_) {}
     }
   } finally {
@@ -1118,10 +1783,37 @@ const loadData = async () => {
   }
 }
 
+// Load balances for all mnemonics in the pool
+const loadAllMnemonicBalances = async () => {
+  if (!adminMnemonics.value || adminMnemonics.value.length === 0) return
+
+  balancesLoading.value = true
+  try {
+    // mark all as loading
+    try { (adminMnemonics.value || []).forEach(m => m._loading_balance = true) } catch (_) {}
+    // Load balances in parallel for better performance, but limit concurrent requests
+    const batchSize = 5 // Limit to 5 concurrent requests to avoid overwhelming the server
+    for (let i = 0; i < adminMnemonics.value.length; i += batchSize) {
+      const batch = adminMnemonics.value.slice(i, i + batchSize)
+      const balancePromises = batch.map(async (mnemonic) => {
+        try {
+          await fetchOnchain(mnemonic)
+        } catch (error) {
+          console.error(`Failed to load balance for mnemonic ${mnemonic.id}:`, error)
+        }
+      })
+      await Promise.all(balancePromises)
+    }
+  } finally {
+    balancesLoading.value = false
+  }
+}
+
 // Load admin data on mount if admin
 onMounted(async () => {
   console.log('AdminPage mounted, isAdmin:', isAdmin.value)
   await loadData()
+  await loadSidebarConfig()
   // Preload BTC price for final path KRW display
   await fetchBtcPriceKrw()
   // Ensure routing data loads on first enter
@@ -1153,6 +1845,69 @@ watch(() => activeTab.value, async (newTab) => {
     }
   }
 }, { immediate: true })
+
+// Sidebar config functions
+const loadSidebarConfig = async () => {
+  sidebarConfigLoading.value = true
+  try {
+    const result = await apiGetSidebarConfig()
+    if (result.success && result.config) {
+      sidebarConfig.value = result.config
+    }
+  } catch (error) {
+    console.error('Failed to load sidebar config:', error)
+  } finally {
+    sidebarConfigLoading.value = false
+  }
+}
+
+const toggleSidebarItem = async (key) => {
+  if (!isAdmin.value) return
+
+  const updates = {
+    [key]: !sidebarConfig.value[key]
+  }
+
+  try {
+    const result = await apiUpdateSidebarConfig(getCurrentUsername(), updates)
+    if (result.success && result.config) {
+      sidebarConfig.value = result.config
+      showSuccess('사이드바 설정이 업데이트되었습니다')
+      // Trigger event to update App.vue sidebar
+      window.dispatchEvent(new CustomEvent('sidebarConfigUpdated'))
+    } else {
+      showError(result.error || '설정 업데이트 실패')
+    }
+  } catch (error) {
+    showError('설정 업데이트 중 오류 발생')
+    console.error('Failed to update sidebar config:', error)
+  }
+}
+
+// Admin: confirm chain reset
+const confirmAdminReset = async () => {
+  if (!isAdmin.value) { showErrorMessage('관리자만 가능합니다'); return }
+  if (!adminResetPassword.value) { showErrorMessage('비밀번호를 입력하세요'); return }
+  adminResetLoading.value = true
+  try {
+    const res = await fetch((import.meta.env.VITE_API_BASE || '') + '/api/init_reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ token: adminResetPassword.value })
+    })
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    if (res.ok && data?.ok) {
+      showSuccessMessage('초기화가 완료되었습니다')
+    } else {
+      showErrorMessage(data?.error || '초기화 실패')
+    }
+  } catch (_) {
+    showErrorMessage('네트워크 오류')
+  } finally {
+    adminResetLoading.value = false
+  }
+}
 
 // Computed helpers for final path fee calculation
 const sendAmountKRW = computed(() => {

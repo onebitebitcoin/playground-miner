@@ -102,11 +102,12 @@ export async function apiInitReset(token) {
 }
 
 // Mnemonic API functions
-export async function apiRequestMnemonic() {
+export async function apiRequestMnemonic(username) {
   try {
     const res = await fetch(`${BASE_URL}/api/mnemonic/request`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ username })
     })
     if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
     const data = await res.json()
@@ -154,6 +155,146 @@ export async function apiGetAdminMnemonics(username) {
     if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
     const data = await res.json()
     return { success: data.ok, mnemonics: data.mnemonics, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+// Admin: delete mnemonic
+export async function apiDeleteMnemonic(username, id) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/mnemonic/admin/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ username, id })
+    })
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    if (!res.ok) return { success: false, error: data?.error || `서버 오류(${res.status})` }
+    return { success: data.ok, deleted: data.deleted, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+// Admin: unassign a mnemonic by id
+export async function apiUnassignMnemonic(username, id) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/mnemonic/admin/unassign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ username, id })
+    })
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    if (!res.ok) return { success: false, error: data?.error || `서버 오류(${res.status})` }
+    return { success: data.ok, mnemonic: data.mnemonic, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+// Admin: get BIP84 account zpub for a mnemonic id
+export async function apiGetMnemonicZpub(username, id, account = 0) {
+  try {
+    const params = new URLSearchParams({ id: String(id), account: String(account), username })
+    const res = await fetch(`${BASE_URL}/api/mnemonic/admin/xpub?${params.toString()}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    })
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    if (!res.ok) return { success: false, error: data?.error || `서버 오류(${res.status})` }
+    return { success: data.ok, zpub: data.zpub, account: data.account, master_fingerprint: data.master_fingerprint, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+// Admin: get a bech32 BIP84 address for a mnemonic id (default index 0)
+export async function apiGetMnemonicAddress(username, id, { index = 0, account = 0, change = 0 } = {}) {
+  try {
+    const params = new URLSearchParams({ id: String(id), index: String(index), account: String(account), change: String(change), username })
+    const res = await fetch(`${BASE_URL}/api/mnemonic/admin/address?${params.toString()}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    })
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    if (!res.ok) return { success: false, error: data?.error || `서버 오류(${res.status})` }
+    return { success: data.ok, address: data.address, index: data.index, account: data.account, change: data.change, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+// Validate a BIP39 mnemonic (server-side, normalized)
+export async function apiValidateMnemonic(mnemonic) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/mnemonic/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ mnemonic })
+    })
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    if (!res.ok) return { success: false, error: data?.error || `서버 오류(${res.status})`, unknown_words: (data && data.unknown_words) || [] }
+    return { success: data.ok, valid: data.valid, word_count: data.word_count, normalized: data.normalized, unknown_words: data.unknown_words || [], error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+// Mnemonic balance APIs
+export async function apiGetMnemonicBalance(id) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/mnemonic/balance?id=${encodeURIComponent(String(id))}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    })
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    if (!res.ok) return { success: false, error: data?.error || `서버 오류(${res.status})` }
+    return { success: data.ok, id: data.id, balance_sats: data.balance_sats, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiSetMnemonicBalance(username, id, balanceSats) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/mnemonic/admin/balance`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ username, id, balance_sats: balanceSats })
+    })
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    if (!res.ok) return { success: false, error: data?.error || `서버 오류(${res.status})` }
+    return { success: data.ok, mnemonic: data.mnemonic, error: data.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+// On-chain balance via backend derivation + explorer
+export async function apiGetOnchainBalanceById(id, { count = 20, account = 0, change = 0, includeMempool = true } = {}) {
+  try {
+    const params = new URLSearchParams({
+      id: String(id),
+      count: String(count),
+      account: String(account),
+      change: String(change),
+      include_mempool: includeMempool ? '1' : '0',
+    })
+    const res = await fetch(`${BASE_URL}/api/mnemonic/balance/onchain?${params.toString()}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    })
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    if (!res.ok) return { success: false, error: data?.error || `서버 오류(${res.status})` }
+    return { success: data.ok, total_sats: data.total_sats, by_address: data.by_address, count: data.count, error: data.error }
   } catch (e) {
     return { success: false, error: '네트워크 오류' }
   }
@@ -477,6 +618,35 @@ export async function apiResetRoutingFromSnapshot(username) {
     if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
     const data = await res.json()
     return { success: data.ok, data }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiGetSidebarConfig() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/sidebar-config`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, config: data.config }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiUpdateSidebarConfig(username, config) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/sidebar-config/admin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ username, ...config })
+    })
+    if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
+    const data = await res.json()
+    return { success: data.ok, config: data.config }
   } catch (e) {
     return { success: false, error: '네트워크 오류' }
   }
