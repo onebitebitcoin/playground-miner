@@ -25,24 +25,15 @@
           {{ assignedMnemonic }}
         </div>
           <div class="mt-2 flex flex-wrap items-center gap-2">
-            <!-- QR icon button -->
-            <button @click="showQRCode(assignedMnemonic)"
+            <!-- Eye icon button to open details modal -->
+            <button v-if="assignedMnemonicId" @click="openAssignedMnemonicDetail"
                     class="p-1.5 rounded text-gray-700 hover:text-gray-900"
-                    title="QR 코드 보기">
+                    title="자세히 보기">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
               </svg>
-              <span class="sr-only">QR 코드</span>
-            </button>
-            <!-- Copy icon button -->
-            <button @click="copyToClipboard(assignedMnemonic)"
-                    class="p-1.5 rounded text-gray-700 hover:text-gray-900"
-                    title="복사">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <rect x="9" y="7" width="11" height="13" rx="2" ry="2"></rect>
-                <rect x="4" y="4" width="11" height="13" rx="2" ry="2"></rect>
-              </svg>
-              <span class="sr-only">복사</span>
+              <span class="sr-only">자세히 보기</span>
             </button>
             <!-- Refresh balance icon -->
             <button v-if="assignedMnemonicId" @click="refreshAssignedBalance"
@@ -698,6 +689,7 @@ const copyToClipboard = async (text) => {
 
 // Detail modal state (admin-like)
 const showMnemonicDetail = ref(false)
+const detailId = ref(null)
 const detailMnemonic = ref('')
 const detailZpub = ref('')
 const detailMfp = ref('')
@@ -733,6 +725,7 @@ const openWalletMnemonicDetail = async () => {
   if (!id) { showErrorMessage('니모닉 저장 실패'); return }
 
   detailMnemonic.value = text
+  detailId.value = id
   detailZpub.value = ''
   detailMfp.value = ''
   detailAddresses.value = []
@@ -764,9 +757,31 @@ const detailLoadAddresses = async (id) => {
 }
 
 const detailRefreshAddresses = async () => {
-  if (!savedMnemonicId.value) return
+  if (!detailId.value) return
   detailAddressStartIndex.value = Number(detailAddressStartIndex.value || 0) + 10
-  await detailLoadAddresses(savedMnemonicId.value)
+  await detailLoadAddresses(detailId.value)
+}
+
+const openAssignedMnemonicDetail = async () => {
+  if (!assignedMnemonicId.value || !assignedMnemonic.value) return
+  detailId.value = assignedMnemonicId.value
+  detailMnemonic.value = assignedMnemonic.value
+  detailZpub.value = ''
+  detailMfp.value = ''
+  detailAddresses.value = []
+  detailAddressStartIndex.value = 0
+  detailShowMnemonicQr.value = false
+  detailShowZpubQr.value = false
+  showMnemonicDetail.value = true
+
+  try {
+    const res = await apiGetMnemonicZpub(getAdminUsername() || getCurrentUsername(), detailId.value, 0)
+    if (res.success) {
+      detailZpub.value = res.zpub || ''
+      detailMfp.value = res.master_fingerprint || ''
+    }
+  } catch (_) {}
+  try { await detailLoadAddresses(detailId.value) } catch (_) {}
 }
 
 const toggleDetailMnemonicQr = async () => {
