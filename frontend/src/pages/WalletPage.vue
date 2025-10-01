@@ -11,7 +11,7 @@
       <!-- Step 1: Request Existing Mnemonic -->
       <div class="bg-white border border-gray-200 rounded-lg p-6">
         <h2 class="text-xl font-semibold text-gray-900 mb-4">1단계: 기존 니모닉 요청</h2>
-        <p class="text-gray-600 mb-4">서버에 저장된 니모닉을 할당받습니다</p>
+        
 
         <button @click="requestExistingMnemonic"
                 :disabled="loading"
@@ -73,7 +73,6 @@
         <div class="flex items-center justify-between mb-2">
           <div>
             <h2 class="text-xl font-semibold text-gray-900">2단계: 새 니모닉 생성</h2>
-            <p class="text-gray-600">관리자 인터페이스와 동일한 입력 방식</p>
           </div>
           <div class="flex items-center gap-2">
             <!-- Plus: auto-generate and fill 12 words -->
