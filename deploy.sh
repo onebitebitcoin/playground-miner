@@ -490,6 +490,23 @@ sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
 
+# Automatically reapply certbot if SSL certificate exists
+if [ "$USE_SSL" = true ]; then
+  echo "=== Certbot: Reapplying SSL configuration ==="
+  if command -v certbot >/dev/null 2>&1; then
+    echo "Reapplying certbot to maintain SSL configuration..."
+    # Use --keep-until-expiring to avoid unnecessary renewals
+    # Use --non-interactive to avoid prompts
+    # This ensures certbot properly manages the nginx config after deploy.sh overwrites it
+    sudo certbot --nginx -d "$SERVER_NAME" --non-interactive --keep-until-expiring --agree-tos || {
+      echo "⚠️  Certbot reapplication failed. You may need to run manually:"
+      echo "   sudo certbot --nginx -d $SERVER_NAME"
+    }
+  else
+    echo "⚠️  certbot not installed. Install with: sudo apt install certbot python3-certbot-nginx"
+  fi
+fi
+
 echo "=== Verification ==="
 if netstat -tlnp 2>/dev/null | grep -q ":$BACKEND_PORT "; then
   echo "✅ Port $BACKEND_PORT is listening"
