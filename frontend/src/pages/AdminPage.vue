@@ -1675,16 +1675,22 @@ const showMnemonicInAdmin = async (m) => {
 
 const toggleMnemonicQr = async () => {
   showMnemonicQr.value = !showMnemonicQr.value
-  if (showMnemonicQr.value && mnemonicQrContainer.value) {
-    await generateQRCode(mnemonicQrContainer.value, currentDisplayMnemonic.value)
+  if (showMnemonicQr.value) {
+    await nextTick()
+    if (mnemonicQrContainer.value) {
+      await generateQRCode(mnemonicQrContainer.value, currentDisplayMnemonic.value)
+    }
   }
 }
 
 const toggleZpubQr = async () => {
   if (!modalZpub.value) return
   showZpubQr.value = !showZpubQr.value
-  if (showZpubQr.value && zpubQrContainer.value) {
-    await generateQRCode(zpubQrContainer.value, modalZpub.value)
+  if (showZpubQr.value) {
+    await nextTick()
+    if (zpubQrContainer.value) {
+      await generateQRCode(zpubQrContainer.value, modalZpub.value)
+    }
   }
 }
 

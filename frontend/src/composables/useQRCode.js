@@ -22,6 +22,7 @@ export async function generateQRCode(container, text, options = {}) {
     container.appendChild(canvas)
     return true
   } catch (error) {
+    console.error('QR 코드 생성 실패:', error)
     const placeholder = document.createElement('div')
     placeholder.textContent = 'QR 코드 생성 실패'
     placeholder.className = 'text-red-500 text-center p-4'
