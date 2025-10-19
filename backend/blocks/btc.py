@@ -45,22 +45,28 @@ def derive_bip84_addresses(mnemonic: str, account: int = 0, change: int = 0, sta
 def fetch_blockstream_balances(addresses: List[str], base_url: str = None, include_mempool: bool = True, timeout: float = 8.0) -> Dict[str, int]:
     """
     Query Blockstream explorer for balances. Returns sats per address.
+    Uses concurrent requests with rate limiting to speed up lookups.
     """
     import time
+    import concurrent.futures
+    import logging
+
     base = (base_url or os.environ.get('BTC_EXPLORER_API') or 'https://blockstream.info/api').rstrip('/')
     out: Dict[str, int] = {}
     sess = requests.Session()
-    for i, addr in enumerate(addresses):
+    logger = logging.getLogger(__name__)
+
+    def fetch_single_address(addr: str, delay_sec: float) -> tuple:
+        """Fetch balance for a single address with rate limiting delay."""
         try:
-            # Add delay between requests to avoid rate limiting (max 1 req/sec to be safe)
-            if i > 0:
-                time.sleep(1.2)
+            # Add staggered delay to respect rate limits
+            time.sleep(delay_sec)
 
             r = sess.get(f"{base}/address/{addr}", timeout=timeout)
 
             # Handle rate limiting
             if r.status_code == 429:
-                # Wait longer and retry once
+                logger.warning(f"Rate limited on {addr}, retrying after delay...")
                 time.sleep(5)
                 r = sess.get(f"{base}/address/{addr}", timeout=timeout)
 
@@ -71,12 +77,24 @@ def fetch_blockstream_balances(addresses: List[str], base_url: str = None, inclu
             bal = int(c.get('funded_txo_sum', 0)) - int(c.get('spent_txo_sum', 0))
             if include_mempool:
                 bal += int(m.get('funded_txo_sum', 0)) - int(m.get('spent_txo_sum', 0))
-            out[addr] = max(0, bal)
+            return (addr, max(0, bal))
         except Exception as e:
-            # Log the error but continue
-            import logging
-            logging.getLogger(__name__).warning(f"Failed to fetch balance for {addr}: {e}")
-            out[addr] = 0
+            logger.warning(f"Failed to fetch balance for {addr}: {e}")
+            return (addr, 0)
+
+    # Use ThreadPoolExecutor for concurrent requests with staggered delays
+    # Max 5 workers to avoid overwhelming the API
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        # Stagger requests: 0s, 0.3s, 0.6s, 0.9s, 1.2s, etc.
+        futures = {
+            executor.submit(fetch_single_address, addr, i * 0.3): addr
+            for i, addr in enumerate(addresses)
+        }
+
+        for future in concurrent.futures.as_completed(futures):
+            addr, balance = future.result()
+            out[addr] = balance
+
     return out
 
 
