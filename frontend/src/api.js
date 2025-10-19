@@ -278,13 +278,13 @@ export async function apiSetMnemonicBalance(username, id, balanceSats) {
 }
 
 // On-chain balance via backend derivation + explorer
-export async function apiGetOnchainBalanceById(id, { count = 20, account = 0, change = 0, includeMempool = true } = {}) {
+export async function apiGetOnchainBalanceById(id, { count = 20, account = 0, bothChains = true, includeMempool = true } = {}) {
   try {
     const params = new URLSearchParams({
       id: String(id),
       count: String(count),
       account: String(account),
-      change: String(change),
+      both_chains: bothChains ? '1' : '0',
       include_mempool: includeMempool ? '1' : '0',
     })
     const res = await fetch(`${BASE_URL}/api/mnemonic/balance/onchain?${params.toString()}`, {

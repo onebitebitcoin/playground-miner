@@ -1154,38 +1154,39 @@ const showErrorMessage = showError
 
 // On-chain helpers (per mnemonic)
 const fetchOnchain = async (mnemonic) => {
+  const index = adminMnemonics.value.findIndex(m => m.id === mnemonic.id)
+  if (index === -1) return
+
   try {
-    mnemonic._loading_balance = true
-    const res = await apiGetOnchainBalanceById(mnemonic.id, { count: 20 })
+    // Set loading state using array update for better reactivity
+    adminMnemonics.value[index]._loading_balance = true
+
+    const res = await apiGetOnchainBalanceById(mnemonic.id, { count: 20, bothChains: true })
     if (res.success) {
       // 자동 반영: 온체인 잔액을 풀 잔액에 바로 반영
       const total = res.total_sats || 0
-      mnemonic._onchain_total = total
-      mnemonic.balance_sats = total
 
-      // Update in adminMnemonics array to ensure reactivity
-      const index = adminMnemonics.value.findIndex(m => m.id === mnemonic.id)
-      if (index !== -1) {
-        adminMnemonics.value[index].balance_sats = total
-        adminMnemonics.value[index]._onchain_total = total
-      }
+      // Update the array item directly for Vue 3 reactivity
+      adminMnemonics.value[index].balance_sats = total
+      adminMnemonics.value[index]._onchain_total = total
 
       // 서버에도 즉시 업데이트(관리자일 때만)
       const adminUser = getAdminUsername()
       if (adminUser) {
-        try { await apiSetMnemonicBalance(adminUser, mnemonic.id, total) } catch (_) {}
+        try {
+          await apiSetMnemonicBalance(adminUser, mnemonic.id, total)
+        } catch (err) {
+          console.error('Failed to save balance to server:', err)
+        }
       }
     } else {
       showErrorMessage(res.error || '온체인 조회 실패')
     }
-  } catch (_) {}
-  finally {
-    mnemonic._loading_balance = false
-    // Update loading state in adminMnemonics array
-    const index = adminMnemonics.value.findIndex(m => m.id === mnemonic.id)
-    if (index !== -1) {
-      adminMnemonics.value[index]._loading_balance = false
-    }
+  } catch (err) {
+    console.error('Failed to fetch onchain balance:', err)
+    showErrorMessage('잔액 조회 중 오류가 발생했습니다')
+  } finally {
+    adminMnemonics.value[index]._loading_balance = false
   }
 }
 
