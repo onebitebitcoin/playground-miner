@@ -2,7 +2,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Learn from '../pages/learn/Learn.vue'
 import BitcoinMining from '../pages/mining/BitcoinMining.vue'
 import UTXOPage from '../pages/UTXOPage.vue'
-import WalletPage from '../pages/WalletPage.vue'
+import WalletKingstonePage from '../pages/WalletKingstonePage.vue'
+import WalletKingstoneDetailPage from '../pages/WalletKingstoneDetailPage.vue'
 import FeePage from '../pages/FeePage.vue'
 import AdminPage from '../pages/AdminPage.vue'
 import NicknameSetup from '../pages/NicknameSetup.vue'
@@ -43,7 +44,19 @@ const routes = [
   {
     path: '/wallet',
     name: 'wallet',
-    component: WalletPage,
+    redirect: '/wallet/kingstone',
+    meta: { requiresNickname: true }
+  },
+  {
+    path: '/wallet/kingstone',
+    name: 'wallet-kingstone',
+    component: WalletKingstonePage,
+    meta: { requiresNickname: true }
+  },
+  {
+    path: '/wallet/kingstone/:id',
+    name: 'wallet-kingstone-detail',
+    component: WalletKingstoneDetailPage,
     meta: { requiresNickname: true }
   },
   {

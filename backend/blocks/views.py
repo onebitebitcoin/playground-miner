@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models import Max
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from .models import Block, Nickname, Mnemonic, ExchangeRate, WithdrawalFee, LightningService, ServiceNode, Route, RoutingSnapshot, SidebarConfig
+from .models import Block, Nickname, Mnemonic, ExchangeRate, WithdrawalFee, LightningService, ServiceNode, Route, RoutingSnapshot, SidebarConfig, KingstoneWallet
 from django.db import connection
 import hashlib
 from .broadcast import broadcaster
@@ -15,6 +15,7 @@ from mnemonic import Mnemonic as MnemonicValidator
 
 MAX_NONCE = 100000
 DIFFICULTY_BASE = 5000
+KINGSTONE_WALLET_LIMIT = 3
 
 _guest_counter = 0
 _guest_lock = threading.Lock()
@@ -1509,6 +1510,205 @@ def admin_update_sidebar_config_view(request):
 
     config.save()
     return JsonResponse({'ok': True, 'config': config.as_dict()})
+
+
+# Kingstone wallet endpoints
+def _load_json_body(request):
+    try:
+        body = request.body
+    except Exception:
+        body = b''
+
+    if isinstance(body, (bytes, bytearray)):
+        try:
+            raw = body.decode('utf-8')
+        except UnicodeDecodeError:
+            return None
+    else:
+        raw = body
+
+    if isinstance(raw, str):
+        raw = raw.strip()
+
+    if not raw:
+        return {}
+
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+
+@csrf_exempt
+def kingstone_wallets_view(request):
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+
+    username = (request.GET.get('username') or '').strip()
+    if not username:
+        return JsonResponse({'ok': False, 'error': 'username required'}, status=400)
+
+    wallets = KingstoneWallet.objects.filter(username=username).order_by('index', 'created_at')
+    return JsonResponse({
+        'ok': True,
+        'wallets': [w.as_dict() for w in wallets],
+        'count': wallets.count(),
+        'limit': KINGSTONE_WALLET_LIMIT,
+    })
+
+
+@csrf_exempt
+def kingstone_verify_pin_view(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+
+    data = _load_json_body(request)
+    if data is None:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    username = (data.get('username') or '').strip()
+    pin = (str(data.get('pin') or '').strip())
+
+    if not username:
+        return JsonResponse({'ok': False, 'error': 'username required'}, status=400)
+    if not pin:
+        return JsonResponse({'ok': False, 'error': 'pin required'}, status=400)
+
+    wallets = list(KingstoneWallet.objects.filter(username=username))
+    if not wallets:
+        return JsonResponse({'ok': False, 'code': 'no_pins', 'error': '등록된 핀번호가 없습니다. 새 핀번호를 등록하세요.'})
+
+    for wallet in wallets:
+        if wallet.check_pin(pin):
+            return JsonResponse({'ok': True, 'wallet': wallet.as_dict()})
+
+    return JsonResponse({'ok': False, 'code': 'invalid_pin', 'error': '핀번호가 올바르지 않습니다. 새 핀번호를 등록하세요.'})
+
+
+@csrf_exempt
+def kingstone_register_pin_view(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+
+    data = _load_json_body(request)
+    if data is None:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    username = (data.get('username') or '').strip()
+    pin = (str(data.get('pin') or '').strip())
+    requested_name = (data.get('wallet_name') or '').strip()
+    mnemonic_override = (data.get('mnemonic') or '').strip()
+
+    if not username:
+        return JsonResponse({'ok': False, 'error': 'username required'}, status=400)
+    if not pin:
+        return JsonResponse({'ok': False, 'error': 'pin required'}, status=400)
+
+    if not pin.isdigit() or len(pin) != 6:
+        return JsonResponse({'ok': False, 'error': '핀번호는 6자리 숫자여야 합니다.'}, status=400)
+
+    existing_wallets = list(KingstoneWallet.objects.filter(username=username).order_by('index'))
+    if len(existing_wallets) >= KINGSTONE_WALLET_LIMIT:
+        return JsonResponse({'ok': False, 'code': 'limit_reached', 'error': f'핀번호는 최대 {KINGSTONE_WALLET_LIMIT}개까지 등록할 수 있습니다.'}, status=400)
+
+    for wallet in existing_wallets:
+        if wallet.check_pin(pin):
+            return JsonResponse({'ok': False, 'code': 'duplicate_pin', 'error': '이미 등록된 핀번호입니다.'}, status=400)
+
+    used_indexes = {wallet.index for wallet in existing_wallets if wallet.index is not None}
+    next_index = None
+    for candidate in range(1, KINGSTONE_WALLET_LIMIT + 1):
+        if candidate not in used_indexes:
+            next_index = candidate
+            break
+
+    if not next_index:
+        # Fallback just in case
+        next_index = len(existing_wallets) + 1
+
+    wallet_name = requested_name or f"지갑{next_index}"
+
+    wallet = KingstoneWallet(username=username, index=next_index, wallet_name=wallet_name)
+    if mnemonic_override:
+        wallet.mnemonic = mnemonic_override
+    wallet.set_pin(pin)
+    wallet.save()
+
+    return JsonResponse({'ok': True, 'wallet': wallet.as_dict(), 'limit': KINGSTONE_WALLET_LIMIT})
+
+
+@csrf_exempt
+def kingstone_delete_wallet_view(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+
+    data = _load_json_body(request)
+    if data is None:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    username = (data.get('username') or '').strip()
+    wallet_id = (data.get('wallet_id') or '').strip()
+
+    if not username:
+        return JsonResponse({'ok': False, 'error': 'username required'}, status=400)
+    if not wallet_id:
+        return JsonResponse({'ok': False, 'error': 'wallet_id required'}, status=400)
+
+    try:
+        wallet = KingstoneWallet.objects.get(username=username, wallet_id=wallet_id)
+        wallet.delete()
+        return JsonResponse({'ok': True, 'message': '지갑이 삭제되었습니다'})
+    except KingstoneWallet.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': '지갑을 찾을 수 없습니다'}, status=404)
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': f'삭제 실패: {str(e)}'}, status=500)
+
+
+@csrf_exempt
+def kingstone_wallet_address_view(request):
+    """Get BIP84 address for a Kingstone wallet by wallet_id and index."""
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+
+    username = (request.GET.get('username') or '').strip()
+    wallet_id = (request.GET.get('wallet_id') or '').strip()
+
+    if not username:
+        return JsonResponse({'ok': False, 'error': 'username required'}, status=400)
+    if not wallet_id:
+        return JsonResponse({'ok': False, 'error': 'wallet_id required'}, status=400)
+
+    try:
+        index = max(0, int(request.GET.get('index', '0')))
+    except Exception:
+        index = 0
+    try:
+        account = max(0, int(request.GET.get('account', '0')))
+    except Exception:
+        account = 0
+    try:
+        change = max(0, int(request.GET.get('change', '0')))
+    except Exception:
+        change = 0
+
+    try:
+        wallet = KingstoneWallet.objects.get(username=username, wallet_id=wallet_id)
+    except KingstoneWallet.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': '지갑을 찾을 수 없습니다'}, status=404)
+
+    if not wallet.mnemonic:
+        return JsonResponse({'ok': False, 'error': '지갑에 니모닉이 없습니다'}, status=400)
+
+    try:
+        addresses = derive_bip84_addresses(wallet.mnemonic, account=account, change=change, start=index, count=1)
+        if not addresses:
+            return JsonResponse({'ok': False, 'error': 'address derivation failed'}, status=500)
+        return JsonResponse({'ok': True, 'address': addresses[0], 'index': index, 'account': account, 'change': change})
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error deriving address for wallet {wallet_id}: {e}")
+        return JsonResponse({'ok': False, 'error': f'address derivation failed: {e}'}, status=400)
 
 
 # Wallet password endpoints

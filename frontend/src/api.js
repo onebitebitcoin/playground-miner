@@ -377,6 +377,104 @@ export async function apiGetWalletPassword() {
   }
 }
 
+// Kingstone wallet APIs
+export async function apiGetKingstoneWallets(username) {
+  try {
+    const params = new URLSearchParams({ username })
+    const res = await fetch(`${BASE_URL}/api/kingstone/wallets?${params.toString()}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    })
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    if (!res.ok) return { success: false, error: data?.error || `서버 오류(${res.status})` }
+    return {
+      success: data?.ok ?? false,
+      wallets: data?.wallets || [],
+      count: data?.count ?? 0,
+      limit: data?.limit ?? 3,
+      error: data?.error
+    }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiVerifyKingstonePin(username, pin) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/kingstone/pin/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ username, pin })
+    })
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    if (!res.ok) return { success: false, error: data?.error || `서버 오류(${res.status})`, code: data?.code }
+    return {
+      success: data?.ok ?? false,
+      wallet: data?.wallet || null,
+      error: data?.error,
+      code: data?.code
+    }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiRegisterKingstonePin(username, pin, { walletName = '', mnemonic = '' } = {}) {
+  try {
+    const payload = { username, pin }
+    if (walletName) payload.wallet_name = walletName
+    if (mnemonic) payload.mnemonic = mnemonic
+    const res = await fetch(`${BASE_URL}/api/kingstone/pin/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    if (!res.ok) return { success: false, error: data?.error || `서버 오류(${res.status})`, code: data?.code }
+    return {
+      success: data?.ok ?? false,
+      wallet: data?.wallet || null,
+      limit: data?.limit ?? 3,
+      error: data?.error,
+      code: data?.code
+    }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiGetKingstoneWalletAddress(username, walletId, { index = 0, account = 0, change = 0 } = {}) {
+  try {
+    const params = new URLSearchParams({
+      username,
+      wallet_id: walletId,
+      index: String(index),
+      account: String(account),
+      change: String(change)
+    })
+    const res = await fetch(`${BASE_URL}/api/kingstone/wallet/address?${params.toString()}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    })
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    if (!res.ok) return { success: false, error: data?.error || `서버 오류(${res.status})` }
+    return {
+      success: data?.ok ?? false,
+      address: data?.address || '',
+      index: data?.index ?? 0,
+      account: data?.account ?? 0,
+      change: data?.change ?? 0,
+      error: data?.error
+    }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
 export async function apiUpdateExchangeRate(username, exchange, feeRate, isEvent, description, eventDetails = '') {
   try {
     const res = await fetch(`${BASE_URL}/api/exchange-rates/admin`, {

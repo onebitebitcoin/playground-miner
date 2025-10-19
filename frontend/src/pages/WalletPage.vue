@@ -1,5 +1,7 @@
 <template>
   <div class="max-w-4xl mx-auto">
+    <WalletMenuTabs active="kingstone" />
+
     <!-- Password Gate -->
     <div v-if="!walletUnlocked" class="bg-white border border-gray-200 rounded-lg p-6 max-w-md mx-auto mt-6">
       <h2 class="text-xl font-semibold text-gray-900 mb-3">지갑 비밀번호</h2>
@@ -343,8 +345,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import QRCode from 'qrcode'
+import WalletMenuTabs from '../components/WalletMenuTabs.vue'
 import {
   apiRequestMnemonic,
   apiGenerateMnemonic,
@@ -395,7 +398,8 @@ const savedBalanceLoading = ref(false)
 // Computed for valid mnemonic input
 const isValidMnemonicInput = computed(() => {
   const words = mnemonicWords.value.filter(w => w.trim().length > 0)
-  return words.length === 12 || (manualMnemonicText.value.trim().split(/\s+/).length === 12)
+  // Must have exactly 12 words and pass validation
+  return words.length === 12 && walletMnemonicValidity.value === true
 })
 
 
@@ -413,23 +417,10 @@ const getAdminUsername = () => {
   return nickname === 'admin' && adminStatus === 'true' ? 'admin' : ''
 }
 
-// Mnemonic validation
-const validateMnemonic = (mnemonic) => {
-  const words = mnemonic.trim().split(/\s+/)
-  if (words.length !== 12) {
-    return '니모닉은 정확히 12개의 단어로 구성되어야 합니다'
-  }
-
-  for (const word of words) {
-    if (!/^[a-z]+$/.test(word)) {
-      return '모든 단어는 영어 소문자여야 합니다'
-    }
-  }
-
-  return null
-}
-
 // Removed generation mode/tabs; using single admin-like interface
+
+// Auto-validation debounce timer
+let validationTimer = null
 
 // Manual mnemonic input handling
 const updateManualMnemonic = () => {
@@ -437,9 +428,10 @@ const updateManualMnemonic = () => {
   manualMnemonic.value = words.join(' ')
   manualMnemonicText.value = mnemonicWords.value.join(' ').trim()
 
-  // Auto-validate when 12 words are entered
+  // Debounced auto-validate when 12 words are entered
+  if (validationTimer) clearTimeout(validationTimer)
   if (words.length === 12) {
-    checkWalletMnemonic()
+    validationTimer = setTimeout(() => checkWalletMnemonic(), 500)
   } else {
     walletMnemonicValidity.value = null
     walletMnemonicWordCount.value = 0
@@ -455,9 +447,10 @@ const updateFromTextarea = () => {
 
   manualMnemonic.value = words.slice(0, 12).join(' ')
 
-  // Auto-validate when 12 words are entered
+  // Debounced auto-validate when 12 words are entered
+  if (validationTimer) clearTimeout(validationTimer)
   if (words.length === 12) {
-    checkWalletMnemonic()
+    validationTimer = setTimeout(() => checkWalletMnemonic(), 500)
   } else {
     walletMnemonicValidity.value = null
     walletMnemonicWordCount.value = 0
@@ -528,9 +521,11 @@ const saveManualMnemonic = async () => {
   mnemonicError.value = ''
 
   const finalMnemonic = manualMnemonicText.value.trim() || mnemonicWords.value.join(' ').trim()
-  const error = validateMnemonic(finalMnemonic)
-  if (error) {
-    mnemonicError.value = error
+
+  // Validate that we have exactly 12 words
+  const words = finalMnemonic.split(/\s+/).filter(w => w.length > 0)
+  if (words.length !== 12) {
+    mnemonicError.value = '니모닉은 정확히 12개의 단어로 구성되어야 합니다'
     return
   }
 
@@ -562,7 +557,9 @@ const fetchAssignedBalance = async () => {
     if (!assignedMnemonicId.value) return
     const res = await apiGetMnemonicBalance(assignedMnemonicId.value)
     if (res.success) assignedBalanceSats.value = res.balance_sats
-  } catch (_) {}
+  } catch (error) {
+    console.error('Failed to fetch assigned balance:', error)
+  }
 }
 
 const fetchSavedBalance = async () => {
@@ -570,7 +567,9 @@ const fetchSavedBalance = async () => {
     if (!savedMnemonicId.value) return
     const res = await apiGetMnemonicBalance(savedMnemonicId.value)
     if (res.success) savedBalanceSats.value = res.balance_sats
-  } catch (_) {}
+  } catch (error) {
+    console.error('Failed to fetch saved balance:', error)
+  }
 }
 
 const formatBtc = (sats) => {
@@ -595,7 +594,9 @@ const refreshAssignedBalance = async () => {
       try {
         const username = getAdminUsername() || getCurrentUsername()
         await apiSetMnemonicBalance(username, assignedMnemonicId.value, total)
-      } catch (_) { /* ignore update errors */ }
+      } catch (error) {
+        console.error('Failed to update stored balance:', error)
+      }
     } else {
       showErrorMessage(res.error || '온체인 잔액 조회 실패')
     }
@@ -625,7 +626,10 @@ const showQRCode = async (mnemonic) => {
   await nextTick()
 
   if (qrCodeContainer.value) {
-    qrCodeContainer.value.innerHTML = ''
+    // Clear previous content properly
+    while (qrCodeContainer.value.firstChild) {
+      qrCodeContainer.value.removeChild(qrCodeContainer.value.firstChild)
+    }
 
     try {
       const canvas = await QRCode.toCanvas(mnemonic, {
@@ -638,6 +642,7 @@ const showQRCode = async (mnemonic) => {
       })
       qrCodeContainer.value.appendChild(canvas)
     } catch (error) {
+      console.error('Failed to generate QR code:', error)
       const placeholder = document.createElement('div')
       placeholder.className = 'text-red-500 text-center p-4'
       placeholder.textContent = 'QR 코드 생성 실패'
@@ -682,7 +687,9 @@ const ensureSavedIdForCurrentMnemonic = async () => {
       savedMnemonicId.value = res.id || null
       return savedMnemonicId.value
     }
-  } catch (_) {}
+  } catch (error) {
+    console.error('Failed to save mnemonic for detail view:', error)
+  }
   return null
 }
 
@@ -710,8 +717,14 @@ const openWalletMnemonicDetail = async () => {
       detailZpub.value = res.zpub || ''
       detailMfp.value = res.master_fingerprint || ''
     }
-  } catch (_) {}
-  try { await detailLoadAddresses(id) } catch (_) {}
+  } catch (error) {
+    console.error('Failed to load zpub:', error)
+  }
+  try {
+    await detailLoadAddresses(id)
+  } catch (error) {
+    console.error('Failed to load addresses:', error)
+  }
 }
 
 const detailLoadAddresses = async (id) => {
@@ -750,19 +763,30 @@ const openAssignedMnemonicDetail = async () => {
       detailZpub.value = res.zpub || ''
       detailMfp.value = res.master_fingerprint || ''
     }
-  } catch (_) {}
-  try { await detailLoadAddresses(detailId.value) } catch (_) {}
+  } catch (error) {
+    console.error('Failed to load zpub for assigned mnemonic:', error)
+  }
+  try {
+    await detailLoadAddresses(detailId.value)
+  } catch (error) {
+    console.error('Failed to load addresses for assigned mnemonic:', error)
+  }
 }
 
 const toggleDetailMnemonicQr = async () => {
   detailShowMnemonicQr.value = !detailShowMnemonicQr.value
   await nextTick()
   if (detailShowMnemonicQr.value && detailMnemonicQrContainer.value) {
-    detailMnemonicQrContainer.value.innerHTML = ''
+    // Clear previous content properly
+    while (detailMnemonicQrContainer.value.firstChild) {
+      detailMnemonicQrContainer.value.removeChild(detailMnemonicQrContainer.value.firstChild)
+    }
     try {
       const canvas = await QRCode.toCanvas(detailMnemonic.value, { width: 200, margin: 2, color: { dark: '#000000', light: '#FFFFFF' } })
       detailMnemonicQrContainer.value.appendChild(canvas)
-    } catch (_) {}
+    } catch (error) {
+      console.error('Failed to generate QR code for mnemonic:', error)
+    }
   }
 }
 
@@ -771,17 +795,23 @@ const toggleDetailZpubQr = async () => {
   detailShowZpubQr.value = !detailShowZpubQr.value
   await nextTick()
   if (detailShowZpubQr.value && detailZpubQrContainer.value) {
-    detailZpubQrContainer.value.innerHTML = ''
+    // Clear previous content properly
+    while (detailZpubQrContainer.value.firstChild) {
+      detailZpubQrContainer.value.removeChild(detailZpubQrContainer.value.firstChild)
+    }
     try {
       const canvas = await QRCode.toCanvas(detailZpub.value, { width: 200, margin: 2, color: { dark: '#000000', light: '#FFFFFF' } })
       detailZpubQrContainer.value.appendChild(canvas)
-    } catch (_) {}
+    } catch (error) {
+      console.error('Failed to generate QR code for zpub:', error)
+    }
   }
 }
 
 const copyDetailMnemonic = async () => { await copyToClipboard(detailMnemonic.value) }
 const copyDetailZpub = async () => { if (detailZpub.value) await copyToClipboard(detailZpub.value) }
 const copyDetailMfp = async () => { if (detailMfp.value) await copyToClipboard(detailMfp.value) }
+const copyAddressString = async (address) => { if (address) await copyToClipboard(address) }
 // Admin-like helpers for Step 2
 const generateAndFillWalletMnemonic = async () => {
   try {
@@ -855,11 +885,11 @@ const showErrorMessage = (message) => {
 
 const checkWalletMnemonic = async () => {
   const text = (manualMnemonicText.value || mnemonicWords.value.join(' ')).trim()
-  if (!text) { 
-    walletMnemonicValidity.value = null; 
-    walletMnemonicWordCount.value = 0; 
+  if (!text) {
+    walletMnemonicValidity.value = null;
+    walletMnemonicWordCount.value = 0;
     showErrorMessage('니모닉을 입력하세요')
-    return 
+    return
   }
   const res = await apiValidateMnemonic(text)
   if (res.success) {
@@ -890,4 +920,12 @@ const checkWalletMnemonic = async () => {
     showErrorMessage(msg)
   }
 }
+
+// Cleanup on unmount
+onUnmounted(() => {
+  if (validationTimer) {
+    clearTimeout(validationTimer)
+    validationTimer = null
+  }
+})
 </script>

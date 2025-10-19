@@ -67,7 +67,7 @@
     <!-- Main app with sidebar -->
     <div v-else class="flex flex-1 min-h-0">
       <!-- Sidebar -->
-      <div class="hidden md:flex md:flex-col md:h-full md:flex-shrink-0">
+      <div class="hidden md:flex md:flex-col md:h-full md:flex-shrink-0 md:min-h-0">
         <Sidebar
           :items="menuItems"
           :active="currentRouteName"
@@ -152,7 +152,11 @@ const menuItems = computed(() => {
 })
 
 // Computed properties for routing
-const currentRouteName = computed(() => route.name || 'mining')
+const currentRouteName = computed(() => {
+  const name = route.name || 'mining'
+  if (name === 'wallet-kingstone' || name === 'wallet-kingstone-detail') return 'wallet'
+  return name
+})
 const isNicknameSetup = computed(() => route.name === 'nickname')
 
 // Mobile menu state

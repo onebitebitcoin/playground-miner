@@ -1,6 +1,6 @@
 <template>
-  <aside class="w-64 h-full bg-white border-r border-gray-200 px-6 py-8">
-    <nav class="space-y-1">
+  <aside class="w-64 h-full bg-white border-r border-gray-200 px-6 py-8 flex flex-col overflow-y-auto min-h-0">
+    <nav class="space-y-1 flex-1">
       <button
         v-for="item in items"
         :key="item.key"

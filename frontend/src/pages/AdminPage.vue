@@ -455,30 +455,63 @@
                 </div>
                 <!-- Final combined paths -->
                 <div v-else>
-                    <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-semibold text-gray-900">최종 경로(조합) <span class="text-sm text-gray-500">({{ sortedOptimalPaths.length }}개)</span></h3>
-                    <div class="flex items-center gap-3">
-                      <div class="flex items-center gap-1">
+                    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">
+                      최종 경로(조합)
+                      <span class="text-sm text-gray-500">({{ sortedOptimalPaths.length }}개)</span>
+                    </h3>
+                    <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                      <div class="flex flex-col sm:flex-row sm:items-center sm:gap-2 w-full sm:w-auto">
                         <label class="text-sm text-gray-700">송금 금액</label>
-                        <input v-model.number="sendAmountInput" type="number" min="0" step="1" placeholder="예: 100"
-                               class="w-28 px-2 py-1 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                        <select v-model="sendUnit" class="px-2 py-1 border border-gray-300 rounded bg-white text-sm">
-                          <option value="1">원</option>
-                          <option value="10000">만원</option>
-                          <option value="100000000">억원</option>
-                        </select>
+                        <div class="flex items-center gap-2 w-full sm:w-auto">
+                          <input
+                            v-model.number="sendAmountInput"
+                            type="number"
+                            min="0"
+                            step="1"
+                            placeholder="예: 100"
+                            class="w-full sm:w-24 md:w-28 px-2 py-1 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                          />
+                          <select
+                            v-model="sendUnit"
+                            class="w-full sm:w-auto px-2 py-1 border border-gray-300 rounded bg-white text-sm"
+                          >
+                            <option value="1">원</option>
+                            <option value="10000">만원</option>
+                            <option value="100000000">억원</option>
+                          </select>
+                        </div>
                       </div>
-                      <label class="text-sm text-gray-700">BTC 가격(KRW)</label>
-                      <span class="text-sm font-semibold text-gray-900">{{ btcPriceKrw ? formatKRW(btcPriceKrw) : '불러오는 중...' }}</span>
-                      <button @click="fetchBtcPriceKrw" class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded">가격 새로고침</button>
-                      <button @click="loadOptimalPaths" :disabled="optimalLoading" class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">{{ optimalLoading ? '계산 중...' : '다시 계산' }}</button>
+                      <div class="flex items-center justify-between sm:justify-start gap-2 text-sm w-full sm:w-auto">
+                        <span class="text-gray-700">BTC 가격(KRW)</span>
+                        <span class="font-semibold text-gray-900">{{ btcPriceKrw ? formatKRW(btcPriceKrw) : '불러오는 중...' }}</span>
+                      </div>
+                      <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                        <button
+                          @click="fetchBtcPriceKrw"
+                          class="w-full sm:w-auto px-2 py-2 text-xs sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded"
+                        >
+                          가격 새로고침
+                        </button>
+                        <button
+                          @click="loadOptimalPaths"
+                          :disabled="optimalLoading"
+                          class="w-full sm:w-auto px-3 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {{ optimalLoading ? '계산 중...' : '다시 계산' }}
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <div v-if="optimalError" class="p-3 bg-red-50 border border-red-200 rounded text-red-700 mb-3">{{ optimalError }}</div>
                   <div v-if="optimalPaths.length === 0 && !optimalLoading" class="text-gray-500 text-sm">경로가 없습니다. 상단에서 경로를 추가한 뒤 다시 계산하세요.</div>
                   <div class="space-y-4" v-else>
-                    <div v-for="(path, idx) in sortedOptimalPaths" :key="path.path_signature || idx" class="border border-gray-200 rounded p-4">
-                    <div class="flex items-center justify-between mb-2">
+                    <div
+                      v-for="(path, idx) in sortedOptimalPaths"
+                      :key="path.path_signature || idx"
+                      class="border border-gray-200 rounded p-4"
+                    >
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
                       <div class="font-medium text-gray-900">경로 #{{ idx + 1 }}</div>
                       <div class="text-sm text-gray-600">
                         총 비율 수수료: <span class="font-semibold">{{ computePathFees(path.routes).rate.toFixed(4) }}%</span>
@@ -491,7 +524,7 @@
                         </template>
                       </div>
                     </div>
-                    <div class="flex flex-wrap items-center text-sm">
+                    <div class="flex flex-wrap items-center gap-1 text-sm">
                       <template v-for="(r, i) in path.routes" :key="i">
                         <span class="px-2 py-1 bg-blue-50 text-blue-800 rounded">{{ r.source.display_name }}</span>
                         <svg class="w-4 h-4 mx-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>

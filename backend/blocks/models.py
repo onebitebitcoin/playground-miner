@@ -1,6 +1,9 @@
 from django.db import models
+from django.contrib.auth.hashers import make_password, check_password
 from .encryption import encrypt_mnemonic, decrypt_mnemonic, is_encrypted_mnemonic
 import logging
+import uuid
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +98,82 @@ class Mnemonic(models.Model):
             'balance_sats': int(self.balance_sats or 0),
             'created_at': self.created_at.isoformat(),
         }
+
+
+class KingstoneWallet(models.Model):
+    """PIN-protected Kingstone wallets mapped per user"""
+
+    username = models.CharField(max_length=64)
+    pin_hash = models.CharField(max_length=256)
+    wallet_id = models.CharField(max_length=64, unique=True)
+    wallet_name = models.CharField(max_length=64)
+    index = models.PositiveSmallIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    mnemonic = models.CharField(max_length=512, blank=True, default='')
+
+    class Meta:
+        unique_together = (
+            ('username', 'index'),
+        )
+        indexes = [
+            models.Index(fields=['username']),
+        ]
+
+    def set_pin(self, pin: str):
+        if not pin:
+            raise ValueError('PIN must not be empty')
+        self.pin_hash = make_password(pin)
+
+    def check_pin(self, pin: str) -> bool:
+        if not self.pin_hash:
+            return False
+        return check_password(pin, self.pin_hash)
+
+    def ensure_defaults(self):
+        """Ensure wallet_id and wallet_name are populated before saving."""
+        if not self.wallet_id:
+            self.wallet_id = uuid.uuid4().hex
+        if not self.wallet_name:
+            self.wallet_name = f"지갑{self.index}"
+        if not self.mnemonic:
+            self.mnemonic = self.generate_mock_mnemonic()
+
+    def save(self, *args, **kwargs):
+        self.ensure_defaults()
+        super().save(*args, **kwargs)
+
+    def as_dict(self):
+        from .btc import derive_bip84_account_zpub
+        zpub = None
+        try:
+            if self.mnemonic:
+                zpub = derive_bip84_account_zpub(self.mnemonic, account=0)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to derive zpub for wallet {self.wallet_id}: {e}")
+
+        return {
+            'id': self.id,
+            'username': self.username,
+            'wallet_id': self.wallet_id,
+            'wallet_name': self.wallet_name,
+            'index': self.index,
+            'created_at': self.created_at.isoformat(),
+            'mnemonic': self.mnemonic,
+            'zpub': zpub,
+        }
+
+    @staticmethod
+    def generate_mock_mnemonic(word_count: int = 12) -> str:
+        words = [
+            'apple', 'balance', 'candle', 'delta', 'ember', 'forest', 'globe', 'harbor',
+            'island', 'jungle', 'king', 'lantern', 'magnet', 'nebula', 'ocean', 'prairie',
+            'quantum', 'rocket', 'saturn', 'timber', 'utopia', 'victory', 'willow', 'zenith'
+        ]
+        if not words:
+            return uuid.uuid4().hex
+        return ' '.join(random.choice(words) for _ in range(max(1, word_count)))
 
 
 class ExchangeRate(models.Model):

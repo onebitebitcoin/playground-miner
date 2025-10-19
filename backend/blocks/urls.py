@@ -40,6 +40,12 @@ urlpatterns = [
     # Sidebar config endpoints
     path('sidebar-config', views.sidebar_config_view, name='sidebar_config'),
     path('sidebar-config/admin', views.admin_update_sidebar_config_view, name='admin_sidebar_config'),
+    # Kingstone wallet endpoints
+    path('kingstone/wallets', views.kingstone_wallets_view, name='kingstone_wallets'),
+    path('kingstone/pin/verify', views.kingstone_verify_pin_view, name='kingstone_verify_pin'),
+    path('kingstone/pin/register', views.kingstone_register_pin_view, name='kingstone_register_pin'),
+    path('kingstone/wallet/delete', views.kingstone_delete_wallet_view, name='kingstone_delete_wallet'),
+    path('kingstone/wallet/address', views.kingstone_wallet_address_view, name='kingstone_wallet_address'),
     # Wallet password
     path('wallet/password/admin', views.admin_set_wallet_password_view, name='admin_set_wallet_password'),
     path('wallet/password/check', views.wallet_password_check_view, name='wallet_password_check'),
