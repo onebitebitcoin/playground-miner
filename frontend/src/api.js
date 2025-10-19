@@ -293,10 +293,31 @@ export async function apiGetOnchainBalanceById(id, { count = 20, account = 0, bo
     })
     let data = null
     try { data = await res.json() } catch (_) {}
-    if (!res.ok) return { success: false, error: data?.error || `서버 오류(${res.status})` }
+
+    // Handle specific HTTP status codes
+    if (!res.ok) {
+      const errorMsg = data?.error || `서버 오류(${res.status})`
+      const errorType = data?.error_type || 'unknown'
+
+      // Provide more context for specific errors
+      if (res.status === 429 || errorType === 'rate_limit') {
+        return { success: false, error: errorMsg, error_type: 'rate_limit', status: res.status }
+      } else if (res.status === 504 || errorType === 'timeout') {
+        return { success: false, error: errorMsg, error_type: 'timeout', status: res.status }
+      } else if (res.status === 502 || res.status === 503 || errorType === 'service_unavailable') {
+        return { success: false, error: errorMsg, error_type: 'service_unavailable', status: res.status }
+      }
+
+      return { success: false, error: errorMsg, error_type: errorType, status: res.status }
+    }
+
     return { success: data.ok, total_sats: data.total_sats, by_address: data.by_address, count: data.count, error: data.error }
   } catch (e) {
-    return { success: false, error: '네트워크 오류' }
+    // Network or fetch errors
+    if (e.name === 'TypeError' && e.message.includes('fetch')) {
+      return { success: false, error: '네트워크 연결 실패', error_type: 'network' }
+    }
+    return { success: false, error: e.message || '네트워크 오류', error_type: 'network' }
   }
 }
 

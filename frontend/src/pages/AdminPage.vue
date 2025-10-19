@@ -218,7 +218,14 @@
                       </div>
                       <span class="text-xs text-gray-500 block mb-1">{{ formatDate(mnemonic.created_at) }}</span>
                       <div class="text-xs md:text-sm text-gray-700 flex flex-wrap items-center gap-1">
-                        <span v-if="mnemonic._loading_balance">조회중...</span>
+                        <span v-if="mnemonic._loading_balance" class="text-blue-600">조회중...</span>
+                        <span v-else-if="mnemonic._balance_error" class="flex items-center gap-1 text-red-600">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span class="font-medium">조회 실패</span>
+                          <span class="text-xs text-red-500" :title="mnemonic._balance_error_detail">({{ mnemonic._balance_error }})</span>
+                        </span>
                         <span v-else class="flex flex-wrap items-center gap-1">
                           <span class="font-medium">{{ Number(mnemonic.balance_sats || 0).toLocaleString() }} sats</span>
                           <span class="text-gray-500 text-xs">({{ formatBtc(mnemonic.balance_sats) }})</span>
@@ -1158,8 +1165,10 @@ const fetchOnchain = async (mnemonic) => {
   if (index === -1) return
 
   try {
-    // Set loading state using array update for better reactivity
+    // Set loading state and clear previous errors
     adminMnemonics.value[index]._loading_balance = true
+    adminMnemonics.value[index]._balance_error = null
+    adminMnemonics.value[index]._balance_error_detail = null
 
     const res = await apiGetOnchainBalanceById(mnemonic.id, { count: 20, bothChains: true })
     if (res.success) {
@@ -1180,11 +1189,31 @@ const fetchOnchain = async (mnemonic) => {
         }
       }
     } else {
-      showErrorMessage(res.error || '온체인 조회 실패')
+      // Set error state on the mnemonic object based on error type
+      const errorMsg = res.error || '온체인 조회 실패'
+      let errorType = 'API 오류'
+
+      if (res.error_type === 'rate_limit') {
+        errorType = 'API 제한'
+      } else if (res.error_type === 'timeout') {
+        errorType = '시간 초과'
+      } else if (res.error_type === 'service_unavailable') {
+        errorType = '서비스 불가'
+      } else if (res.error_type === 'network') {
+        errorType = '네트워크 오류'
+      }
+
+      adminMnemonics.value[index]._balance_error = errorType
+      adminMnemonics.value[index]._balance_error_detail = errorMsg
+      showErrorMessage(errorMsg)
     }
   } catch (err) {
-    console.error('Failed to fetch onchain balance:', err)
-    showErrorMessage('잔액 조회 중 오류가 발생했습니다')
+    // Unexpected errors that weren't caught by API layer
+    console.error('Unexpected error fetching onchain balance:', err)
+
+    adminMnemonics.value[index]._balance_error = '예기치 않은 오류'
+    adminMnemonics.value[index]._balance_error_detail = err.message || '잔액 조회 중 예기치 않은 오류가 발생했습니다'
+    showErrorMessage('잔액 조회 중 예기치 않은 오류가 발생했습니다')
   } finally {
     adminMnemonics.value[index]._loading_balance = false
   }

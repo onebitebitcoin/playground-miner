@@ -446,7 +446,36 @@ def mnemonic_onchain_balance_view(request):
         by_addr = fetch_blockstream_balances(all_addresses, include_mempool=include_mempool)
         total = calc_total_sats(by_addr)
     except Exception as e:
-        return JsonResponse({'ok': False, 'error': f'explorer failed: {e}'}, status=502)
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Balance fetch failed for mnemonic {mid}: {e}")
+
+        # Provide more specific error messages
+        error_msg = str(e)
+        if '429' in error_msg or 'rate limit' in error_msg.lower():
+            return JsonResponse({
+                'ok': False,
+                'error': 'API 호출 제한에 도달했습니다. 잠시 후 다시 시도해주세요.',
+                'error_type': 'rate_limit'
+            }, status=429)
+        elif 'timeout' in error_msg.lower():
+            return JsonResponse({
+                'ok': False,
+                'error': 'Blockstream API 요청 시간이 초과되었습니다.',
+                'error_type': 'timeout'
+            }, status=504)
+        elif '502' in error_msg or '503' in error_msg:
+            return JsonResponse({
+                'ok': False,
+                'error': 'Blockstream API 서버가 일시적으로 응답하지 않습니다.',
+                'error_type': 'service_unavailable'
+            }, status=502)
+        else:
+            return JsonResponse({
+                'ok': False,
+                'error': f'블록체인 탐색기 오류: {e}',
+                'error_type': 'explorer_error'
+            }, status=502)
 
     return JsonResponse({
         'ok': True,
