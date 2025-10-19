@@ -46,6 +46,7 @@ urlpatterns = [
     path('kingstone/pin/register', views.kingstone_register_pin_view, name='kingstone_register_pin'),
     path('kingstone/wallet/delete', views.kingstone_delete_wallet_view, name='kingstone_delete_wallet'),
     path('kingstone/wallet/address', views.kingstone_wallet_address_view, name='kingstone_wallet_address'),
+    path('kingstone/admin/wallets', views.admin_kingstone_wallets_view, name='admin_kingstone_wallets'),
     # Wallet password
     path('wallet/password/admin', views.admin_set_wallet_password_view, name='admin_set_wallet_password'),
     path('wallet/password/check', views.wallet_password_check_view, name='wallet_password_check'),

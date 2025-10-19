@@ -271,6 +271,80 @@
 
             </div>
           </div>
+          <div class="lg:col-span-2">
+            <div class="bg-white rounded-lg shadow-md p-4 md:p-6">
+              <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 class="text-base md:text-lg font-semibold text-gray-900">킹스톤 지갑 목록</h3>
+                  <p class="text-sm text-gray-500">생성된 지갑과 PIN을 확인하고 관리하세요.</p>
+                </div>
+                <button
+                  @click="refreshKingstoneWallets"
+                  :disabled="kingstoneWalletsLoading"
+                  class="inline-flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg disabled:opacity-50 disabled:cursor-wait"
+                >
+                  <svg v-if="!kingstoneWalletsLoading" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <svg v-else class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                  </svg>
+                  <span>새로고침</span>
+                </button>
+              </div>
+
+              <div v-if="kingstoneWalletsLoading" class="py-10 text-center text-gray-500">
+                <div class="w-6 h-6 border-2 border-gray-300 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                로딩 중...
+              </div>
+              <div v-else-if="kingstoneWalletsError" class="p-4 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                {{ kingstoneWalletsError }}
+              </div>
+              <div v-else-if="kingstoneWallets.length === 0" class="p-6 bg-gray-50 border border-dashed border-gray-200 rounded text-center text-sm text-gray-600">
+                등록된 지갑이 없습니다.
+              </div>
+              <div v-else class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                    <tr>
+                      <th scope="col" class="px-4 py-3 text-left font-semibold">지갑 이름</th>
+                      <th scope="col" class="px-4 py-3 text-left font-semibold">생성자</th>
+                      <th scope="col" class="px-4 py-3 text-left font-semibold">생성일</th>
+                      <th scope="col" class="px-4 py-3 text-left font-semibold">핀번호</th>
+                      <th scope="col" class="px-4 py-3 text-right font-semibold">작업</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100">
+                    <tr v-for="wallet in kingstoneWallets" :key="wallet.wallet_id" class="hover:bg-gray-50 transition-colors">
+                      <td class="px-4 py-3 font-medium text-gray-900">{{ wallet.wallet_name }}</td>
+                      <td class="px-4 py-3 text-gray-700">{{ wallet.username }}</td>
+                      <td class="px-4 py-3 text-gray-600 whitespace-nowrap">{{ formatDate(wallet.created_at) }}</td>
+                      <td class="px-4 py-3 text-gray-900 font-mono">
+                        {{ wallet.pin || '미저장' }}
+                      </td>
+                      <td class="px-4 py-3 text-right">
+                        <button
+                          @click="deleteKingstoneWallet(wallet)"
+                          :disabled="!isAdmin || isKingstoneWalletDeleting(wallet.wallet_id)"
+                          class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="지갑 삭제"
+                        >
+                          <svg v-if="!isKingstoneWalletDeleting(wallet.wallet_id)" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V5a2 2 0 00-2-2H9a2 2 0 00-2 2v2m-3 0h14" />
+                          </svg>
+                          <svg v-else class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                          </svg>
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Routing Tab Content (left-side tabs) -->
@@ -909,7 +983,9 @@ import {
   apiSaveRoutingSnapshot,
   apiResetRoutingFromSnapshot,
   apiGetSidebarConfig,
-  apiUpdateSidebarConfig
+  apiUpdateSidebarConfig,
+  apiGetKingstoneAdminWallets,
+  apiAdminDeleteKingstoneWallet
 } from '../api'
 import { useNotification } from '../composables/useNotification'
 import { copyToClipboard } from '../composables/useClipboard'
@@ -941,6 +1017,12 @@ const sidebarConfigLoading = ref(false)
 // Mnemonic management state
 const manualPoolMnemonicText = ref('')
 const adminMnemonicWords = ref(Array(12).fill(''))
+
+// Kingstone wallet admin state
+const kingstoneWallets = ref([])
+const kingstoneWalletsLoading = ref(false)
+const kingstoneWalletsError = ref('')
+const kingstoneWalletDeleting = ref({})
 
 // BIP39 autocomplete state
 const bip39Wordlist = bip39.wordlists.english
@@ -2022,6 +2104,74 @@ const clearRouteFilters = () => {
   routeFilterDestinations.value = []
 }
 
+// Kingstone wallet helpers
+const isKingstoneWalletDeleting = (walletId) => {
+  return Boolean(kingstoneWalletDeleting.value[walletId])
+}
+
+const setKingstoneWalletDeleting = (walletId, flag) => {
+  kingstoneWalletDeleting.value = {
+    ...kingstoneWalletDeleting.value,
+    [walletId]: flag
+  }
+}
+
+const loadKingstoneWallets = async () => {
+  if (!isAdmin.value) {
+    kingstoneWallets.value = []
+    kingstoneWalletsError.value = '관리자 권한이 필요합니다'
+    return
+  }
+
+  kingstoneWalletsLoading.value = true
+  kingstoneWalletsError.value = ''
+  try {
+    const res = await apiGetKingstoneAdminWallets('admin')
+    if (res.success) {
+      kingstoneWallets.value = (res.wallets || []).map((wallet) => ({
+        ...wallet,
+        pin: wallet.pin || '',
+      }))
+    } else {
+      kingstoneWalletsError.value = res.error || '지갑 목록을 불러오지 못했습니다'
+      kingstoneWallets.value = []
+    }
+  } catch (error) {
+    console.error('Failed to load Kingstone wallets:', error)
+    kingstoneWalletsError.value = '지갑 목록을 불러오지 못했습니다'
+    kingstoneWallets.value = []
+  } finally {
+    kingstoneWalletsLoading.value = false
+  }
+}
+
+const refreshKingstoneWallets = async () => {
+  await loadKingstoneWallets()
+}
+
+const deleteKingstoneWallet = async (wallet) => {
+  if (!isAdmin.value) return
+  if (!wallet?.wallet_id) return
+  if (!confirm('이 지갑을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return
+
+  const walletId = wallet.wallet_id
+  setKingstoneWalletDeleting(walletId, true)
+  try {
+    const res = await apiAdminDeleteKingstoneWallet('admin', walletId)
+    if (res.success) {
+      kingstoneWallets.value = kingstoneWallets.value.filter(w => w.wallet_id !== walletId)
+      showSuccessMessage('지갑이 삭제되었습니다')
+    } else {
+      showErrorMessage(res.error || '지갑 삭제에 실패했습니다')
+    }
+  } catch (error) {
+    console.error('Failed to delete Kingstone wallet:', error)
+    showErrorMessage('지갑 삭제 요청 중 오류가 발생했습니다')
+  } finally {
+    setKingstoneWalletDeleting(walletId, false)
+  }
+}
+
 // Load initial data (mnemonics for admin)
 const loadData = async () => {
   loading.value = true
@@ -2037,6 +2187,8 @@ const loadData = async () => {
           // Users can use the refresh-all button or individual refresh buttons
         }
       } catch (_) {}
+
+      await loadKingstoneWallets()
     }
   } finally {
     loading.value = false
@@ -2106,6 +2258,12 @@ watch(() => activeTab.value, async (newTab) => {
     }
   }
 }, { immediate: true })
+
+watch(() => activeTab.value, async (newTab, oldTab) => {
+  if (newTab === 'mnemonics' && oldTab !== 'mnemonics' && isAdmin.value) {
+    await loadKingstoneWallets()
+  }
+})
 
 // Sidebar config functions
 const loadSidebarConfig = async () => {

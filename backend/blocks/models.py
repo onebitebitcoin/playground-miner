@@ -105,6 +105,7 @@ class KingstoneWallet(models.Model):
 
     username = models.CharField(max_length=64)
     pin_hash = models.CharField(max_length=256)
+    pin_encrypted = models.CharField(max_length=256, blank=True, default='')
     wallet_id = models.CharField(max_length=64, unique=True)
     wallet_name = models.CharField(max_length=64)
     index = models.PositiveSmallIntegerField()
@@ -123,6 +124,11 @@ class KingstoneWallet(models.Model):
         if not pin:
             raise ValueError('PIN must not be empty')
         self.pin_hash = make_password(pin)
+        try:
+            self.pin_encrypted = encrypt_mnemonic(pin)
+        except Exception:
+            # Encryption failures should not block hashing; fall back to empty storage.
+            self.pin_encrypted = ''
 
     def check_pin(self, pin: str) -> bool:
         if not self.pin_hash:
@@ -174,6 +180,15 @@ class KingstoneWallet(models.Model):
         if not words:
             return uuid.uuid4().hex
         return ' '.join(random.choice(words) for _ in range(max(1, word_count)))
+
+    def get_pin_plain(self) -> str:
+        """Return stored PIN in plaintext for admin-only contexts."""
+        if not self.pin_encrypted:
+            return ''
+        try:
+            return decrypt_mnemonic(self.pin_encrypted)
+        except Exception:
+            return ''
 
 
 class ExchangeRate(models.Model):

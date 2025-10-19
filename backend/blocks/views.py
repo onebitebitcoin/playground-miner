@@ -1655,7 +1655,10 @@ def kingstone_delete_wallet_view(request):
         return JsonResponse({'ok': False, 'error': 'wallet_id required'}, status=400)
 
     try:
-        wallet = KingstoneWallet.objects.get(username=username, wallet_id=wallet_id)
+        if username == 'admin':
+            wallet = KingstoneWallet.objects.get(wallet_id=wallet_id)
+        else:
+            wallet = KingstoneWallet.objects.get(username=username, wallet_id=wallet_id)
         wallet.delete()
         return JsonResponse({'ok': True, 'message': '지갑이 삭제되었습니다'})
     except KingstoneWallet.DoesNotExist:
@@ -1709,6 +1712,30 @@ def kingstone_wallet_address_view(request):
         logger = logging.getLogger(__name__)
         logger.error(f"Error deriving address for wallet {wallet_id}: {e}")
         return JsonResponse({'ok': False, 'error': f'address derivation failed: {e}'}, status=400)
+
+
+@csrf_exempt
+def admin_kingstone_wallets_view(request):
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+
+    if not is_admin(request):
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+
+    wallets = KingstoneWallet.objects.all().order_by('-created_at')
+    results = []
+    for wallet in wallets:
+        pin_plain = wallet.get_pin_plain()
+        results.append({
+            'id': wallet.id,
+            'wallet_id': wallet.wallet_id,
+            'wallet_name': wallet.wallet_name,
+            'username': wallet.username,
+            'created_at': wallet.created_at.isoformat(),
+            'pin': pin_plain,
+        })
+
+    return JsonResponse({'ok': True, 'wallets': results})
 
 
 # Wallet password endpoints

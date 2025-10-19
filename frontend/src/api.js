@@ -475,6 +475,42 @@ export async function apiGetKingstoneWalletAddress(username, walletId, { index =
   }
 }
 
+export async function apiGetKingstoneAdminWallets(username) {
+  try {
+    const params = new URLSearchParams({ username })
+    const res = await fetch(`${BASE_URL}/api/kingstone/admin/wallets?${params.toString()}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    })
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    if (!res.ok) return { success: false, error: data?.error || `서버 오류(${res.status})` }
+    return {
+      success: data?.ok ?? false,
+      wallets: data?.wallets || [],
+      error: data?.error
+    }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
+export async function apiAdminDeleteKingstoneWallet(username, walletId) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/kingstone/wallet/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ username, wallet_id: walletId })
+    })
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    if (!res.ok) return { success: false, error: data?.error || `서버 오류(${res.status})` }
+    return { success: data?.ok ?? false, error: data?.error }
+  } catch (e) {
+    return { success: false, error: '네트워크 오류' }
+  }
+}
+
 export async function apiUpdateExchangeRate(username, exchange, feeRate, isEvent, description, eventDetails = '') {
   try {
     const res = await fetch(`${BASE_URL}/api/exchange-rates/admin`, {
