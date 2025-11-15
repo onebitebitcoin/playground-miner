@@ -845,6 +845,7 @@ const finalFilterOnlyEvents = ref(false)
 const finalFilterExcludeCustodialServices = ref(false)
 
 const nodeTypeOptions = ['exchange', 'service', 'wallet', 'user']
+const toTruthyBoolean = (value) => value === true || value === 1 || value === '1' || value === 'true'
 const inferNodeTypeFromService = (service = '') => {
   if (!service) return 'service'
   if (service === 'user') return 'user'
@@ -984,15 +985,17 @@ const computeTotalFeeKRW = (path) => {
 }
 
 const isLightningRoute = (route) => route?.route_type === 'withdrawal_lightning'
-const isNonExchangeKycNode = (node) => {
+const isServiceKycNode = (node) => {
   if (!node) return false
   const nodeType = normalizeNodeTypeValue(node.node_type, node.service)
-  return nodeType !== 'exchange' && nodeType !== 'user' && Boolean(node.is_kyc)
+  const isKyc = toTruthyBoolean(node.is_kyc)
+  return nodeType === 'service' && isKyc
 }
 const isCustodialServiceNode = (node) => {
   if (!node) return false
   const nodeType = normalizeNodeTypeValue(node.node_type, node.service)
-  return nodeType === 'service' && Boolean(node.is_custodial)
+  const isCustodial = toTruthyBoolean(node.is_custodial)
+  return nodeType === 'service' && isCustodial
 }
 const routeHasCustodialServiceNode = (route) => {
   if (!route) return false
@@ -1006,7 +1009,7 @@ const filteredOptimalPaths = computed(() => {
     if (finalFilterExcludeCustodialServices.value && path.routes.some(routeHasCustodialServiceNode)) return false
     return !path.routes.some(route => {
       if (finalFilterExcludeLightning.value && isLightningRoute(route)) return true
-      if (finalFilterExcludeKycWithdrawal.value && isNonExchangeKycNode(route.destination)) return true
+      if (finalFilterExcludeKycWithdrawal.value && isServiceKycNode(route.destination)) return true
       return false
     })
   })
