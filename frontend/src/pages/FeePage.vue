@@ -188,7 +188,7 @@
                 </div>
               </div>
               <template v-for="pathFees in [computePathFees(path.routes)]" :key="`card-fees-${idx}`">
-                <div>
+                <div class="mt-3">
                   총 비율 수수료: <span class="font-semibold">{{ pathFees.rate.toFixed(4) }}%</span>
                   • 총 고정 수수료: <span class="font-semibold">{{ formatFixedFeeSummary(pathFees.fixedByCurrency) }}</span>
                   <template v-if="computeFixedFeeKRW(pathFees.fixedByCurrency)">
@@ -292,11 +292,13 @@
                 </div>
               </div>
               <template v-for="pathFees in [computePathFees(path.routes)]" :key="`flow-fees-${idx}`">
-                총 비율 수수료: <span class="font-semibold">{{ pathFees.rate.toFixed(4) }}%</span>
-                • 총 고정 수수료: <span class="font-semibold">{{ formatFixedFeeSummary(pathFees.fixedByCurrency) }}</span>
-                <template v-if="computeFixedFeeKRW(pathFees.fixedByCurrency)">
-                  (≈ {{ formatPrice(computeFixedFeeKRW(pathFees.fixedByCurrency)) }}원)
-                </template>
+                <div class="mt-3">
+                  총 비율 수수료: <span class="font-semibold">{{ pathFees.rate.toFixed(4) }}%</span>
+                  • 총 고정 수수료: <span class="font-semibold">{{ formatFixedFeeSummary(pathFees.fixedByCurrency) }}</span>
+                  <template v-if="computeFixedFeeKRW(pathFees.fixedByCurrency)">
+                    (≈ {{ formatPrice(computeFixedFeeKRW(pathFees.fixedByCurrency)) }}원)
+                  </template>
+                </div>
               </template>
             </div>
           </div>
