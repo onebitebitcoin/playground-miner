@@ -43,6 +43,7 @@ def main(argv):
             'route_type': r.route_type,
             'fee_rate': float(r.fee_rate) if r.fee_rate is not None else None,
             'fee_fixed': float(r.fee_fixed) if r.fee_fixed is not None else None,
+            'fee_fixed_currency': r.fee_fixed_currency,
             'is_enabled': bool(r.is_enabled),
             'description': r.description or '',
             'is_event': bool(r.is_event),

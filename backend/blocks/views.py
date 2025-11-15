@@ -1,13 +1,14 @@
 import json
 import time
 import threading
+import hashlib
+import requests
 from django.db import transaction
 from django.db.models import Max
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from .models import Block, Nickname, Mnemonic, ExchangeRate, WithdrawalFee, LightningService, ServiceNode, Route, RoutingSnapshot, SidebarConfig, KingstoneWallet
 from django.db import connection
-import hashlib
 from .broadcast import broadcaster
 from .btc import derive_bip84_addresses, fetch_blockstream_balances, calc_total_sats, derive_bip84_account_zpub, derive_master_fingerprint, _normalize_mnemonic
 from mnemonic import Mnemonic as MnemonicValidator
@@ -19,6 +20,36 @@ KINGSTONE_WALLET_LIMIT = 3
 
 _guest_counter = 0
 _guest_lock = threading.Lock()
+_btc_usdt_cache = {'price': None, 'expires_at': 0.0}
+_btc_usdt_lock = threading.Lock()
+
+
+def get_cached_btc_usdt_price():
+    """Return cached BTC/USDT price, refreshing from Binance if needed."""
+    now = time.time()
+    cached_price = _btc_usdt_cache['price']
+    if cached_price and now < _btc_usdt_cache['expires_at']:
+        return cached_price
+    with _btc_usdt_lock:
+        cached_price = _btc_usdt_cache['price']
+        if cached_price and now < _btc_usdt_cache['expires_at']:
+            return cached_price
+        try:
+            resp = requests.get(
+                'https://api.binance.com/api/v3/ticker/price',
+                params={'symbol': 'BTCUSDT'},
+                timeout=5
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            price = float(data.get('price'))
+            if price <= 0:
+                raise ValueError('invalid BTCUSDT price')
+            _btc_usdt_cache['price'] = price
+            _btc_usdt_cache['expires_at'] = time.time() + 60  # cache for 60s
+            return price
+        except Exception:
+            return _btc_usdt_cache['price']
 
 
 def calc_difficulty_for_height(height: int) -> int:
@@ -1212,11 +1243,16 @@ def admin_routes_view(request):
         route_type = data.get('route_type')
         fee_rate = data.get('fee_rate')
         fee_fixed = data.get('fee_fixed')
+        fee_fixed_currency = (data.get('fee_fixed_currency') or 'BTC').upper()
         is_enabled = data.get('is_enabled', True)
         description = data.get('description', '')
         is_event = data.get('is_event', False)
         event_title = data.get('event_title', '')
         event_description = data.get('event_description', '')
+
+        valid_fee_currencies = {choice[0] for choice in Route.FEE_CURRENCY_CHOICES}
+        if fee_fixed_currency not in valid_fee_currencies:
+            fee_fixed_currency = 'BTC'
 
         if not source_id or not destination_id or not route_type:
             return JsonResponse({'ok': False, 'error': 'Source, destination, and route_type required'}, status=400)
@@ -1243,6 +1279,7 @@ def admin_routes_view(request):
                 defaults={
                     'fee_rate': fee_rate if fee_rate is not None else None,
                     'fee_fixed': fee_fixed if fee_fixed is not None else None,
+                    'fee_fixed_currency': fee_fixed_currency,
                     'is_enabled': bool(is_enabled),
                     'description': description,
                     'is_event': bool(is_event),
@@ -1371,7 +1408,13 @@ def calculate_route_cost(route):
     if route.fee_rate:
         cost += float(route.fee_rate)  # Percentage cost
     if route.fee_fixed:
-        cost += float(route.fee_fixed) * 100000000  # Convert BTC to satoshis for comparison
+        fixed_amount = float(route.fee_fixed)
+        currency = (route.fee_fixed_currency or 'BTC').upper()
+        if currency == 'USDT':
+            btc_usdt_price = get_cached_btc_usdt_price()
+            if btc_usdt_price:
+                fixed_amount = fixed_amount / btc_usdt_price
+        cost += fixed_amount * 100000000  # Convert BTC to satoshis for comparison
     return cost
 
 
@@ -1427,6 +1470,7 @@ def routing_snapshot_view(request):
                         'route_type': r.route_type,
                         'fee_rate': float(r.fee_rate) if r.fee_rate is not None else None,
                         'fee_fixed': float(r.fee_fixed) if r.fee_fixed is not None else None,
+                        'fee_fixed_currency': r.fee_fixed_currency,
                         'is_enabled': bool(r.is_enabled),
                         'description': r.description or '',
                         'is_event': bool(r.is_event),
@@ -1452,6 +1496,7 @@ def routing_snapshot_view(request):
                 Route.objects.all().delete()
                 ServiceNode.objects.all().delete()
                 service_to_node = {}
+                valid_fee_currencies = {choice[0] for choice in Route.FEE_CURRENCY_CHOICES}
                 for n in nodes:
                     node = ServiceNode.objects.create(
                         service=n['service'],
@@ -1470,12 +1515,16 @@ def routing_snapshot_view(request):
                     dst = service_to_node.get(r['destination'])
                     if not src or not dst:
                         continue
+                    currency = (r.get('fee_fixed_currency') or 'BTC').upper()
+                    if currency not in valid_fee_currencies:
+                        currency = 'BTC'
                     Route.objects.create(
                         source=src,
                         destination=dst,
                         route_type=r['route_type'],
                         fee_rate=r.get('fee_rate', None),
                         fee_fixed=r.get('fee_fixed', None),
+                        fee_fixed_currency=currency,
                         is_enabled=bool(r.get('is_enabled', True)),
                         description=r.get('description', ''),
                         is_event=bool(r.get('is_event', False)),

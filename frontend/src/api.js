@@ -722,7 +722,7 @@ export async function apiGetRoutes(username) {
   }
 }
 
-export async function apiCreateRoute(username, sourceId, destinationId, routeType, feeRate, feeFixed, isEnabled, description, isEvent = false, eventTitle = '', eventDescription = '') {
+export async function apiCreateRoute(username, sourceId, destinationId, routeType, feeRate, feeFixed, feeFixedCurrency, isEnabled, description, isEvent = false, eventTitle = '', eventDescription = '') {
   try {
     const res = await fetch(`${BASE_URL}/api/routes/admin`, {
       method: 'POST',
@@ -737,6 +737,7 @@ export async function apiCreateRoute(username, sourceId, destinationId, routeTyp
         route_type: routeType,
         fee_rate: feeRate,
         fee_fixed: feeFixed,
+        fee_fixed_currency: feeFixedCurrency,
         is_enabled: isEnabled,
         description,
         is_event: isEvent,

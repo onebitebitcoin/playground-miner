@@ -339,12 +339,17 @@ class Route(models.Model):
         ('withdrawal_lightning', '라이트닝 출금'),
         ('withdrawal_onchain', '온체인 출금'),
     ]
+    FEE_CURRENCY_CHOICES = [
+        ('BTC', 'BTC'),
+        ('USDT', 'USDT'),
+    ]
 
     source = models.ForeignKey(ServiceNode, on_delete=models.CASCADE, related_name='routes_from')
     destination = models.ForeignKey(ServiceNode, on_delete=models.CASCADE, related_name='routes_to')
     route_type = models.CharField(max_length=30, choices=ROUTE_TYPE_CHOICES)
     fee_rate = models.DecimalField(max_digits=6, decimal_places=4, null=True, blank=True)  # Percentage fee
-    fee_fixed = models.DecimalField(max_digits=10, decimal_places=8, null=True, blank=True)  # Fixed BTC fee
+    fee_fixed = models.DecimalField(max_digits=10, decimal_places=8, null=True, blank=True)  # Fixed fee amount
+    fee_fixed_currency = models.CharField(max_length=10, choices=FEE_CURRENCY_CHOICES, default='BTC')
     is_enabled = models.BooleanField(default=True)
     description = models.TextField(blank=True, null=True)
     is_event = models.BooleanField(default=False)
@@ -363,9 +368,9 @@ class Route(models.Model):
             fee_str += f"{self.fee_rate}%"
         if self.fee_fixed:
             if fee_str:
-                fee_str += f" + {self.fee_fixed} BTC"
+                fee_str += f" + {self.fee_fixed} {self.fee_fixed_currency}"
             else:
-                fee_str = f"{self.fee_fixed} BTC"
+                fee_str = f"{self.fee_fixed} {self.fee_fixed_currency}"
         return f"{self.source.display_name} → {self.destination.display_name} ({self.get_route_type_display()}): {fee_str}"
 
     def as_dict(self):
@@ -377,6 +382,7 @@ class Route(models.Model):
             'route_type_display': self.get_route_type_display(),
             'fee_rate': float(self.fee_rate) if self.fee_rate else None,
             'fee_fixed': float(self.fee_fixed) if self.fee_fixed else None,
+            'fee_fixed_currency': self.fee_fixed_currency,
             'is_enabled': self.is_enabled,
             'description': self.description,
             'is_event': self.is_event,

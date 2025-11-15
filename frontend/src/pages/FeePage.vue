@@ -74,6 +74,10 @@
                 <input type="checkbox" v-model="finalFilterExcludeKycWithdrawal" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                 KYC 출금 제외
               </label>
+              <label class="inline-flex items-center gap-2">
+                <input type="checkbox" v-model="finalFilterOnlyEvents" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                이벤트 경로만 보기
+              </label>
             </div>
 
             <!-- View Mode Toggle -->
@@ -158,7 +162,9 @@
                   <span>{{ r.source.display_name }} → {{ r.destination.display_name }} ({{ r.route_type_display }})</span>
                   <span>
                     <template v-if="r.fee_rate !== null">{{ r.fee_rate }}%</template>
-                    <template v-if="r.fee_fixed !== null">{{ r.fee_rate !== null ? ' + ' : ''}}{{ r.fee_fixed }} BTC</template>
+                    <template v-if="r.fee_fixed !== null">
+                      {{ r.fee_rate !== null ? ' + ' : ''}}{{ formatFixedAmount(r.fee_fixed, r.fee_fixed_currency) }} {{ normalizeFeeCurrency(r.fee_fixed_currency) }}
+                    </template>
                     <template v-if="r.fee_rate === null && r.fee_fixed === null">무료</template>
                   </span>
                 </div>
@@ -181,13 +187,15 @@
                   </div>
                 </div>
               </div>
-              <div>
-                총 비율 수수료: <span class="font-semibold">{{ computePathFees(path.routes).rate.toFixed(4) }}%</span>
-                • 총 고정 수수료: <span class="font-semibold">{{ computePathFees(path.routes).fixed.toFixed(8) }} BTC</span>
-                <template v-if="bitcoinPrice && computePathFees(path.routes).fixed">
-                  (≈ {{ formatPrice(computePathFees(path.routes).fixed * bitcoinPrice) }}원)
-                </template>
-              </div>
+              <template v-for="pathFees in [computePathFees(path.routes)]" :key="`card-fees-${idx}`">
+                <div>
+                  총 비율 수수료: <span class="font-semibold">{{ pathFees.rate.toFixed(4) }}%</span>
+                  • 총 고정 수수료: <span class="font-semibold">{{ formatFixedFeeSummary(pathFees.fixedByCurrency) }}</span>
+                  <template v-if="computeFixedFeeKRW(pathFees.fixedByCurrency)">
+                    (≈ {{ formatPrice(computeFixedFeeKRW(pathFees.fixedByCurrency)) }}원)
+                  </template>
+                </div>
+              </template>
             </div>
           </div>
         </div>
@@ -243,9 +251,9 @@
                     <div class="mt-1 text-[10px] sm:text-xs text-center leading-tight">
                       <div v-if="r.fee_rate !== null" class="text-gray-700">{{ r.fee_rate }}%</div>
                       <div v-if="r.fee_fixed !== null" :class="Number(r.fee_fixed) === 0 ? 'text-green-600' : 'text-orange-600'">
-                        {{ r.fee_fixed }} BTC
-                        <template v-if="bitcoinPrice && r.fee_fixed">
-                          <span class="text-[10px] text-gray-500">(≈ {{ formatPrice(r.fee_fixed * bitcoinPrice) }}원)</span>
+                        {{ formatFixedAmount(r.fee_fixed, r.fee_fixed_currency) }} {{ normalizeFeeCurrency(r.fee_fixed_currency) }}
+                        <template v-if="getCurrencyKrwPrice(r.fee_fixed_currency) && Number(r.fee_fixed)">
+                          <span class="text-[10px] text-gray-500">(≈ {{ formatPrice(r.fee_fixed * getCurrencyKrwPrice(r.fee_fixed_currency)) }}원)</span>
                         </template>
                       </div>
                       <div class="text-[9px] text-gray-500">{{ r.route_type_display }}</div>
@@ -283,10 +291,12 @@
                   </div>
                 </div>
               </div>
-              총 비율 수수료: <span class="font-semibold">{{ computePathFees(path.routes).rate.toFixed(4) }}%</span>
-              • 총 고정 수수료: <span class="font-semibold">{{ computePathFees(path.routes).fixed.toFixed(8) }} BTC</span>
-              <template v-if="bitcoinPrice && computePathFees(path.routes).fixed">
-                (≈ {{ formatPrice(computePathFees(path.routes).fixed * bitcoinPrice) }}원)
+              <template v-for="pathFees in [computePathFees(path.routes)]" :key="`flow-fees-${idx}`">
+                총 비율 수수료: <span class="font-semibold">{{ pathFees.rate.toFixed(4) }}%</span>
+                • 총 고정 수수료: <span class="font-semibold">{{ formatFixedFeeSummary(pathFees.fixedByCurrency) }}</span>
+                <template v-if="computeFixedFeeKRW(pathFees.fixedByCurrency)">
+                  (≈ {{ formatPrice(computeFixedFeeKRW(pathFees.fixedByCurrency)) }}원)
+                </template>
               </template>
             </div>
           </div>
@@ -795,11 +805,20 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { apiGetExchangeRates, apiGetWithdrawalFees, apiGetLightningServices, apiGetOptimalPaths } from '../api'
 import { getUpbitBtcPriceKrw } from '../utils/btcPriceProvider'
+import { getBtcPriceUsdt } from '../utils/btcUsdtPriceProvider'
 
 // Reactive data
 const inputAmount = ref('')
 const selectedUnit = ref('10000') // Default to 만원
 const bitcoinPrice = ref(null)
+const btcPriceUsdt = ref(null)
+const usdtPriceKrw = computed(() => {
+  const btcKrw = bitcoinPrice.value
+  const btcUsdt = btcPriceUsdt.value
+  if (!btcKrw || !btcUsdt) return null
+  if (!Number.isFinite(btcUsdt) || btcUsdt === 0) return null
+  return btcKrw / btcUsdt
+})
 const isLoading = ref(false)
 const error = ref(null)
 const results = ref([])
@@ -816,6 +835,7 @@ const flowContainerRefs = Object.create(null)
 const flowOverflowById = ref({})
 const finalFilterExcludeLightning = ref(false)
 const finalFilterExcludeKycWithdrawal = ref(false)
+const finalFilterOnlyEvents = ref(false)
 
 const nodeTypeOptions = ['exchange', 'service', 'wallet', 'user']
 const inferNodeTypeFromService = (service = '') => {
@@ -848,6 +868,41 @@ const nodeHasUrl = (node) => Boolean(node?.website_url)
 const navigateToNode = (node) => {
   if (!nodeHasUrl(node)) return
   window.open(node.website_url, '_blank', 'noopener,noreferrer')
+}
+const supportedFeeCurrencies = new Set(['BTC', 'USDT'])
+const normalizeFeeCurrency = (currency = 'BTC') => {
+  const upper = (currency || 'BTC').toString().toUpperCase()
+  return supportedFeeCurrencies.has(upper) ? upper : 'BTC'
+}
+const getCurrencyKrwPrice = (currency = 'BTC') => {
+  const normalized = normalizeFeeCurrency(currency)
+  if (normalized === 'USDT') return usdtPriceKrw.value
+  return bitcoinPrice.value
+}
+const formatFixedAmount = (value, currency = 'BTC') => {
+  const normalized = normalizeFeeCurrency(currency)
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return '0'
+  const decimals = normalized === 'USDT' ? 4 : 8
+  const formatted = Number(value).toFixed(decimals)
+  const trimmed = formatted.includes('.') ? formatted.replace(/\.?0+$/, '') : formatted
+  return trimmed.length ? trimmed : '0'
+}
+const formatFixedFeeSummary = (fixedByCurrency = {}) => {
+  const entries = Object.entries(fixedByCurrency)
+    .filter(([, amount]) => amount !== null && amount !== undefined)
+    .map(([currency, amount]) => `${formatFixedAmount(amount, currency)} ${normalizeFeeCurrency(currency)}`)
+  if (!entries.length) return '없음'
+  return entries.join(' + ')
+}
+const computeFixedFeeKRW = (fixedByCurrency = {}) => {
+  let total = 0
+  for (const [currency, amount] of Object.entries(fixedByCurrency)) {
+    if (amount === null || amount === undefined) continue
+    const price = getCurrencyKrwPrice(currency)
+    if (!price) continue
+    total += Number(amount) * price
+  }
+  return total
 }
 const previewEventDescription = (desc) => {
   if (!desc) return '이벤트 상세정보가 없습니다.'
@@ -895,12 +950,17 @@ const checkOverflowForId = (id) => {
 // Helpers for dynamic final paths
 const computePathFees = (pathRoutes) => {
   let totalRate = 0
-  let totalFixed = 0
+  const fixedByCurrency = {}
   for (const r of pathRoutes || []) {
     if (r.fee_rate !== null && r.fee_rate !== undefined) totalRate += Number(r.fee_rate) || 0
-    if (r.fee_fixed !== null && r.fee_fixed !== undefined) totalFixed += Number(r.fee_fixed) || 0
+    if (r.fee_fixed !== null && r.fee_fixed !== undefined) {
+      const amount = Number(r.fee_fixed)
+      if (!Number.isFinite(amount)) continue
+      const currency = normalizeFeeCurrency(r.fee_fixed_currency)
+      fixedByCurrency[currency] = (fixedByCurrency[currency] || 0) + amount
+    }
   }
-  return { rate: totalRate, fixed: totalFixed }
+  return { rate: totalRate, fixedByCurrency }
 }
 
 const actualAmountKRW = computed(() => {
@@ -910,9 +970,9 @@ const actualAmountKRW = computed(() => {
 
 const computeTotalFeeKRW = (path) => {
   if (!path || !Array.isArray(path.routes)) return 0
-  const { rate, fixed } = computePathFees(path.routes)
+  const { rate, fixedByCurrency } = computePathFees(path.routes)
   const rateFee = (actualAmountKRW.value || 0) * (Number(rate) || 0) / 100
-  const fixedFee = (Number(fixed) || 0) * (bitcoinPrice.value || 0)
+  const fixedFee = computeFixedFeeKRW(fixedByCurrency)
   return Math.max(0, Math.floor(rateFee + fixedFee))
 }
 
@@ -926,6 +986,7 @@ const isNonExchangeKycNode = (node) => {
 const filteredOptimalPaths = computed(() => {
   return (optimalPaths.value || []).filter(path => {
     if (!Array.isArray(path.routes)) return true
+    if (finalFilterOnlyEvents.value && !pathHasEvent(path)) return false
     return !path.routes.some(route => {
       if (finalFilterExcludeLightning.value && isLightningRoute(route)) return true
       if (finalFilterExcludeKycWithdrawal.value && isNonExchangeKycNode(route.destination)) return true
@@ -936,7 +997,7 @@ const filteredOptimalPaths = computed(() => {
 
 const sortedOptimalPaths = computed(() => {
   const arr = [...filteredOptimalPaths.value]
-  if ((actualAmountKRW.value || 0) > 0 && (bitcoinPrice.value || 0) > 0) {
+  if ((actualAmountKRW.value || 0) > 0) {
     arr.sort((a, b) => computeTotalFeeKRW(a) - computeTotalFeeKRW(b))
   }
   return arr
@@ -985,7 +1046,7 @@ watch(sortedOptimalPaths, () => {
   nextTick(() => checkAllOverflows())
 }, { deep: true })
 
-watch([finalFilterExcludeLightning, finalFilterExcludeKycWithdrawal, viewMode], () => {
+watch([finalFilterExcludeLightning, finalFilterExcludeKycWithdrawal, finalFilterOnlyEvents, viewMode], () => {
   nextTick(() => checkAllOverflows())
 })
 
@@ -1094,15 +1155,24 @@ const setQuickAmount = (value, unit) => {
 }
 
 const fetchBitcoinPrice = async (force = false) => {
-  if (!force && bitcoinPrice.value !== null && !isLoading.value) {
+  if (!force && bitcoinPrice.value !== null && btcPriceUsdt.value !== null && !isLoading.value) {
     return
   }
   isLoading.value = true
   error.value = null
 
   try {
-    const price = await getUpbitBtcPriceKrw(force)
-    bitcoinPrice.value = price
+    const [priceKrw, priceUsdt] = await Promise.all([
+      getUpbitBtcPriceKrw(force),
+      getBtcPriceUsdt(force).catch(err => {
+        console.error('BTC/USDT price fetch error:', err)
+        return btcPriceUsdt.value
+      })
+    ])
+    bitcoinPrice.value = priceKrw
+    if (priceUsdt) {
+      btcPriceUsdt.value = priceUsdt
+    }
   } catch (err) {
     error.value = '비트코인 가격을 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'
     console.error('Upbit Bitcoin price fetch error:', err)

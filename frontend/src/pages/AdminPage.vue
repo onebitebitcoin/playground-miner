@@ -535,19 +535,9 @@
                                 newRoute.routeType === option.value
                                   ? 'border-blue-500 bg-blue-50 shadow-sm'
                                   : 'border-gray-200 bg-white hover:border-blue-300',
-                                'flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors'
+                                'flex items-start gap-3 rounded-lg border px-3 py-2 transition-colors'
                               ]"
                             >
-                              <span
-                                :class="[
-                                  newRoute.routeType === option.value
-                                    ? 'bg-blue-100 text-blue-700'
-                                    : 'bg-gray-100 text-gray-600',
-                                  'flex items-center justify-center w-10 h-10 rounded-full'
-                                ]"
-                              >
-                                <RouteTypeIcon :type="option.value" class="w-5 h-5" aria-hidden="true" />
-                              </span>
                               <div class="flex flex-col">
                                 <span class="text-sm font-medium text-gray-900">{{ option.label }}</span>
                                 <span class="text-xs text-gray-500">{{ option.description }}</span>
@@ -558,19 +548,20 @@
                       </div>
                       <div><label class="block text-sm font-medium text-gray-700 mb-2">생성</label><button @click="createRoute" :disabled="!isAdmin || routingUpdateLoading || !isValidNewRoute" class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium">{{ routingUpdateLoading ? '추가 중...' : '경로 생성' }}</button></div>
                       <div><label class="block text-sm font-medium text-gray-700 mb-2">비율 수수료 (%)</label><input v-model="newRoute.feeRate" type="number" step="0.0001" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" /></div>
-                      <div><label class="block text-sm font-medium text-gray-700 mb-2">고정 수수료 (BTC)</label><input v-model="newRoute.feeFixed" type="number" step="0.00000001" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" /></div>
-                      <div class="md:col-span-2"><input v-model="newRoute.description" type="text" placeholder="경로 설명 (선택사항)" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" /></div>
-                      <div class="md:col-span-2 bg-white border border-gray-200 rounded-lg p-3">
-                        <div class="flex items-center justify-between">
-                          <div>
-                            <div class="text-sm font-medium text-gray-900">이벤트 설정</div>
-                            <p class="text-xs text-gray-500">특정 경로에 한시적 혜택이 있을 경우 이벤트 정보를 입력하세요.</p>
-                          </div>
-                          <label class="inline-flex items-center gap-2 text-sm text-gray-700">
-                            <input type="checkbox" v-model="newRoute.isEvent" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-                            이벤트 경로
-                          </label>
+                      <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">고정 수수료</label>
+                        <div class="flex gap-2">
+                          <input v-model="newRoute.feeFixed" type="number" step="0.00000001" min="0" class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                          <select v-model="newRoute.feeFixedCurrency" class="px-2 py-2 border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none w-24">
+                            <option v-for="option in feeCurrencyOptions" :key="`new-fee-currency-${option.value}`" :value="option.value">{{ option.label }}</option>
+                          </select>
                         </div>
+                      </div>
+                      <div class="md:col-span-2">
+                        <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                          <input type="checkbox" v-model="newRoute.isEvent" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                          이벤트
+                        </label>
                         <div v-if="newRoute.isEvent" class="mt-3 grid sm:grid-cols-2 gap-3">
                           <div>
                             <label class="block text-xs font-medium text-gray-600 mb-1">이벤트 제목</label>
@@ -649,8 +640,7 @@
                         <!-- Badges -->
                         <div class="mb-3 flex flex-wrap items-center gap-2">
                           <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                            <RouteTypeIcon :type="route.route_type" class="w-4 h-4" aria-hidden="true" />
-                            <span>{{ getRouteTypeLabel(route.route_type) }}</span>
+                            {{ getRouteTypeLabel(route.route_type) }}
                           </span>
                           <span :class="[route.is_enabled ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800', 'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium']">
                             <svg v-if="route.is_enabled" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -664,7 +654,7 @@
                         </div>
 
                         <!-- Edit form -->
-                        <div v-if="isAdmin" class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                        <div v-if="isAdmin" class="space-y-3 text-sm">
                           <div>
                             <label class="block text-xs font-medium text-gray-600 mb-1">유형</label>
                             <select v-model="route.edit_route_type" class="w-full px-2 py-1 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
@@ -673,15 +663,22 @@
                               <option value="withdrawal_onchain">온체인 출금</option>
                             </select>
                           </div>
-                          <div>
-                            <label class="block text-xs font-medium text-gray-600 mb-1">비율 수수료(%)</label>
-                            <input v-model.number="route.edit_fee_rate" type="number" step="0.0001" min="0" class="w-full px-2 py-1 border border-gray-300 rounded-md" />
+                          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <label class="block text-xs font-medium text-gray-600 mb-1">비율 수수료(%)</label>
+                              <input v-model.number="route.edit_fee_rate" type="number" step="0.0001" min="0" class="w-full px-2 py-1 border border-gray-300 rounded-md" />
+                            </div>
+                            <div>
+                              <label class="block text-xs font-medium text-gray-600 mb-1">고정 수수료</label>
+                              <div class="flex items-center gap-2">
+                                <input v-model.number="route.edit_fee_fixed" type="number" step="0.00000001" min="0" class="w-full px-2 py-1 border border-gray-300 rounded-md" />
+                                <select v-model="route.edit_fee_fixed_currency" class="px-2 py-1 border border-gray-300 rounded-md bg-white text-xs">
+                                  <option v-for="option in feeCurrencyOptions" :key="`edit-fee-currency-${route.id}-${option.value}`" :value="option.value">{{ option.label }}</option>
+                                </select>
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <label class="block text-xs font-medium text-gray-600 mb-1">고정 수수료(BTC)</label>
-                            <input v-model.number="route.edit_fee_fixed" type="number" step="0.00000001" min="0" class="w-full px-2 py-1 border border-gray-300 rounded-md" />
-                          </div>
-                          <div class="md:col-span-3 bg-gray-50 border border-gray-200 rounded-md p-3">
+                          <div class="bg-gray-50 border border-gray-200 rounded-md p-3">
                             <div class="flex items-center justify-between">
                               <span class="text-xs font-medium text-gray-700">이벤트</span>
                               <label class="inline-flex items-center gap-2 text-xs text-gray-700">
@@ -700,7 +697,7 @@
                               </div>
                             </div>
                           </div>
-                          <div class="md:col-span-3 flex justify-end">
+                          <div class="flex justify-end">
                             <button @click="updateExistingRoute(route)" :disabled="routingUpdateLoading" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">{{ routingUpdateLoading ? '저장 중...' : '저장' }}</button>
                           </div>
                         </div>
@@ -708,7 +705,12 @@
                         <!-- Read-only fee display for non-admin -->
                         <div v-else class="space-y-2 text-sm">
                           <div v-if="route.fee_rate !== null" class="flex justify-between"><span class="text-gray-600">비율 수수료:</span><span class="font-medium text-blue-600">{{ route.fee_rate }}%</span></div>
-                          <div v-if="route.fee_fixed !== null" class="flex justify-between"><span class="text-gray-600">고정 수수료:</span><span class="font-medium text-orange-600">{{ route.fee_fixed }} BTC</span></div>
+                          <div v-if="route.fee_fixed !== null" class="flex justify-between">
+                            <span class="text-gray-600">고정 수수료:</span>
+                            <span class="font-medium text-orange-600">
+                              {{ formatFixedAmount(route.fee_fixed, route.fee_fixed_currency) }} {{ normalizeFeeCurrency(route.fee_fixed_currency) }}
+                            </span>
+                          </div>
                           <div v-if="!route.fee_rate && !route.fee_fixed" class="flex justify-between"><span class="text-gray-600">수수료:</span><span class="font-medium text-green-600">무료</span></div>
                         </div>
 
@@ -799,12 +801,14 @@
                     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
                       <div class="font-medium text-gray-900">경로 #{{ idx + 1 }}</div>
                       <div class="text-sm text-gray-600">
-                        총 비율 수수료: <span class="font-semibold">{{ computePathFees(path.routes).rate.toFixed(4) }}%</span>
-                        • 총 고정 수수료: <span class="font-semibold">{{ computePathFees(path.routes).fixed.toFixed(8) }} BTC</span>
-                        <template v-if="btcPriceKrw && computePathFees(path.routes).fixed">
-                          (≈ {{ formatKRW(computePathFees(path.routes).fixed * btcPriceKrw) }})
+                        <template v-for="pathFees in [computePathFees(path.routes)]" :key="`optimal-fees-${idx}`">
+                          총 비율 수수료: <span class="font-semibold">{{ pathFees.rate.toFixed(4) }}%</span>
+                          • 총 고정 수수료: <span class="font-semibold">{{ formatFixedFeeSummary(pathFees.fixedByCurrency) }}</span>
+                          <template v-if="computeFixedFeeKRW(pathFees.fixedByCurrency)">
+                            (≈ {{ formatKRW(computeFixedFeeKRW(pathFees.fixedByCurrency)) }})
+                          </template>
                         </template>
-                        <template v-if="sendAmountKRW > 0 && btcPriceKrw">
+                        <template v-if="sendAmountKRW > 0">
                           • 총 예상 수수료: <span class="font-semibold text-blue-700">{{ formatKRW(computeTotalFeeKRW(path)) }}</span>
                         </template>
                       </div>
@@ -819,12 +823,14 @@
                     <div class="mt-2 grid grid-cols-1 gap-2 text-xs text-gray-600">
                       <div v-for="(r, i) in path.routes" :key="'d'+i" class="flex justify-between bg-gray-50 px-2 py-1 rounded">
                         <span>{{ r.source.display_name }} → {{ r.destination.display_name }} ({{ getRouteTypeLabel(r.route_type) }})</span>
-                        <span>
-                          <template v-if="r.fee_rate !== null">{{ r.fee_rate }}%</template>
-                          <template v-if="r.fee_fixed !== null">{{ r.fee_rate !== null ? ' + ' : ''}}{{ r.fee_fixed }} BTC</template>
-                          <template v-if="r.fee_rate === null && r.fee_fixed === null">무료</template>
-                        </span>
-                      </div>
+                          <span>
+                            <template v-if="r.fee_rate !== null">{{ r.fee_rate }}%</template>
+                            <template v-if="r.fee_fixed !== null">
+                              {{ r.fee_rate !== null ? ' + ' : ''}}{{ formatFixedAmount(r.fee_fixed, r.fee_fixed_currency) }} {{ normalizeFeeCurrency(r.fee_fixed_currency) }}
+                            </template>
+                            <template v-if="r.fee_rate === null && r.fee_fixed === null">무료</template>
+                          </span>
+                        </div>
                     </div>
                     </div>
                   </div>
@@ -1168,7 +1174,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick, defineComponent, h } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import * as bip39 from 'bip39'
 import {
   apiRequestMnemonic,
@@ -1204,6 +1210,7 @@ import { generateQRCode } from '../composables/useQRCode'
 import { formatBtc, formatDate, formatKrw } from '../utils/formatters'
 import { validateMnemonic, parseMnemonicWords } from '../utils/validation'
 import { getUpbitBtcPriceKrw } from '../utils/btcPriceProvider'
+import { getBtcPriceUsdt } from '../utils/btcUsdtPriceProvider'
 
 // Composables
 const { successMessage, errorMessage, showSuccess, showError } = useNotification()
@@ -1292,6 +1299,7 @@ const newRoute = ref({
   routeType: '',
   feeRate: null,
   feeFixed: null,
+  feeFixedCurrency: 'BTC',
   description: '',
   isEvent: false,
   eventTitle: '',
@@ -1313,6 +1321,10 @@ const routeTypeOptions = [
     label: '온체인 출금',
     description: '블록체인 전송',
   }
+]
+const feeCurrencyOptions = [
+  { value: 'BTC', label: 'BTC' },
+  { value: 'USDT', label: 'USDT' },
 ]
 const routeTypeOptionMap = routeTypeOptions.reduce((acc, option) => {
   acc[option.value] = option
@@ -1344,61 +1356,6 @@ const withDefaultNodeType = (node) => {
   }
 }
 
-const routeTypeIconDefs = {
-  trading: {
-    svgProps: {
-      fill: 'none',
-      stroke: 'currentColor',
-      'stroke-width': 1.6,
-      'stroke-linecap': 'round',
-      'stroke-linejoin': 'round'
-    },
-    paths: [
-      { d: 'M17 20h5m0 0-5-5m5 5-5-5M7 4H2m0 0 5 5M2 4l5 5' }
-    ]
-  },
-  withdrawal_lightning: {
-    svgProps: {
-      fill: 'currentColor',
-      stroke: 'none'
-    },
-    paths: [
-      { d: 'M13 10V3L4 14h7v7l9-11h-7z' }
-    ]
-  },
-  withdrawal_onchain: {
-    svgProps: {
-      fill: 'none',
-      stroke: 'currentColor',
-      'stroke-width': 1.6,
-      'stroke-linecap': 'round',
-      'stroke-linejoin': 'round'
-    },
-    paths: [
-      { d: 'M10.5 13.5l3-3' },
-      { d: 'M7 15a4 4 0 010-5.657l2-2a4 4 0 015.657 0' },
-      { d: 'M17 9a4 4 0 010 5.657l-2 2a4 4 0 01-5.657 0' }
-    ]
-  }
-}
-const RouteTypeIcon = defineComponent({
-  name: 'RouteTypeIcon',
-  props: {
-    type: { type: String, required: true }
-  },
-  setup(props, { attrs }) {
-    return () => {
-      const def = routeTypeIconDefs[props.type] || routeTypeIconDefs.trading
-      const svgProps = {
-        viewBox: '0 0 24 24',
-        ...def.svgProps,
-        ...attrs
-      }
-      const nodes = def.paths.map((path, idx) => h('path', { ...path, key: idx }))
-      return h('svg', svgProps, nodes)
-    }
-  }
-})
 const getEmptyServiceNodeForm = () => ({
   service: '',
   display_name: '',
@@ -1419,6 +1376,14 @@ const optimalPaths = ref([])
 const optimalLoading = ref(false)
 const optimalError = ref('')
 const btcPriceKrw = ref(0) // KRW per 1 BTC
+const btcPriceUsdt = ref(0) // USDT per 1 BTC
+const usdtPriceKrw = computed(() => {
+  const btcKrw = btcPriceKrw.value
+  const btcUsdt = btcPriceUsdt.value
+  if (!btcKrw || !btcUsdt) return 0
+  if (!Number.isFinite(btcUsdt) || btcUsdt === 0) return 0
+  return btcKrw / btcUsdt
+})
 // Snapshot state
 const snapshotInfo = ref({ has_snapshot: false, updated_at: '', counts: { nodes: 0, routes: 0 } })
 const snapshotLoading = ref(false)
@@ -1679,16 +1644,56 @@ const getNodeDisplayName = (nodeId) => {
 }
 
 const getRouteTypeLabel = (routeType) => routeTypeOptionMap[routeType]?.label || routeType
+const supportedFeeCurrencies = new Set(feeCurrencyOptions.map(opt => opt.value))
+const normalizeFeeCurrency = (currency = 'BTC') => {
+  const upper = (currency || 'BTC').toString().toUpperCase()
+  return supportedFeeCurrencies.has(upper) ? upper : 'BTC'
+}
+const formatFixedAmount = (value, currency = 'BTC') => {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return '0'
+  const normalized = normalizeFeeCurrency(currency)
+  const decimals = normalized === 'USDT' ? 4 : 8
+  const formatted = Number(value).toFixed(decimals)
+  const trimmed = formatted.includes('.') ? formatted.replace(/\.?0+$/, '') : formatted
+  return trimmed.length ? trimmed : '0'
+}
+const formatFixedFeeSummary = (fixedByCurrency = {}) => {
+  const entries = Object.entries(fixedByCurrency)
+    .filter(([, amount]) => amount !== null && amount !== undefined)
+    .map(([currency, amount]) => `${formatFixedAmount(amount, currency)} ${normalizeFeeCurrency(currency)}`)
+  if (!entries.length) return '없음'
+  return entries.join(' + ')
+}
+const getCurrencyKrwPrice = (currency = 'BTC') => {
+  const normalized = normalizeFeeCurrency(currency)
+  if (normalized === 'USDT') return usdtPriceKrw.value
+  return btcPriceKrw.value
+}
 
 // Compute aggregate fee for a path
 const computePathFees = (pathRoutes) => {
   let totalRate = 0
-  let totalFixed = 0
+  const fixedByCurrency = {}
   for (const r of pathRoutes || []) {
     if (r.fee_rate !== null && r.fee_rate !== undefined) totalRate += Number(r.fee_rate) || 0
-    if (r.fee_fixed !== null && r.fee_fixed !== undefined) totalFixed += Number(r.fee_fixed) || 0
+    if (r.fee_fixed !== null && r.fee_fixed !== undefined) {
+      const amount = Number(r.fee_fixed)
+      if (!Number.isFinite(amount)) continue
+      const currency = normalizeFeeCurrency(r.fee_fixed_currency)
+      fixedByCurrency[currency] = (fixedByCurrency[currency] || 0) + amount
+    }
   }
-  return { rate: totalRate, fixed: totalFixed }
+  return { rate: totalRate, fixedByCurrency }
+}
+const computeFixedFeeKRW = (fixedByCurrency = {}) => {
+  let total = 0
+  for (const [currency, amount] of Object.entries(fixedByCurrency)) {
+    if (amount === null || amount === undefined) continue
+    const price = getCurrencyKrwPrice(currency)
+    if (!price) continue
+    total += Number(amount) * price
+  }
+  return total
 }
 
 const formatKRW = (n) => {
@@ -1723,6 +1728,7 @@ const clearRoute = () => {
     routeType: '',
     feeRate: null,
     feeFixed: null,
+    feeFixedCurrency: 'BTC',
     description: '',
     isEvent: false,
     eventTitle: '',
@@ -2239,15 +2245,20 @@ const loadRoutes = async () => {
     const username = getCurrentUsername()
     const response = await apiGetRoutes(username)
     if (response.success) {
-      routes.value = (response.routes || []).map(r => ({
-        ...r,
-        edit_route_type: r.route_type,
-        edit_fee_rate: r.fee_rate,
-        edit_fee_fixed: r.fee_fixed,
-        edit_is_event: r.is_event,
-        edit_event_title: r.event_title,
-        edit_event_description: r.event_description,
-      }))
+      routes.value = (response.routes || []).map(r => {
+        const normalizedCurrency = normalizeFeeCurrency(r.fee_fixed_currency)
+        return {
+          ...r,
+          fee_fixed_currency: normalizedCurrency,
+          edit_route_type: r.route_type,
+          edit_fee_rate: r.fee_rate,
+          edit_fee_fixed: r.fee_fixed,
+          edit_fee_fixed_currency: normalizedCurrency,
+          edit_is_event: r.is_event,
+          edit_event_title: r.event_title,
+          edit_event_description: r.event_description,
+        }
+      })
     } else {
       routingUpdateError.value = response.error || '경로 데이터 로드에 실패했습니다'
     }
@@ -2304,6 +2315,7 @@ const createRoute = async () => {
 
   try {
     const username = getCurrentUsername()
+    const selectedCurrency = (newRoute.value.feeFixedCurrency || 'BTC').toUpperCase()
     const response = await apiCreateRoute(
       username,
       parseInt(newRoute.value.sourceId),
@@ -2311,6 +2323,7 @@ const createRoute = async () => {
       newRoute.value.routeType,
       newRoute.value.feeRate ? parseFloat(newRoute.value.feeRate) : null,
       newRoute.value.feeFixed ? parseFloat(newRoute.value.feeFixed) : null,
+      selectedCurrency,
       true, // is_enabled
       newRoute.value.description,
       Boolean(newRoute.value.isEvent),
@@ -2322,11 +2335,14 @@ const createRoute = async () => {
       routingUpdateSuccess.value = true
 
       // Add the new route to the list
+      const normalizedCurrency = normalizeFeeCurrency(response.route.fee_fixed_currency)
       routes.value.push({
         ...response.route,
+        fee_fixed_currency: normalizedCurrency,
         edit_route_type: response.route.route_type,
         edit_fee_rate: response.route.fee_rate,
         edit_fee_fixed: response.route.fee_fixed,
+        edit_fee_fixed_currency: normalizedCurrency,
         edit_is_event: response.route.is_event,
         edit_event_title: response.route.event_title,
         edit_event_description: response.route.event_description,
@@ -2339,6 +2355,7 @@ const createRoute = async () => {
         routeType: '',
         feeRate: null,
         feeFixed: null,
+        feeFixedCurrency: 'BTC',
         description: '',
         isEvent: false,
         eventTitle: '',
@@ -2403,6 +2420,7 @@ const updateExistingRoute = async (route) => {
     const newFeeFixed = route.edit_fee_fixed !== undefined && route.edit_fee_fixed !== null && route.edit_fee_fixed !== ''
       ? Number(route.edit_fee_fixed)
       : null
+    const newFeeFixedCurrency = (route.edit_fee_fixed_currency || route.fee_fixed_currency || 'BTC').toUpperCase()
 
     // Create or update the (source, dest, newType)
     const resp = await apiCreateRoute(
@@ -2412,6 +2430,7 @@ const updateExistingRoute = async (route) => {
       newType,
       newFeeRate,
       newFeeFixed,
+      newFeeFixedCurrency,
       route.is_enabled,
       route.description || '',
       Boolean(route.edit_is_event),
@@ -2425,15 +2444,18 @@ const updateExistingRoute = async (route) => {
     }
 
     const updated = resp.route
+    const normalizedCurrency = normalizeFeeCurrency(updated.fee_fixed_currency)
     // If the type changed, delete the old one
     if (newType !== route.route_type) {
       await apiDeleteRoute(username, route.id)
       // Replace element in routes array
       routes.value = routes.value.map(r => r.id === route.id ? {
         ...updated,
+        fee_fixed_currency: normalizedCurrency,
         edit_route_type: updated.route_type,
         edit_fee_rate: updated.fee_rate,
         edit_fee_fixed: updated.fee_fixed,
+        edit_fee_fixed_currency: normalizedCurrency,
         edit_is_event: updated.is_event,
         edit_event_title: updated.event_title,
         edit_event_description: updated.event_description,
@@ -2442,9 +2464,11 @@ const updateExistingRoute = async (route) => {
       // Same key; just patch fields
       routes.value = routes.value.map(r => r.id === route.id ? {
         ...updated,
+        fee_fixed_currency: normalizedCurrency,
         edit_route_type: updated.route_type,
         edit_fee_rate: updated.fee_rate,
         edit_fee_fixed: updated.fee_fixed,
+        edit_fee_fixed_currency: normalizedCurrency,
         edit_is_event: updated.is_event,
         edit_event_title: updated.event_title,
         edit_event_description: updated.event_description,
@@ -2528,8 +2552,17 @@ const resetFromSnapshot = async () => {
 // Fetch BTC price (KRW) via Upbit API with caching
 const fetchBtcPriceKrw = async (force = false) => {
   try {
-    const price = await getUpbitBtcPriceKrw(force)
-    btcPriceKrw.value = price
+    const [priceKrw, priceUsdt] = await Promise.all([
+      getUpbitBtcPriceKrw(force),
+      getBtcPriceUsdt(force).catch(err => {
+        console.error('Failed to fetch BTC price (USDT):', err)
+        return btcPriceUsdt.value
+      })
+    ])
+    btcPriceKrw.value = priceKrw
+    if (priceUsdt) {
+      btcPriceUsdt.value = priceUsdt
+    }
   } catch (e) {
     console.error('Failed to fetch BTC price (KRW) from Upbit:', e)
   }
@@ -2775,9 +2808,9 @@ const sendAmountKRW = computed(() => {
 
 const computeTotalFeeKRW = (path) => {
   if (!path || !Array.isArray(path.routes)) return 0
-  const { rate, fixed } = computePathFees(path.routes)
+  const { rate, fixedByCurrency } = computePathFees(path.routes)
   const rateFee = (sendAmountKRW.value || 0) * (Number(rate) || 0) / 100
-  const fixedFee = (Number(fixed) || 0) * (btcPriceKrw.value || 0)
+  const fixedFee = computeFixedFeeKRW(fixedByCurrency)
   // 소수점 버림 처리
   return Math.max(0, Math.floor(rateFee + fixedFee))
 }
@@ -2791,7 +2824,7 @@ const filteredOptimalPaths = computed(() => {
 
 const sortedOptimalPaths = computed(() => {
   const arr = [...filteredOptimalPaths.value]
-  if ((sendAmountKRW.value || 0) > 0 && (btcPriceKrw.value || 0) > 0) {
+  if ((sendAmountKRW.value || 0) > 0) {
     arr.sort((a, b) => computeTotalFeeKRW(a) - computeTotalFeeKRW(b))
   }
   return arr
