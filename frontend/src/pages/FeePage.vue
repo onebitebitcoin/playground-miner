@@ -71,16 +71,8 @@
                 라이트닝 경로 제외
               </label>
               <label class="inline-flex items-center gap-2">
-                <input type="checkbox" v-model="finalFilterExcludeKycWithdrawal" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-                KYC 출금 제외
-              </label>
-              <label class="inline-flex items-center gap-2">
                 <input type="checkbox" v-model="finalFilterOnlyEvents" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                 이벤트 경로만 보기
-              </label>
-              <label class="inline-flex items-center gap-2">
-                <input type="checkbox" v-model="finalFilterExcludeCustodialServices" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-                수탁형 제외
               </label>
             </div>
 
