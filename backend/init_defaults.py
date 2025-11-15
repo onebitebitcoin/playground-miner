@@ -124,6 +124,7 @@ def seed_service_nodes():
                     service=n['service'],
                     defaults={
                         'display_name': n.get('display_name') or n['service'],
+                        'node_type': n.get('node_type', 'service'),
                         'is_kyc': bool(n.get('is_kyc', False)),
                         'is_custodial': bool(n.get('is_custodial', True)),
                         'is_enabled': bool(n.get('is_enabled', True)),
@@ -137,16 +138,16 @@ def seed_service_nodes():
             print(f"Failed to load routing seed file for nodes: {e}. Falling back to built-in defaults.")
 
     nodes = [
-        {'service': 'user', 'display_name': '사용자', 'is_kyc': False, 'is_custodial': False, 'website_url': ''},
-        {'service': 'upbit', 'display_name': '업비트', 'is_kyc': True, 'is_custodial': True, 'website_url': 'https://upbit.com'},
-        {'service': 'bithumb', 'display_name': '빗썸', 'is_kyc': True, 'is_custodial': True, 'website_url': 'https://www.bithumb.com'},
-        {'service': 'binance', 'display_name': '바이낸스', 'is_kyc': True, 'is_custodial': True, 'website_url': 'https://www.binance.com'},
-        {'service': 'okx', 'display_name': 'OKX', 'is_kyc': True, 'is_custodial': True, 'website_url': 'https://www.okx.com'},
-        {'service': 'strike', 'display_name': 'Strike', 'is_kyc': True, 'is_custodial': True, 'website_url': 'https://strike.me'},
-        {'service': 'walletofsatoshi', 'display_name': '월렛오브사토시', 'is_kyc': False, 'is_custodial': True, 'website_url': 'https://walletofsatoshi.com'},
-        {'service': 'coinos', 'display_name': 'Coinos', 'is_kyc': False, 'is_custodial': True, 'website_url': 'https://coinos.io'},
-        {'service': 'boltz', 'display_name': 'Boltz Exchange', 'is_kyc': False, 'is_custodial': False, 'website_url': 'https://boltz.exchange'},
-        {'service': 'personal_wallet', 'display_name': '개인지갑', 'is_kyc': False, 'is_custodial': False, 'website_url': ''},
+        {'service': 'user', 'display_name': '사용자', 'is_kyc': False, 'is_custodial': False, 'website_url': '', 'node_type': 'user'},
+        {'service': 'upbit', 'display_name': '업비트', 'is_kyc': True, 'is_custodial': True, 'website_url': 'https://upbit.com', 'node_type': 'exchange'},
+        {'service': 'bithumb', 'display_name': '빗썸', 'is_kyc': True, 'is_custodial': True, 'website_url': 'https://www.bithumb.com', 'node_type': 'exchange'},
+        {'service': 'binance', 'display_name': '바이낸스', 'is_kyc': True, 'is_custodial': True, 'website_url': 'https://www.binance.com', 'node_type': 'exchange'},
+        {'service': 'okx', 'display_name': 'OKX', 'is_kyc': True, 'is_custodial': True, 'website_url': 'https://www.okx.com', 'node_type': 'exchange'},
+        {'service': 'strike', 'display_name': 'Strike', 'is_kyc': True, 'is_custodial': True, 'website_url': 'https://strike.me', 'node_type': 'service'},
+        {'service': 'walletofsatoshi', 'display_name': '월렛오브사토시', 'is_kyc': False, 'is_custodial': True, 'website_url': 'https://walletofsatoshi.com', 'node_type': 'service'},
+        {'service': 'coinos', 'display_name': 'Coinos', 'is_kyc': False, 'is_custodial': True, 'website_url': 'https://coinos.io', 'node_type': 'service'},
+        {'service': 'boltz', 'display_name': 'Boltz Exchange', 'is_kyc': False, 'is_custodial': False, 'website_url': 'https://boltz.exchange', 'node_type': 'service'},
+        {'service': 'personal_wallet', 'display_name': '개인지갑', 'is_kyc': False, 'is_custodial': False, 'website_url': '', 'node_type': 'wallet'},
     ]
 
     created = 0
@@ -155,6 +156,7 @@ def seed_service_nodes():
             service=node_data['service'],
             defaults={
                 'display_name': node_data['display_name'],
+                'node_type': node_data.get('node_type', 'service'),
                 'is_kyc': node_data['is_kyc'],
                 'is_custodial': node_data['is_custodial'],
                 'website_url': node_data['website_url'],

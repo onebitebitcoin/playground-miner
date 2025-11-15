@@ -680,7 +680,7 @@ export async function apiGetServiceNodes(username) {
   }
 }
 
-export async function apiUpdateServiceNode(username, service, displayName, isKyc, isCustodial, isEnabled, description, websiteUrl) {
+export async function apiUpdateServiceNode(username, service, displayName, nodeType, isKyc, isCustodial, isEnabled, description, websiteUrl) {
   try {
     const res = await fetch(`${BASE_URL}/api/service-nodes/admin`, {
       method: 'POST',
@@ -692,6 +692,7 @@ export async function apiUpdateServiceNode(username, service, displayName, isKyc
         username,
         service,
         display_name: displayName,
+        node_type: nodeType,
         is_kyc: isKyc,
         is_custodial: isCustodial,
         is_enabled: isEnabled,

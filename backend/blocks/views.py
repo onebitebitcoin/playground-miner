@@ -907,26 +907,27 @@ def admin_service_nodes_view(request):
         # Ensure required service nodes exist (idempotent)
         try:
             required = [
-                { 'service': 'user',            'display_name': '사용자',        'is_kyc': False, 'is_custodial': False, 'website_url': '' },
-                { 'service': 'upbit_btc',       'display_name': '업비트 BTC',    'is_kyc': True,  'is_custodial': True,  'website_url': 'https://upbit.com' },
-                { 'service': 'upbit_usdt',      'display_name': '업비트 USDT',   'is_kyc': True,  'is_custodial': True,  'website_url': 'https://upbit.com' },
-                { 'service': 'bithumb_btc',     'display_name': '빗썸 BTC',      'is_kyc': True,  'is_custodial': True,  'website_url': 'https://www.bithumb.com' },
-                { 'service': 'bithumb_usdt',    'display_name': '빗썸 USDT',     'is_kyc': True,  'is_custodial': True,  'website_url': 'https://www.bithumb.com' },
-                { 'service': 'binance_usdt',    'display_name': '바이낸스 USDT', 'is_kyc': True,  'is_custodial': True,  'website_url': 'https://www.binance.com' },
-                { 'service': 'binance_btc',     'display_name': '바이낸스 BTC',  'is_kyc': True,  'is_custodial': True,  'website_url': 'https://www.binance.com' },
-                { 'service': 'okx_usdt',        'display_name': 'OKX USDT',      'is_kyc': True,  'is_custodial': True,  'website_url': 'https://www.okx.com' },
-                { 'service': 'okx_btc',         'display_name': 'OKX BTC',       'is_kyc': True,  'is_custodial': True,  'website_url': 'https://www.okx.com' },
-                { 'service': 'strike',          'display_name': 'Strike',        'is_kyc': True,  'is_custodial': True,  'website_url': 'https://strike.me' },
-                { 'service': 'coinos',          'display_name': 'Coinos',        'is_kyc': False, 'is_custodial': True,  'website_url': 'https://coinos.io' },
-                { 'service': 'walletofsatoshi', 'display_name': 'Wallet of Satoshi','is_kyc': False,'is_custodial': True,  'website_url': 'https://walletofsatoshi.com' },
-                { 'service': 'boltz',           'display_name': 'Boltz Exchange','is_kyc': False, 'is_custodial': False, 'website_url': 'https://boltz.exchange' },
-                { 'service': 'personal_wallet', 'display_name': '개인지갑',      'is_kyc': False, 'is_custodial': False, 'website_url': '' },
+                { 'service': 'user',            'display_name': '사용자',        'is_kyc': False, 'is_custodial': False, 'website_url': '', 'node_type': 'user' },
+                { 'service': 'upbit_btc',       'display_name': '업비트 BTC',    'is_kyc': True,  'is_custodial': True,  'website_url': 'https://upbit.com',              'node_type': 'exchange' },
+                { 'service': 'upbit_usdt',      'display_name': '업비트 USDT',   'is_kyc': True,  'is_custodial': True,  'website_url': 'https://upbit.com',              'node_type': 'exchange' },
+                { 'service': 'bithumb_btc',     'display_name': '빗썸 BTC',      'is_kyc': True,  'is_custodial': True,  'website_url': 'https://www.bithumb.com',        'node_type': 'exchange' },
+                { 'service': 'bithumb_usdt',    'display_name': '빗썸 USDT',     'is_kyc': True,  'is_custodial': True,  'website_url': 'https://www.bithumb.com',        'node_type': 'exchange' },
+                { 'service': 'binance_usdt',    'display_name': '바이낸스 USDT', 'is_kyc': True,  'is_custodial': True,  'website_url': 'https://www.binance.com',        'node_type': 'exchange' },
+                { 'service': 'binance_btc',     'display_name': '바이낸스 BTC',  'is_kyc': True,  'is_custodial': True,  'website_url': 'https://www.binance.com',        'node_type': 'exchange' },
+                { 'service': 'okx_usdt',        'display_name': 'OKX USDT',      'is_kyc': True,  'is_custodial': True,  'website_url': 'https://www.okx.com',            'node_type': 'exchange' },
+                { 'service': 'okx_btc',         'display_name': 'OKX BTC',       'is_kyc': True,  'is_custodial': True,  'website_url': 'https://www.okx.com',            'node_type': 'exchange' },
+                { 'service': 'strike',          'display_name': 'Strike',        'is_kyc': True,  'is_custodial': True,  'website_url': 'https://strike.me',              'node_type': 'service' },
+                { 'service': 'coinos',          'display_name': 'Coinos',        'is_kyc': False, 'is_custodial': True,  'website_url': 'https://coinos.io',              'node_type': 'service' },
+                { 'service': 'walletofsatoshi', 'display_name': 'Wallet of Satoshi','is_kyc': False,'is_custodial': True,  'website_url': 'https://walletofsatoshi.com', 'node_type': 'service' },
+                { 'service': 'boltz',           'display_name': 'Boltz Exchange','is_kyc': False, 'is_custodial': False, 'website_url': 'https://boltz.exchange',        'node_type': 'service' },
+                { 'service': 'personal_wallet', 'display_name': '개인지갑',      'is_kyc': False, 'is_custodial': False, 'website_url': '',                               'node_type': 'wallet' },
             ]
             for d in required:
                 ServiceNode.objects.get_or_create(
                     service=d['service'],
                     defaults={
                         'display_name': d['display_name'],
+                        'node_type': d.get('node_type', 'service'),
                         'is_kyc': d['is_kyc'],
                         'is_custodial': d['is_custodial'],
                         'website_url': d['website_url'],
@@ -959,15 +960,21 @@ def admin_service_nodes_view(request):
         is_enabled = data.get('is_enabled', True)
         description = data.get('description', '')
         website_url = data.get('website_url', '')
+        node_type = data.get('node_type', 'service')
 
         if not service or not display_name:
             return JsonResponse({'ok': False, 'error': 'Service and display_name required'}, status=400)
+
+        valid_types = {choice[0] for choice in ServiceNode.NODE_TYPE_CHOICES}
+        if node_type not in valid_types:
+            node_type = 'service'
 
         try:
             node, created = ServiceNode.objects.update_or_create(
                 service=service,
                 defaults={
                     'display_name': display_name,
+                    'node_type': node_type,
                     'is_kyc': bool(is_kyc),
                     'is_custodial': bool(is_custodial),
                     'is_enabled': bool(is_enabled),
@@ -1403,7 +1410,7 @@ def routing_snapshot_view(request):
         if action == 'save':
             try:
                 nodes = list(ServiceNode.objects.all().values(
-                    'service', 'display_name', 'is_kyc', 'is_custodial', 'is_enabled', 'description', 'website_url'
+                    'service', 'display_name', 'node_type', 'is_kyc', 'is_custodial', 'is_enabled', 'description', 'website_url'
                 ))
                 routes_qs = Route.objects.select_related('source', 'destination').all()
                 routes = []
@@ -1440,6 +1447,7 @@ def routing_snapshot_view(request):
                     node = ServiceNode.objects.create(
                         service=n['service'],
                         display_name=n.get('display_name') or n['service'],
+                        node_type=n.get('node_type', 'service'),
                         is_kyc=bool(n.get('is_kyc', False)),
                         is_custodial=bool(n.get('is_custodial', True)),
                         is_enabled=bool(n.get('is_enabled', True)),

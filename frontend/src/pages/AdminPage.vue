@@ -377,43 +377,136 @@
                 <div v-if="routingUpdateLoading" class="bg-blue-50 p-4 rounded-lg mb-4"><p class="text-blue-800">데이터를 로딩하고 있습니다...</p></div>
                 <div v-if="activeRoutingTab === 'nodes'">
                   <h3 class="text-lg font-semibold text-gray-900 mb-4">서비스 노드 관리</h3>
-                  <div v-if="serviceNodes.length === 0" class="text-center py-8 text-gray-500">서비스 노드가 없습니다. 데이터를 다시 로드해보세요.</div>
-                  <div v-else class="space-y-4">
-                    <div v-for="node in serviceNodes" :key="node.id" class="border border-gray-200 rounded-lg p-4">
+                  <div class="space-y-4">
+                    <div class="border border-dashed border-blue-200 rounded-lg p-4 bg-blue-50/40">
                       <div class="flex items-center justify-between mb-3">
-                        <h4 class="font-medium text-gray-900">{{ node.display_name }}</h4>
-                        <div class="flex items-center gap-2"><span :class="[node.is_enabled ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800', 'text-xs px-2 py-1 rounded']">{{ node.is_enabled ? '활성' : '비활성' }}</span></div>
+                        <div>
+                          <h4 class="font-medium text-gray-900">새 서비스 노드 추가</h4>
+                          <p class="text-sm text-gray-500 mt-1">거래소/서비스 노드를 직접 등록할 수 있습니다. 생성 즉시 DB에 저장됩니다.</p>
+                        </div>
+                        <span class="text-xs font-semibold px-2 py-1 rounded bg-blue-100 text-blue-800">신규 등록</span>
                       </div>
-                      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                        <div><label class="block text-sm font-medium text-gray-700 mb-1">표시명</label><input v-model="node.display_name" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" /></div>
-                        <div><label class="block text-sm font-medium text-gray-700 mb-1">KYC 상태</label><div class="flex items-center gap-2 mt-2"><label class="flex items-center"><input v-model="node.is_kyc" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" /><span class="ml-2 text-sm text-gray-700">KYC 필요</span></label></div></div>
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label class="block text-sm font-medium text-gray-700 mb-1">서비스 코드</label>
+                          <input
+                            v-model="newServiceNode.service"
+                            type="text"
+                            placeholder="예: upbit_krw"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                          <p class="mt-1 text-xs text-gray-500">소문자/숫자/밑줄만 사용 (예: binance_btc)</p>
+                        </div>
+                        <div>
+                          <label class="block text-sm font-medium text-gray-700 mb-1">표시명</label>
+                          <input
+                            v-model="newServiceNode.display_name"
+                            type="text"
+                            placeholder="예: 바이낸스 BTC"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label class="block text-sm font-medium text-gray-700 mb-1">노드 유형</label>
+                          <select
+                            v-model="newServiceNode.node_type"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                          >
+                            <option v-for="type in nodeTypeOptions" :key="`new-type-${type.value}`" :value="type.value">
+                              {{ type.label }}
+                            </option>
+                          </select>
+                        </div>
+                        <div>
+                          <label class="block text-sm font-medium text-gray-700 mb-1">웹사이트 주소</label>
+                          <input
+                            v-model="newServiceNode.website_url"
+                            type="text"
+                            placeholder="https://"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div class="md:col-span-2">
+                          <label class="block text-sm font-medium text-gray-700 mb-1">설명</label>
+                          <textarea
+                            v-model="newServiceNode.description"
+                            rows="2"
+                            placeholder="노드 설명을 입력하세요"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          ></textarea>
+                        </div>
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                        <label class="flex items-center gap-2 text-sm text-gray-700">
+                          <input v-model="newServiceNode.is_kyc" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                          KYC 필요
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-gray-700">
+                          <input v-model="newServiceNode.is_custodial" type="checkbox" class="rounded border-gray-300 text-red-600 focus:ring-red-500" />
+                          수탁형 서비스
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-gray-700">
+                          <input v-model="newServiceNode.is_enabled" type="checkbox" class="rounded border-gray-300 text-green-600 focus:ring-green-500" />
+                          즉시 활성화
+                        </label>
+                      </div>
+                      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-4 gap-3">
+                        <p class="text-sm text-gray-600">
+                          서비스 코드는 고유해야 하며 생성 후 경로에서 바로 사용할 수 있습니다.
+                        </p>
+                        <button
+                          @click="createServiceNode"
+                          :disabled="!isAdmin || routingUpdateLoading || !canCreateServiceNode"
+                          class="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                        >
+                          {{ routingUpdateLoading ? '등록 중...' : '서비스 노드 생성' }}
+                        </button>
+                      </div>
+                      <div v-if="newServiceNodeError && isNewServiceNodeDirty" class="mt-2 text-sm text-red-600">
+                        {{ newServiceNodeError }}
+                      </div>
+                    </div>
+
+                    <template v-if="serviceNodes.length === 0">
+                      <div class="text-center py-8 text-gray-500 bg-white border border-dashed border-gray-200 rounded-lg">
+                        등록된 서비스 노드가 없습니다. 새로운 노드를 추가하세요.
+                      </div>
+                    </template>
+                    <template v-else>
+                      <div class="space-y-4">
+                        <div v-for="node in serviceNodes" :key="node.id" class="border border-gray-200 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-3">
+                          <h4 class="font-medium text-gray-900">{{ node.display_name }}</h4>
+                          <div class="flex items-center gap-2"><span :class="[node.is_enabled ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800', 'text-xs px-2 py-1 rounded']">{{ node.is_enabled ? '활성' : '비활성' }}</span></div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                          <div><label class="block text-sm font-medium text-gray-700 mb-1">표시명</label><input v-model="node.display_name" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" /></div>
+                          <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">노드 유형</label>
+                            <select v-model="node.node_type" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white">
+                              <option v-for="type in nodeTypeOptions" :key="`node-type-${node.service}-${type.value}`" :value="type.value">{{ type.label }}</option>
+                            </select>
+                          </div>
+                          <div><label class="block text-sm font-medium text-gray-700 mb-1">KYC 상태</label><div class="flex items-center gap-2 mt-2"><label class="flex items-center"><input v-model="node.is_kyc" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" /><span class="ml-2 text-sm text-gray-700">KYC 필요</span></label></div></div>
                         <div><label class="block text-sm font-medium text-gray-700 mb-1">수탁 유형</label><div class="flex items-center gap-2 mt-2"><label class="flex items-center"><input v-model="node.is_custodial" type="checkbox" class="rounded border-gray-300 text-red-600 focus:ring-red-500" /><span class="ml-2 text-sm text-gray-700">수탁형</span></label></div></div>
                         <div><label class="block text-sm font-medium text-gray-700 mb-1">활성 상태</label><div class="flex items-center gap-2 mt-2"><label class="flex items-center"><input v-model="node.is_enabled" type="checkbox" class="rounded border-gray-300 text-green-600 focus:ring-green-500" /><span class="ml-2 text-sm text-gray-700">활성화</span></label></div></div>
                         <div><label class="block text-sm font-medium text-gray-700 mb-1">작업</label><button @click="updateServiceNode(node)" :disabled="!isAdmin || routingUpdateLoading" class="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm">{{ routingUpdateLoading ? '업데이트 중...' : '업데이트' }}</button></div>
                       </div>
-                      <div class="mt-4"><label class="block text-sm font-medium text-gray-700 mb-1">설명</label><input v-model="node.description" type="text" placeholder="서비스 설명" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" /></div>
+                        <div class="mt-4"><label class="block text-sm font-medium text-gray-700 mb-1">설명</label><input v-model="node.description" type="text" placeholder="서비스 설명" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" /></div>
+                      </div>
                     </div>
+                    </template>
                   </div>
                 </div>
                 <div v-else-if="activeRoutingTab === 'routes'">
                   <h3 class="text-lg font-semibold text-gray-900 mb-4">경로 관리</h3>
                   <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg mb-6 border border-blue-200">
                     <h4 class="font-semibold text-blue-900 mb-4 flex items-center"><svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>새 경로 생성</h4>
-                    <!-- 그룹 탭: 거래소별 빠른 필터 -->
-                    <div class="mb-3">
-                      <nav class="flex flex-wrap gap-2 text-sm" aria-label="Node groups">
-                        <button @click="routeSelectGroup = 'all'" :class="groupTabClass('all')">전체</button>
-                        <button @click="routeSelectGroup = 'upbit'" :class="groupTabClass('upbit')">업비트</button>
-                        <button @click="routeSelectGroup = 'bithumb'" :class="groupTabClass('bithumb')">빗썸</button>
-                        <button @click="routeSelectGroup = 'binance'" :class="groupTabClass('binance')">바이낸스</button>
-                        <button @click="routeSelectGroup = 'okx'" :class="groupTabClass('okx')">OKX</button>
-                      </nav>
-                    </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div>
                         <label class="block text-sm font-medium text-gray-700 mb-3">1. 출발지 선택</label>
                         <div class="grid grid-cols-2 gap-2 max-h-56 sm:max-h-72 overflow-y-auto overscroll-contain border rounded p-2 pr-2 bg-white" style="scrollbar-gutter: stable;">
-                          <div v-for="node in filteredByGroup(serviceNodes)" :key="`source-${node.id}`" @click="newRoute.sourceId = node.id" :class="['p-2 border rounded cursor-pointer text-sm', newRoute.sourceId === node.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300']">{{ node.display_name }}</div>
+                          <div v-for="node in serviceNodes" :key="`source-${node.id}`" @click="newRoute.sourceId = node.id" :class="['p-2 border rounded cursor-pointer text-sm', newRoute.sourceId === node.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300']">{{ node.display_name }}</div>
                         </div>
                       </div>
                       <div>
@@ -422,7 +515,47 @@
                           <div v-for="node in filteredDestNodes" :key="`dest-${node.id}`" @click="newRoute.sourceId !== node.id ? newRoute.destinationId = node.id : null" :class="['p-2 border rounded cursor-pointer text-sm', newRoute.destinationId === node.id ? 'border-green-500 bg-green-50' : (newRoute.sourceId === node.id ? 'border-gray-200 opacity-60 cursor-not-allowed' : 'border-gray-200 hover:border-green-300')]">{{ node.display_name }}</div>
                         </div>
                       </div>
-                      <div><label class="block text-sm font-medium text-gray-700 mb-2">경로 유형</label><select v-model="newRoute.routeType" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"><option disabled value="">선택하세요</option><option value="trading">💱 거래수수료</option><option value="withdrawal_lightning">⚡ 라이트닝 출금</option><option value="withdrawal_onchain">🔗 온체인 출금</option></select></div>
+                      <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">경로 유형</label>
+                        <div class="grid gap-2">
+                          <label
+                            v-for="option in routeTypeOptions"
+                            :key="option.value"
+                            class="block cursor-pointer"
+                          >
+                            <input
+                              class="sr-only"
+                              type="radio"
+                              name="new-route-type"
+                              :value="option.value"
+                              v-model="newRoute.routeType"
+                            />
+                            <div
+                              :class="[
+                                newRoute.routeType === option.value
+                                  ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                  : 'border-gray-200 bg-white hover:border-blue-300',
+                                'flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors'
+                              ]"
+                            >
+                              <span
+                                :class="[
+                                  newRoute.routeType === option.value
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-gray-100 text-gray-600',
+                                  'flex items-center justify-center w-10 h-10 rounded-full'
+                                ]"
+                              >
+                                <RouteTypeIcon :type="option.value" class="w-5 h-5" aria-hidden="true" />
+                              </span>
+                              <div class="flex flex-col">
+                                <span class="text-sm font-medium text-gray-900">{{ option.label }}</span>
+                                <span class="text-xs text-gray-500">{{ option.description }}</span>
+                              </div>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
                       <div><label class="block text-sm font-medium text-gray-700 mb-2">생성</label><button @click="createRoute" :disabled="!isAdmin || routingUpdateLoading || !isValidNewRoute" class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium">{{ routingUpdateLoading ? '추가 중...' : '경로 생성' }}</button></div>
                       <div><label class="block text-sm font-medium text-gray-700 mb-2">비율 수수료 (%)</label><input v-model="newRoute.feeRate" type="number" step="0.0001" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" /></div>
                       <div><label class="block text-sm font-medium text-gray-700 mb-2">고정 수수료 (BTC)</label><input v-model="newRoute.feeFixed" type="number" step="0.00000001" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" /></div>
@@ -492,9 +625,20 @@
                         </div>
 
                         <!-- Badges -->
-                        <div class="mb-3">
-                          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{{ getRouteTypeDisplay(route.route_type) }}</span>
-                          <span :class="[route.is_enabled ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800', 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ml-2']">{{ route.is_enabled ? '✓ 활성' : '✗ 비활성' }}</span>
+                        <div class="mb-3 flex flex-wrap items-center gap-2">
+                          <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            <RouteTypeIcon :type="route.route_type" class="w-4 h-4" aria-hidden="true" />
+                            <span>{{ getRouteTypeLabel(route.route_type) }}</span>
+                          </span>
+                          <span :class="[route.is_enabled ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800', 'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium']">
+                            <svg v-if="route.is_enabled" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                            <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                            <span>{{ route.is_enabled ? '활성' : '비활성' }}</span>
+                          </span>
                         </div>
 
                         <!-- Edit form -->
@@ -563,6 +707,16 @@
                           </select>
                         </div>
                       </div>
+                      <div class="flex flex-col sm:flex-row sm:items-center sm:gap-3 text-sm text-gray-700">
+                        <label class="inline-flex items-center gap-2">
+                          <input type="checkbox" v-model="optimalFilterExcludeLightning" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                          라이트닝 경로 제외
+                        </label>
+                        <label class="inline-flex items-center gap-2">
+                          <input type="checkbox" v-model="optimalFilterExcludeKycWithdrawal" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                          KYC 출금 제외
+                        </label>
+                      </div>
                       <div class="flex items-center justify-between sm:justify-start gap-2 text-sm w-full sm:w-auto">
                         <span class="text-gray-700">BTC 가격(KRW)</span>
                         <span class="font-semibold text-gray-900">{{ btcPriceKrw ? formatKRW(btcPriceKrw) : '불러오는 중...' }}</span>
@@ -585,7 +739,7 @@
                     </div>
                   </div>
                   <div v-if="optimalError" class="p-3 bg-red-50 border border-red-200 rounded text-red-700 mb-3">{{ optimalError }}</div>
-                  <div v-if="optimalPaths.length === 0 && !optimalLoading" class="text-gray-500 text-sm">경로가 없습니다. 상단에서 경로를 추가한 뒤 다시 계산하세요.</div>
+                  <div v-if="sortedOptimalPaths.length === 0 && !optimalLoading" class="text-gray-500 text-sm">경로가 없습니다. 상단에서 경로를 추가하거나 필터를 조정한 뒤 다시 계산하세요.</div>
                   <div class="space-y-4" v-else>
                     <div
                       v-for="(path, idx) in sortedOptimalPaths"
@@ -614,7 +768,7 @@
                     </div>
                     <div class="mt-2 grid grid-cols-1 gap-2 text-xs text-gray-600">
                       <div v-for="(r, i) in path.routes" :key="'d'+i" class="flex justify-between bg-gray-50 px-2 py-1 rounded">
-                        <span>{{ r.source.display_name }} → {{ r.destination.display_name }} ({{ getRouteTypeDisplay(r.route_type) }})</span>
+                        <span>{{ r.source.display_name }} → {{ r.destination.display_name }} ({{ getRouteTypeLabel(r.route_type) }})</span>
                         <span>
                           <template v-if="r.fee_rate !== null">{{ r.fee_rate }}%</template>
                           <template v-if="r.fee_fixed !== null">{{ r.fee_rate !== null ? ' + ' : ''}}{{ r.fee_fixed }} BTC</template>
@@ -964,7 +1118,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch, nextTick, defineComponent, h } from 'vue'
 import * as bip39 from 'bip39'
 import {
   apiRequestMnemonic,
@@ -1089,6 +1243,122 @@ const newRoute = ref({
   feeFixed: null,
   description: ''
 })
+const routeTypeOptions = [
+  {
+    value: 'trading',
+    label: '거래 수수료',
+    description: '거래소 내부·간 전환',
+  },
+  {
+    value: 'withdrawal_lightning',
+    label: '라이트닝 출금',
+    description: '라이트닝 네트워크 출금',
+  },
+  {
+    value: 'withdrawal_onchain',
+    label: '온체인 출금',
+    description: '블록체인 전송',
+  }
+]
+const routeTypeOptionMap = routeTypeOptions.reduce((acc, option) => {
+  acc[option.value] = option
+  return acc
+}, {})
+const nodeTypeOptions = [
+  { value: 'exchange', label: '거래소' },
+  { value: 'service', label: '서비스' },
+  { value: 'wallet', label: '지갑' },
+  { value: 'user', label: '사용자' }
+]
+const validNodeTypeValues = new Set(nodeTypeOptions.map(opt => opt.value))
+const inferNodeTypeFromService = (service = '') => {
+  if (!service) return 'service'
+  if (service === 'user') return 'user'
+  if (service === 'personal_wallet') return 'wallet'
+  if (/^(upbit|bithumb|binance|okx)/.test(service)) return 'exchange'
+  return 'service'
+}
+const normalizeNodeTypeValue = (value, service = '') => {
+  if (value && validNodeTypeValues.has(value)) return value
+  return inferNodeTypeFromService(service)
+}
+const withDefaultNodeType = (node) => {
+  if (!node || typeof node !== 'object') return node
+  return {
+    ...node,
+    node_type: normalizeNodeTypeValue(node.node_type, node.service)
+  }
+}
+
+const routeTypeIconDefs = {
+  trading: {
+    svgProps: {
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-width': 1.6,
+      'stroke-linecap': 'round',
+      'stroke-linejoin': 'round'
+    },
+    paths: [
+      { d: 'M17 20h5m0 0-5-5m5 5-5-5M7 4H2m0 0 5 5M2 4l5 5' }
+    ]
+  },
+  withdrawal_lightning: {
+    svgProps: {
+      fill: 'currentColor',
+      stroke: 'none'
+    },
+    paths: [
+      { d: 'M13 10V3L4 14h7v7l9-11h-7z' }
+    ]
+  },
+  withdrawal_onchain: {
+    svgProps: {
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-width': 1.6,
+      'stroke-linecap': 'round',
+      'stroke-linejoin': 'round'
+    },
+    paths: [
+      { d: 'M10.5 13.5l3-3' },
+      { d: 'M7 15a4 4 0 010-5.657l2-2a4 4 0 015.657 0' },
+      { d: 'M17 9a4 4 0 010 5.657l-2 2a4 4 0 01-5.657 0' }
+    ]
+  }
+}
+const RouteTypeIcon = defineComponent({
+  name: 'RouteTypeIcon',
+  props: {
+    type: { type: String, required: true }
+  },
+  setup(props, { attrs }) {
+    return () => {
+      const def = routeTypeIconDefs[props.type] || routeTypeIconDefs.trading
+      const svgProps = {
+        viewBox: '0 0 24 24',
+        ...def.svgProps,
+        ...attrs
+      }
+      const nodes = def.paths.map((path, idx) => h('path', { ...path, key: idx }))
+      return h('svg', svgProps, nodes)
+    }
+  }
+})
+const getEmptyServiceNodeForm = () => ({
+  service: '',
+  display_name: '',
+  node_type: 'service',
+  is_kyc: false,
+  is_custodial: true,
+  is_enabled: true,
+  description: '',
+  website_url: ''
+})
+const newServiceNode = ref(getEmptyServiceNodeForm())
+const resetNewServiceNode = () => {
+  newServiceNode.value = getEmptyServiceNodeForm()
+}
 
 // Final path (optimal) state
 const optimalPaths = ref([])
@@ -1103,12 +1373,24 @@ const snapshotError = ref('')
 const sendAmountInput = ref('')
 const sendUnit = ref('10000') // 기본 만원 단위
 
-// Creation UI group filter
-const routeSelectGroup = ref('all') // 'all' | 'upbit' | 'bithumb' | 'binance' | 'okx'
-
 // Route filters
 const routeFilterSources = ref([]) // array<number>
 const routeFilterDestinations = ref([]) // array<number>
+const optimalFilterExcludeLightning = ref(false)
+const optimalFilterExcludeKycWithdrawal = ref(false)
+
+const isLightningRoute = (route) => route?.route_type === 'withdrawal_lightning'
+const isNonExchangeKycNode = (node) => {
+  if (!node) return false
+  const nodeType = normalizeNodeTypeValue(node.node_type, node.service)
+  return nodeType !== 'exchange' && nodeType !== 'user' && Boolean(node.is_kyc)
+}
+const shouldExcludeRouteByOptimalFilters = (route) => {
+  if (!route) return false
+  if (optimalFilterExcludeLightning.value && isLightningRoute(route)) return true
+  if (optimalFilterExcludeKycWithdrawal.value && isNonExchangeKycNode(route.destination)) return true
+  return false
+}
 
 // Computed
 const isAdmin = computed(() => {
@@ -1120,6 +1402,31 @@ const isAdmin = computed(() => {
 const availableMnemonicsCount = computed(() => {
   return adminMnemonics.value.filter(m => !m.is_assigned).length
 })
+
+const serviceCodePattern = /^[a-z0-9_]+$/
+const normalizedNewServiceCode = computed(() => (newServiceNode.value.service || '').trim().toLowerCase())
+const isNewServiceNodeDirty = computed(() => {
+  const node = newServiceNode.value
+  return Boolean(
+    (node.service || '').length ||
+    (node.display_name || '').length ||
+    (node.description || '').length ||
+    (node.website_url || '').length ||
+    node.is_kyc ||
+    !node.is_custodial ||
+    !node.is_enabled
+  )
+})
+const newServiceNodeError = computed(() => {
+  const code = normalizedNewServiceCode.value
+  if (!code) return '서비스 코드를 입력하세요'
+  if (!serviceCodePattern.test(code)) return '서비스 코드는 소문자, 숫자, 밑줄만 사용할 수 있습니다'
+  if ((serviceNodes.value || []).some(n => n.service === code)) return '이미 존재하는 서비스 코드입니다'
+  const displayName = (newServiceNode.value.display_name || '').trim()
+  if (!displayName) return '표시명을 입력하세요'
+  return ''
+})
+const canCreateServiceNode = computed(() => !newServiceNodeError.value)
 
 const getAdminUsername = () => {
   const nickname = localStorage.getItem('nickname')
@@ -1317,14 +1624,7 @@ const getNodeDisplayName = (nodeId) => {
   return node ? node.display_name : ''
 }
 
-const getRouteTypeDisplay = (routeType) => {
-  const types = {
-    'trading': '💱 거래수수료',
-    'withdrawal_lightning': '⚡ 라이트닝 출금',
-    'withdrawal_onchain': '🔗 온체인 출금'
-  }
-  return types[routeType] || routeType
-}
+const getRouteTypeLabel = (routeType) => routeTypeOptionMap[routeType]?.label || routeType
 
 // Compute aggregate fee for a path
 const computePathFees = (pathRoutes) => {
@@ -1341,31 +1641,10 @@ const formatKRW = (n) => {
   try { return Number(n).toLocaleString('ko-KR') + '원' } catch { return n + '원' }
 }
 
-// Helpers for creation UI grouping and destination filtering
-const groupTabClass = (name) => {
-  return [
-    'px-3 py-1 rounded border',
-    routeSelectGroup.value === name ? 'bg-white border-blue-300 text-blue-700' : 'bg-white/60 border-gray-200 hover:bg-white'
-  ]
-}
-
-const filteredByGroup = (nodes) => {
-  if (routeSelectGroup.value === 'all') return nodes
-  return nodes.filter(n => {
-    switch (routeSelectGroup.value) {
-      case 'upbit': return n.service?.startsWith('upbit')
-      case 'bithumb': return n.service?.startsWith('bithumb')
-      case 'binance': return n.service?.startsWith('binance')
-      case 'okx': return n.service?.startsWith('okx')
-      default: return true
-    }
-  })
-}
-
 const selectedSource = computed(() => serviceNodes.value.find(n => n.id === newRoute.value.sourceId) || null)
 const disallowedDestForUser = new Set(['binance','binance_usdt','binance_btc','okx','okx_usdt','okx_btc'])
 const filteredDestNodes = computed(() => {
-  let nodes = filteredByGroup(serviceNodes.value)
+  let nodes = serviceNodes.value
   if (selectedSource.value) {
     const srcSvc = selectedSource.value.service
     if (srcSvc === 'user') {
@@ -1842,12 +2121,59 @@ const loadServiceNodes = async () => {
     const response = await apiGetServiceNodes(username)
     console.log('Service nodes response:', response)
     if (response.success) {
-      serviceNodes.value = Array.isArray(response.nodes) ? [...response.nodes] : []
+      serviceNodes.value = Array.isArray(response.nodes) ? response.nodes.map(withDefaultNodeType) : []
     } else {
       routingUpdateError.value = response.error || '서비스 노드 데이터 로드에 실패했습니다'
     }
   } catch (error) {
     routingUpdateError.value = '네트워크 오류'
+  }
+}
+
+const createServiceNode = async () => {
+  if (!isAdmin.value) {
+    showErrorMessage('관리자만 서비스 노드를 추가할 수 있습니다')
+    return
+  }
+  if (!canCreateServiceNode.value) {
+    if (isNewServiceNodeDirty.value) {
+      showErrorMessage(newServiceNodeError.value || '입력값을 확인하세요')
+    }
+    return
+  }
+
+  routingUpdateLoading.value = true
+  routingUpdateSuccess.value = false
+  routingUpdateError.value = ''
+
+  try {
+    const username = getCurrentUsername()
+    const response = await apiUpdateServiceNode(
+      username,
+      normalizedNewServiceCode.value,
+      (newServiceNode.value.display_name || '').trim(),
+      normalizeNodeTypeValue(newServiceNode.value.node_type, normalizedNewServiceCode.value),
+      Boolean(newServiceNode.value.is_kyc),
+      Boolean(newServiceNode.value.is_custodial),
+      Boolean(newServiceNode.value.is_enabled),
+      newServiceNode.value.description,
+      newServiceNode.value.website_url || ''
+    )
+
+    if (response.success) {
+      routingUpdateSuccess.value = true
+      await loadServiceNodes()
+      resetNewServiceNode()
+      setTimeout(() => {
+        routingUpdateSuccess.value = false
+      }, 3000)
+    } else {
+      routingUpdateError.value = response.error || '서비스 노드 생성에 실패했습니다'
+    }
+  } catch (error) {
+    routingUpdateError.value = '네트워크 오류'
+  } finally {
+    routingUpdateLoading.value = false
   }
 }
 
@@ -1881,6 +2207,7 @@ const updateServiceNode = async (node) => {
       username,
       node.service,
       node.display_name,
+      normalizeNodeTypeValue(node.node_type, node.service),
       node.is_kyc,
       node.is_custodial,
       node.is_enabled,
@@ -1893,7 +2220,7 @@ const updateServiceNode = async (node) => {
       // Update the local node data
       const index = serviceNodes.value.findIndex(n => n.service === node.service)
       if (index !== -1) {
-        serviceNodes.value[index] = response.node
+        serviceNodes.value[index] = withDefaultNodeType(response.node)
       }
 
       // Clear success message after 3 seconds
@@ -2381,8 +2708,15 @@ const computeTotalFeeKRW = (path) => {
   return Math.max(0, Math.floor(rateFee + fixedFee))
 }
 
+const filteredOptimalPaths = computed(() => {
+  return (optimalPaths.value || []).filter(path => {
+    if (!Array.isArray(path.routes)) return true
+    return !path.routes.some(route => shouldExcludeRouteByOptimalFilters(route))
+  })
+})
+
 const sortedOptimalPaths = computed(() => {
-  const arr = [...(optimalPaths.value || [])]
+  const arr = [...filteredOptimalPaths.value]
   if ((sendAmountKRW.value || 0) > 0 && (btcPriceKrw.value || 0) > 0) {
     arr.sort((a, b) => computeTotalFeeKRW(a) - computeTotalFeeKRW(b))
   }

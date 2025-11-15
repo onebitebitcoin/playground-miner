@@ -31,7 +31,7 @@ def main(argv):
     os.makedirs(out_dir, exist_ok=True)
 
     nodes = list(ServiceNode.objects.all().values(
-        'service', 'display_name', 'is_kyc', 'is_custodial', 'is_enabled', 'description', 'website_url'
+        'service', 'display_name', 'node_type', 'is_kyc', 'is_custodial', 'is_enabled', 'description', 'website_url'
     ))
 
     routes_list = []
@@ -55,4 +55,3 @@ def main(argv):
 
 if __name__ == '__main__':
     main(sys.argv)
-

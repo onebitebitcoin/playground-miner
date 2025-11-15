@@ -61,3 +61,11 @@ pnpm-debug.log*
 # Logs
 logs/
 *.log
+
+# Bitcoin library cache/config
+backend/.bitcoinlib/
+
+# Development/debug scripts
+check_balance.py
+check_balance_rpc.py
+check_all_balances.py

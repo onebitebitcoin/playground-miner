@@ -59,12 +59,25 @@
       </div>
 
       <!-- Final Paths Results (dynamic from backend) -->
-      <div v-if="inputAmount && sortedOptimalPaths.length > 0" class="space-y-6">
-        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+      <div v-if="inputAmount" class="space-y-6">
+        <template v-if="sortedOptimalPaths.length > 0">
+        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <h2 class="text-lg sm:text-xl font-semibold text-gray-900">최종 경로 기반 수수료 비교 ({{ sortedOptimalPaths.length }}개)</h2>
 
-          <!-- View Mode Toggle -->
-          <div class="flex bg-gray-100 rounded-lg p-1 self-start sm:self-auto">
+          <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-end gap-3">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700">
+              <label class="inline-flex items-center gap-2">
+                <input type="checkbox" v-model="finalFilterExcludeLightning" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                라이트닝 경로 제외
+              </label>
+              <label class="inline-flex items-center gap-2">
+                <input type="checkbox" v-model="finalFilterExcludeKycWithdrawal" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                KYC 출금 제외
+              </label>
+            </div>
+
+            <!-- View Mode Toggle -->
+            <div class="flex bg-gray-100 rounded-lg p-1 self-start sm:self-auto">
             <button
               @click="viewMode = 'flow'"
               :class="[
@@ -93,6 +106,7 @@
               </svg>
               카드
             </button>
+          </div>
           </div>
         </div>
 
@@ -205,6 +219,10 @@
               </template>
             </div>
           </div>
+        </div>
+        </template>
+        <div v-else class="bg-white border border-dashed border-gray-200 rounded-lg p-6 text-center text-gray-600">
+          선택한 필터 조건에 맞는 최종 경로가 없습니다. 다른 필터를 선택하거나 금액을 변경해보세요.
         </div>
       </div>
 
@@ -735,7 +753,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { apiGetExchangeRates, apiGetWithdrawalFees, apiGetLightningServices, apiGetOptimalPaths } from '../api'
 
 // Reactive data
@@ -758,6 +776,30 @@ const selectedEventDetails = ref('')
 // Use non-reactive map to avoid update loops from ref callbacks
 const flowContainerRefs = Object.create(null)
 const flowOverflowById = ref({})
+const finalFilterExcludeLightning = ref(false)
+const finalFilterExcludeKycWithdrawal = ref(false)
+
+const nodeTypeOptions = ['exchange', 'service', 'wallet', 'user']
+const inferNodeTypeFromService = (service = '') => {
+  if (!service) return 'service'
+  if (service === 'user') return 'user'
+  if (service === 'personal_wallet') return 'wallet'
+  if (/^(upbit|bithumb|binance|okx)/.test(service)) return 'exchange'
+  return 'service'
+}
+const normalizeNodeTypeValue = (value, service = '') => {
+  if (value && nodeTypeOptions.includes(value)) {
+    return value
+  }
+  return inferNodeTypeFromService(service)
+}
+const withDefaultNodeType = (node) => {
+  if (!node || typeof node !== 'object') return node
+  return {
+    ...node,
+    node_type: normalizeNodeTypeValue(node.node_type, node.service)
+  }
+}
 
 const setFlowContainerRef = (id, el) => {
   if (!id) return
@@ -810,8 +852,26 @@ const computeTotalFeeKRW = (path) => {
   return Math.max(0, Math.floor(rateFee + fixedFee))
 }
 
+const isLightningRoute = (route) => route?.route_type === 'withdrawal_lightning'
+const isNonExchangeKycNode = (node) => {
+  if (!node) return false
+  const nodeType = normalizeNodeTypeValue(node.node_type, node.service)
+  return nodeType !== 'exchange' && nodeType !== 'user' && Boolean(node.is_kyc)
+}
+
+const filteredOptimalPaths = computed(() => {
+  return (optimalPaths.value || []).filter(path => {
+    if (!Array.isArray(path.routes)) return true
+    return !path.routes.some(route => {
+      if (finalFilterExcludeLightning.value && isLightningRoute(route)) return true
+      if (finalFilterExcludeKycWithdrawal.value && isNonExchangeKycNode(route.destination)) return true
+      return false
+    })
+  })
+})
+
 const sortedOptimalPaths = computed(() => {
-  const arr = [...(optimalPaths.value || [])]
+  const arr = [...filteredOptimalPaths.value]
   if ((actualAmountKRW.value || 0) > 0 && (bitcoinPrice.value || 0) > 0) {
     arr.sort((a, b) => computeTotalFeeKRW(a) - computeTotalFeeKRW(b))
   }
@@ -824,7 +884,14 @@ const loadFinalPaths = async () => {
   try {
     const res = await apiGetOptimalPaths(500)
     if (res.success) {
-      optimalPaths.value = res.paths || []
+      optimalPaths.value = (res.paths || []).map(path => ({
+        ...path,
+        routes: (path.routes || []).map(route => ({
+          ...route,
+          source: withDefaultNodeType(route.source),
+          destination: withDefaultNodeType(route.destination)
+        }))
+      }))
     } else {
       finalError.value = res.error || '최종 경로를 불러오지 못했습니다'
     }
@@ -849,6 +916,14 @@ const quickAmounts = ref([
   { label: '5억원', value: 5, unit: '100000000' },
   { label: '10억원', value: 10, unit: '100000000' }
 ])
+
+watch(sortedOptimalPaths, () => {
+  nextTick(() => checkAllOverflows())
+}, { deep: true })
+
+watch([finalFilterExcludeLightning, finalFilterExcludeKycWithdrawal, viewMode], () => {
+  nextTick(() => checkAllOverflows())
+})
 
 // Fee rates and related data
 const feeRates = ref({

@@ -268,6 +268,13 @@ class WithdrawalFee(models.Model):
 
 class ServiceNode(models.Model):
     """Service nodes for routing system"""
+    NODE_TYPE_CHOICES = [
+        ('user', '사용자'),
+        ('exchange', '거래소'),
+        ('service', '서비스'),
+        ('wallet', '지갑'),
+    ]
+
     SERVICE_CHOICES = [
         ('user', '사용자'),
         ('upbit', '업비트'),
@@ -293,6 +300,7 @@ class ServiceNode(models.Model):
 
     service = models.CharField(max_length=30, choices=SERVICE_CHOICES, unique=True)
     display_name = models.CharField(max_length=100)
+    node_type = models.CharField(max_length=20, choices=NODE_TYPE_CHOICES, default='service')
     is_kyc = models.BooleanField(default=False)
     is_custodial = models.BooleanField(default=True)
     is_enabled = models.BooleanField(default=True)
@@ -314,6 +322,7 @@ class ServiceNode(models.Model):
             'id': self.id,
             'service': self.service,
             'display_name': self.display_name,
+            'node_type': self.node_type,
             'is_kyc': self.is_kyc,
             'is_custodial': self.is_custodial,
             'is_enabled': self.is_enabled,
