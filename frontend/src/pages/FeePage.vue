@@ -78,6 +78,10 @@
                 <input type="checkbox" v-model="finalFilterOnlyEvents" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                 이벤트 경로만 보기
               </label>
+              <label class="inline-flex items-center gap-2">
+                <input type="checkbox" v-model="finalFilterExcludeCustodialServices" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                수탁형 제외
+              </label>
             </div>
 
             <!-- View Mode Toggle -->
@@ -838,6 +842,7 @@ const flowOverflowById = ref({})
 const finalFilterExcludeLightning = ref(false)
 const finalFilterExcludeKycWithdrawal = ref(false)
 const finalFilterOnlyEvents = ref(false)
+const finalFilterExcludeCustodialServices = ref(false)
 
 const nodeTypeOptions = ['exchange', 'service', 'wallet', 'user']
 const inferNodeTypeFromService = (service = '') => {
@@ -984,11 +989,21 @@ const isNonExchangeKycNode = (node) => {
   const nodeType = normalizeNodeTypeValue(node.node_type, node.service)
   return nodeType !== 'exchange' && nodeType !== 'user' && Boolean(node.is_kyc)
 }
+const isCustodialServiceNode = (node) => {
+  if (!node) return false
+  const nodeType = normalizeNodeTypeValue(node.node_type, node.service)
+  return nodeType === 'service' && Boolean(node.is_custodial)
+}
+const routeHasCustodialServiceNode = (route) => {
+  if (!route) return false
+  return isCustodialServiceNode(route.source) || isCustodialServiceNode(route.destination)
+}
 
 const filteredOptimalPaths = computed(() => {
   return (optimalPaths.value || []).filter(path => {
     if (!Array.isArray(path.routes)) return true
     if (finalFilterOnlyEvents.value && !pathHasEvent(path)) return false
+    if (finalFilterExcludeCustodialServices.value && path.routes.some(routeHasCustodialServiceNode)) return false
     return !path.routes.some(route => {
       if (finalFilterExcludeLightning.value && isLightningRoute(route)) return true
       if (finalFilterExcludeKycWithdrawal.value && isNonExchangeKycNode(route.destination)) return true
@@ -1048,7 +1063,7 @@ watch(sortedOptimalPaths, () => {
   nextTick(() => checkAllOverflows())
 }, { deep: true })
 
-watch([finalFilterExcludeLightning, finalFilterExcludeKycWithdrawal, finalFilterOnlyEvents, viewMode], () => {
+watch([finalFilterExcludeLightning, finalFilterExcludeKycWithdrawal, finalFilterOnlyEvents, finalFilterExcludeCustodialServices, viewMode], () => {
   nextTick(() => checkAllOverflows())
 })
 
