@@ -347,6 +347,9 @@ class Route(models.Model):
     fee_fixed = models.DecimalField(max_digits=10, decimal_places=8, null=True, blank=True)  # Fixed BTC fee
     is_enabled = models.BooleanField(default=True)
     description = models.TextField(blank=True, null=True)
+    is_event = models.BooleanField(default=False)
+    event_title = models.CharField(max_length=255, blank=True, default='')
+    event_description = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -376,6 +379,9 @@ class Route(models.Model):
             'fee_fixed': float(self.fee_fixed) if self.fee_fixed else None,
             'is_enabled': self.is_enabled,
             'description': self.description,
+            'is_event': self.is_event,
+            'event_title': self.event_title or '',
+            'event_description': self.event_description or '',
             'updated_at': self.updated_at.isoformat(),
         }
 

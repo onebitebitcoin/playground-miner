@@ -722,7 +722,7 @@ export async function apiGetRoutes(username) {
   }
 }
 
-export async function apiCreateRoute(username, sourceId, destinationId, routeType, feeRate, feeFixed, isEnabled, description) {
+export async function apiCreateRoute(username, sourceId, destinationId, routeType, feeRate, feeFixed, isEnabled, description, isEvent = false, eventTitle = '', eventDescription = '') {
   try {
     const res = await fetch(`${BASE_URL}/api/routes/admin`, {
       method: 'POST',
@@ -738,7 +738,10 @@ export async function apiCreateRoute(username, sourceId, destinationId, routeTyp
         fee_rate: feeRate,
         fee_fixed: feeFixed,
         is_enabled: isEnabled,
-        description
+        description,
+        is_event: isEvent,
+        event_title: eventTitle,
+        event_description: eventDescription
       })
     })
     if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }

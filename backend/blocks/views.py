@@ -1214,6 +1214,9 @@ def admin_routes_view(request):
         fee_fixed = data.get('fee_fixed')
         is_enabled = data.get('is_enabled', True)
         description = data.get('description', '')
+        is_event = data.get('is_event', False)
+        event_title = data.get('event_title', '')
+        event_description = data.get('event_description', '')
 
         if not source_id or not destination_id or not route_type:
             return JsonResponse({'ok': False, 'error': 'Source, destination, and route_type required'}, status=400)
@@ -1241,7 +1244,10 @@ def admin_routes_view(request):
                     'fee_rate': fee_rate if fee_rate is not None else None,
                     'fee_fixed': fee_fixed if fee_fixed is not None else None,
                     'is_enabled': bool(is_enabled),
-                    'description': description
+                    'description': description,
+                    'is_event': bool(is_event),
+                    'event_title': event_title,
+                    'event_description': event_description,
                 }
             )
 
@@ -1423,6 +1429,9 @@ def routing_snapshot_view(request):
                         'fee_fixed': float(r.fee_fixed) if r.fee_fixed is not None else None,
                         'is_enabled': bool(r.is_enabled),
                         'description': r.description or '',
+                        'is_event': bool(r.is_event),
+                        'event_title': r.event_title or '',
+                        'event_description': r.event_description or '',
                     })
                 snap, _ = RoutingSnapshot.objects.update_or_create(
                     name='default',
@@ -1469,6 +1478,9 @@ def routing_snapshot_view(request):
                         fee_fixed=r.get('fee_fixed', None),
                         is_enabled=bool(r.get('is_enabled', True)),
                         description=r.get('description', ''),
+                        is_event=bool(r.get('is_event', False)),
+                        event_title=r.get('event_title', ''),
+                        event_description=r.get('event_description', ''),
                     )
                     created += 1
                 return JsonResponse({'ok': True, 'restored_nodes': len(service_to_node), 'restored_routes': created})

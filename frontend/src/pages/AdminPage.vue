@@ -560,6 +560,28 @@
                       <div><label class="block text-sm font-medium text-gray-700 mb-2">비율 수수료 (%)</label><input v-model="newRoute.feeRate" type="number" step="0.0001" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" /></div>
                       <div><label class="block text-sm font-medium text-gray-700 mb-2">고정 수수료 (BTC)</label><input v-model="newRoute.feeFixed" type="number" step="0.00000001" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" /></div>
                       <div class="md:col-span-2"><input v-model="newRoute.description" type="text" placeholder="경로 설명 (선택사항)" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" /></div>
+                      <div class="md:col-span-2 bg-white border border-gray-200 rounded-lg p-3">
+                        <div class="flex items-center justify-between">
+                          <div>
+                            <div class="text-sm font-medium text-gray-900">이벤트 설정</div>
+                            <p class="text-xs text-gray-500">특정 경로에 한시적 혜택이 있을 경우 이벤트 정보를 입력하세요.</p>
+                          </div>
+                          <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                            <input type="checkbox" v-model="newRoute.isEvent" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                            이벤트 경로
+                          </label>
+                        </div>
+                        <div v-if="newRoute.isEvent" class="mt-3 grid sm:grid-cols-2 gap-3">
+                          <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">이벤트 제목</label>
+                            <input v-model="newRoute.eventTitle" type="text" placeholder="예: 수수료 50% 할인" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                          </div>
+                          <div class="sm:col-span-2">
+                            <label class="block text-xs font-medium text-gray-600 mb-1">이벤트 설명</label>
+                            <textarea v-model="newRoute.eventDescription" rows="2" placeholder="이벤트 내용 및 조건을 입력하세요" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"></textarea>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                   <div class="mt-8">
@@ -659,6 +681,25 @@
                             <label class="block text-xs font-medium text-gray-600 mb-1">고정 수수료(BTC)</label>
                             <input v-model.number="route.edit_fee_fixed" type="number" step="0.00000001" min="0" class="w-full px-2 py-1 border border-gray-300 rounded-md" />
                           </div>
+                          <div class="md:col-span-3 bg-gray-50 border border-gray-200 rounded-md p-3">
+                            <div class="flex items-center justify-between">
+                              <span class="text-xs font-medium text-gray-700">이벤트</span>
+                              <label class="inline-flex items-center gap-2 text-xs text-gray-700">
+                                <input type="checkbox" v-model="route.edit_is_event" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                                이벤트 경로
+                              </label>
+                            </div>
+                            <div v-if="route.edit_is_event" class="mt-2 grid md:grid-cols-2 gap-2">
+                              <div>
+                                <label class="block text-[11px] font-medium text-gray-600 mb-1">제목</label>
+                                <input v-model="route.edit_event_title" type="text" placeholder="예: 라이트닝 50% 할인" class="w-full px-2 py-1 border border-gray-300 rounded-md text-sm" />
+                              </div>
+                              <div class="md:col-span-2">
+                                <label class="block text-[11px] font-medium text-gray-600 mb-1">설명</label>
+                                <textarea v-model="route.edit_event_description" rows="2" placeholder="이벤트 세부 정보를 입력하세요" class="w-full px-2 py-1 border border-gray-300 rounded-md text-sm"></textarea>
+                              </div>
+                            </div>
+                          </div>
                           <div class="md:col-span-3 flex justify-end">
                             <button @click="updateExistingRoute(route)" :disabled="routingUpdateLoading" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">{{ routingUpdateLoading ? '저장 중...' : '저장' }}</button>
                           </div>
@@ -672,6 +713,15 @@
                         </div>
 
                         <div v-if="route.description" class="flex justify-between border-t pt-2 mt-2 text-sm"><span class="text-gray-600">설명:</span><span class="font-medium text-gray-800 text-right max-w-xs truncate">{{ route.description }}</span></div>
+                        <div v-if="route.is_event" class="mt-2 border border-amber-200 bg-amber-50 rounded-lg p-3 text-xs text-amber-900">
+                          <div class="flex items-center gap-2 font-semibold text-amber-800 mb-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {{ route.event_title || '이벤트 진행중' }}
+                          </div>
+                          <p class="whitespace-pre-line">{{ route.event_description || '이벤트 상세정보가 없습니다.' }}</p>
+                        </div>
                       </div>
                     </div>
                     <div v-if="routingUpdateSuccess" class="p-3 bg-green-50 border border-green-200 rounded-lg mt-4"><div class="flex items-center"><svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg><p class="text-green-700">라우팅 설정이 성공적으로 업데이트되었습니다!</p></div></div>
@@ -718,12 +768,12 @@
                         </label>
                       </div>
                       <div class="flex items-center justify-between sm:justify-start gap-2 text-sm w-full sm:w-auto">
-                        <span class="text-gray-700">BTC 가격(KRW)</span>
+                        <span class="text-gray-700">BTC 가격(KRW, 업비트 기준)</span>
                         <span class="font-semibold text-gray-900">{{ btcPriceKrw ? formatKRW(btcPriceKrw) : '불러오는 중...' }}</span>
                       </div>
                       <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                         <button
-                          @click="fetchBtcPriceKrw"
+                          @click="fetchBtcPriceKrw(true)"
                           class="w-full sm:w-auto px-2 py-2 text-xs sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded"
                         >
                           가격 새로고침
@@ -1153,6 +1203,7 @@ import { copyToClipboard } from '../composables/useClipboard'
 import { generateQRCode } from '../composables/useQRCode'
 import { formatBtc, formatDate, formatKrw } from '../utils/formatters'
 import { validateMnemonic, parseMnemonicWords } from '../utils/validation'
+import { getUpbitBtcPriceKrw } from '../utils/btcPriceProvider'
 
 // Composables
 const { successMessage, errorMessage, showSuccess, showError } = useNotification()
@@ -1241,7 +1292,10 @@ const newRoute = ref({
   routeType: '',
   feeRate: null,
   feeFixed: null,
-  description: ''
+  description: '',
+  isEvent: false,
+  eventTitle: '',
+  eventDescription: ''
 })
 const routeTypeOptions = [
   {
@@ -1669,7 +1723,10 @@ const clearRoute = () => {
     routeType: '',
     feeRate: null,
     feeFixed: null,
-    description: ''
+    description: '',
+    isEvent: false,
+    eventTitle: '',
+    eventDescription: ''
   }
 }
 
@@ -2187,6 +2244,9 @@ const loadRoutes = async () => {
         edit_route_type: r.route_type,
         edit_fee_rate: r.fee_rate,
         edit_fee_fixed: r.fee_fixed,
+        edit_is_event: r.is_event,
+        edit_event_title: r.event_title,
+        edit_event_description: r.event_description,
       }))
     } else {
       routingUpdateError.value = response.error || '경로 데이터 로드에 실패했습니다'
@@ -2252,7 +2312,10 @@ const createRoute = async () => {
       newRoute.value.feeRate ? parseFloat(newRoute.value.feeRate) : null,
       newRoute.value.feeFixed ? parseFloat(newRoute.value.feeFixed) : null,
       true, // is_enabled
-      newRoute.value.description
+      newRoute.value.description,
+      Boolean(newRoute.value.isEvent),
+      newRoute.value.eventTitle || '',
+      newRoute.value.eventDescription || ''
     )
 
     if (response.success) {
@@ -2264,6 +2327,9 @@ const createRoute = async () => {
         edit_route_type: response.route.route_type,
         edit_fee_rate: response.route.fee_rate,
         edit_fee_fixed: response.route.fee_fixed,
+        edit_is_event: response.route.is_event,
+        edit_event_title: response.route.event_title,
+        edit_event_description: response.route.event_description,
       })
 
       // Reset form
@@ -2273,7 +2339,10 @@ const createRoute = async () => {
         routeType: '',
         feeRate: null,
         feeFixed: null,
-        description: ''
+        description: '',
+        isEvent: false,
+        eventTitle: '',
+        eventDescription: ''
       }
 
       // Clear success message after 3 seconds
@@ -2344,7 +2413,10 @@ const updateExistingRoute = async (route) => {
       newFeeRate,
       newFeeFixed,
       route.is_enabled,
-      route.description || ''
+      route.description || '',
+      Boolean(route.edit_is_event),
+      route.edit_event_title || '',
+      route.edit_event_description || ''
     )
 
     if (!resp.success) {
@@ -2362,6 +2434,9 @@ const updateExistingRoute = async (route) => {
         edit_route_type: updated.route_type,
         edit_fee_rate: updated.fee_rate,
         edit_fee_fixed: updated.fee_fixed,
+        edit_is_event: updated.is_event,
+        edit_event_title: updated.event_title,
+        edit_event_description: updated.event_description,
       } : r)
     } else {
       // Same key; just patch fields
@@ -2370,6 +2445,9 @@ const updateExistingRoute = async (route) => {
         edit_route_type: updated.route_type,
         edit_fee_rate: updated.fee_rate,
         edit_fee_fixed: updated.fee_fixed,
+        edit_is_event: updated.is_event,
+        edit_event_title: updated.event_title,
+        edit_event_description: updated.event_description,
       } : r)
     }
 
@@ -2447,17 +2525,13 @@ const resetFromSnapshot = async () => {
   } finally { snapshotLoading.value = false }
 }
 
-// Fetch BTC price (KRW) via public API
-const fetchBtcPriceKrw = async () => {
+// Fetch BTC price (KRW) via Upbit API with caching
+const fetchBtcPriceKrw = async (force = false) => {
   try {
-    const resp = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=krw')
-    const data = await resp.json()
-    const price = data?.bitcoin?.krw
-    if (typeof price === 'number' && price > 0) {
-      btcPriceKrw.value = price
-    }
+    const price = await getUpbitBtcPriceKrw(force)
+    btcPriceKrw.value = price
   } catch (e) {
-    console.error('Failed to fetch BTC price (KRW):', e)
+    console.error('Failed to fetch BTC price (KRW) from Upbit:', e)
   }
 }
 

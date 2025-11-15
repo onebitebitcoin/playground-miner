@@ -54,7 +54,7 @@
         </div>
 
         <div v-if="bitcoinPrice" class="text-sm text-gray-600">
-          현재 비트코인 가격: {{ formatPrice(bitcoinPrice) }}원
+          현재 비트코인 가격(업비트 기준): {{ formatPrice(bitcoinPrice) }}원
         </div>
       </div>
 
@@ -114,9 +114,15 @@
         <div v-if="viewMode === 'cards'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           <div v-for="(path, idx) in sortedOptimalPaths" :key="path.path_signature || idx" class="bg-white rounded-lg shadow-sm p-6 border transition-all hover:shadow-md">
             <div class="flex items-center justify-between mb-3">
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 flex-wrap">
                 <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-800 font-semibold">{{ idx + 1 }}</span>
                 <h3 class="text-base sm:text-lg font-semibold text-gray-900">경로 #{{ idx + 1 }}</h3>
+                <span v-if="pathHasEvent(path)" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  이벤트 포함
+                </span>
               </div>
               <div class="text-right">
                 <div class="text-lg sm:text-2xl font-extrabold text-red-600">{{ formatPrice(computeTotalFeeKRW(path)) }}원</div>
@@ -125,24 +131,56 @@
             </div>
             <div class="flex flex-wrap items-center text-sm">
               <template v-for="(r, i) in path.routes" :key="i">
-                <span class="px-2 py-1 bg-blue-50 text-blue-800 rounded">{{ r.source.display_name }}</span>
-                <svg class="w-4 h-4 mx-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                <span v-if="i === path.routes.length - 1" class="px-2 py-1 bg-green-50 text-green-800 rounded">{{ r.destination.display_name }}</span>
+                <span
+                  class="px-2 py-1 bg-blue-50 text-blue-800 rounded transition hover:bg-blue-100"
+                  :class="nodeHasUrl(r.source) ? 'cursor-pointer' : ''"
+                  @click="navigateToNode(r.source)"
+                >
+                  {{ r.source.display_name }}
+                </span>
+                <span class="inline-flex items-center mx-1 text-gray-400 gap-1">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                  <span v-if="r.is_event" class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">이벤트</span>
+                </span>
+                <span
+                  v-if="i === path.routes.length - 1"
+                  class="px-2 py-1 bg-green-50 text-green-800 rounded transition hover:bg-green-100"
+                  :class="nodeHasUrl(r.destination) ? 'cursor-pointer' : ''"
+                  @click="navigateToNode(r.destination)"
+                >
+                  {{ r.destination.display_name }}
+                </span>
               </template>
             </div>
-            <div class="mt-3 grid grid-cols-1 gap-1 text-xs text-gray-600">
-              <div v-for="(r, i) in path.routes" :key="'d'+i" class="flex justify-between bg-gray-50 px-2 py-1 rounded">
-                <span>{{ r.source.display_name }} → {{ r.destination.display_name }} ({{ r.route_type_display }})</span>
-                <span>
-                  <template v-if="r.fee_rate !== null">{{ r.fee_rate }}%</template>
-                  <template v-if="r.fee_fixed !== null">{{ r.fee_rate !== null ? ' + ' : ''}}{{ r.fee_fixed }} BTC</template>
-                  <template v-if="r.fee_rate === null && r.fee_fixed === null">무료</template>
-                </span>
+            <div class="mt-3 grid grid-cols-1 gap-2 text-xs text-gray-600">
+              <div v-for="(r, i) in path.routes" :key="'d'+i" class="bg-gray-50 px-2 py-1 rounded border border-gray-100">
+                <div class="flex justify-between">
+                  <span>{{ r.source.display_name }} → {{ r.destination.display_name }} ({{ r.route_type_display }})</span>
+                  <span>
+                    <template v-if="r.fee_rate !== null">{{ r.fee_rate }}%</template>
+                    <template v-if="r.fee_fixed !== null">{{ r.fee_rate !== null ? ' + ' : ''}}{{ r.fee_fixed }} BTC</template>
+                    <template v-if="r.fee_rate === null && r.fee_fixed === null">무료</template>
+                  </span>
+                </div>
               </div>
             </div>
 
             <!-- Footer: show total rate and fixed fees under the card -->
-            <div class="mt-4 pt-3 border-t text-xs text-gray-600">
+            <div class="mt-4 pt-3 border-t text-xs text-gray-600 space-y-4">
+              <div v-if="pathHasEvent(path)" class="space-y-1 text-amber-900 bg-amber-50 border border-amber-200 rounded px-2 py-2">
+                <div class="flex items-center gap-2 font-semibold text-amber-800">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>이 경로에 이벤트가 포함되어 있습니다</span>
+                </div>
+                <div class="space-y-1">
+                  <div v-for="(eventRoute, eventIdx) in getEventRoutes(path)" :key="`event-${idx}-${eventIdx}`" class="bg-white/60 px-2 py-1 rounded border border-amber-100">
+                    <div class="font-medium">{{ formatEventRouteTitle(eventRoute) }}</div>
+                    <div class="text-[11px] text-amber-700">{{ previewEventDescription(eventRoute.event_description) }}</div>
+                  </div>
+                </div>
+              </div>
               <div>
                 총 비율 수수료: <span class="font-semibold">{{ computePathFees(path.routes).rate.toFixed(4) }}%</span>
                 • 총 고정 수수료: <span class="font-semibold">{{ computePathFees(path.routes).fixed.toFixed(8) }} BTC</span>
@@ -158,7 +196,15 @@
         <div v-else class="space-y-4">
           <div v-for="(path, idx) in sortedOptimalPaths" :key="path.path_signature || idx" class="bg-white rounded-lg shadow-sm p-4 sm:p-6 border">
             <div class="flex items-center justify-between mb-3">
-              <div class="font-medium text-gray-900">경로 #{{ idx + 1 }}</div>
+              <div class="font-medium text-gray-900 flex items-center gap-2">
+                경로 #{{ idx + 1 }}
+                <span v-if="pathHasEvent(path)" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  이벤트
+                </span>
+              </div>
               <div class="text-right">
                 <div class="text-lg sm:text-2xl font-extrabold text-red-600">{{ formatPrice(computeTotalFeeKRW(path)) }}원</div>
                 <div class="text-[11px] sm:text-xs text-gray-500">총 예상 수수료</div>
@@ -171,7 +217,11 @@
                 <!-- First source node -->
                 <template v-if="path.routes && path.routes.length > 0">
                   <div class="flex flex-col items-center shrink-0 mr-2">
-                    <div class="w-24 sm:w-32 bg-white border border-gray-300 rounded-lg p-2 text-center shadow">
+                    <div
+                      class="w-24 sm:w-32 bg-white border border-gray-300 rounded-lg p-2 text-center shadow"
+                      :class="nodeHasUrl(path.routes[0].source) ? 'cursor-pointer hover:border-blue-400 hover:shadow-md transition' : ''"
+                      @click="navigateToNode(path.routes[0].source)"
+                    >
                       <div class="text-[11px] sm:text-sm font-semibold text-gray-900 truncate">{{ path.routes[0].source.display_name }}</div>
                       <div class="mt-1 flex items-center justify-center gap-1">
                         <span class="text-[9px] px-1.5 py-0.5 rounded-full" :class="path.routes[0].source.is_kyc ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'">{{ path.routes[0].source.is_kyc ? 'KYC' : 'non-KYC' }}</span>
@@ -184,9 +234,12 @@
                 <!-- For each route: arrow with fee, then destination node with badges -->
                 <template v-for="(r, i) in path.routes" :key="'flow-'+i">
                   <div class="flex flex-col items-center mx-2 shrink-0">
-                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                    </svg>
+                    <div class="flex items-center gap-2">
+                      <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                      </svg>
+                      <span v-if="r.is_event" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">이벤트</span>
+                    </div>
                     <div class="mt-1 text-[10px] sm:text-xs text-center leading-tight">
                       <div v-if="r.fee_rate !== null" class="text-gray-700">{{ r.fee_rate }}%</div>
                       <div v-if="r.fee_fixed !== null" :class="Number(r.fee_fixed) === 0 ? 'text-green-600' : 'text-orange-600'">
@@ -199,7 +252,11 @@
                     </div>
                   </div>
                   <div :class="['flex flex-col items-center shrink-0', i === path.routes.length - 1 ? 'mr-0' : 'mr-2']">
-                    <div class="w-24 sm:w-32 bg-white border border-gray-300 rounded-lg p-2 text-center shadow">
+                    <div
+                      class="w-24 sm:w-32 bg-white border border-gray-300 rounded-lg p-2 text-center shadow"
+                      :class="nodeHasUrl(r.destination) ? 'cursor-pointer hover:border-blue-400 hover:shadow-md transition' : ''"
+                      @click="navigateToNode(r.destination)"
+                    >
                       <div class="text-[11px] sm:text-sm font-semibold text-gray-900 truncate">{{ r.destination.display_name }}</div>
                       <div class="mt-1 flex items-center justify-center gap-1">
                         <span class="text-[9px] px-1.5 py-0.5 rounded-full" :class="r.destination.is_kyc ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'">{{ r.destination.is_kyc ? 'KYC' : 'non-KYC' }}</span>
@@ -211,7 +268,21 @@
               </div>
             </div>
             <!-- Footer totals under flow box -->
-            <div class="mt-3 pt-2 border-t text-xs text-gray-600">
+            <div class="mt-3 pt-2 border-t text-xs text-gray-600 space-y-4">
+              <div v-if="pathHasEvent(path)" class="space-y-1 text-amber-900 bg-amber-50 border border-amber-200 rounded px-2 py-2">
+                <div class="flex items-center gap-2 font-semibold text-amber-800">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>이 경로에 이벤트가 포함되어 있습니다</span>
+                </div>
+                <div class="space-y-1">
+                  <div v-for="(eventRoute, eventIdx) in getEventRoutes(path)" :key="`flow-event-${idx}-${eventIdx}`" class="bg-white/60 px-2 py-1 rounded border border-amber-100">
+                    <div class="font-medium">{{ formatEventRouteTitle(eventRoute) }}</div>
+                    <div class="text-[11px] text-amber-700">{{ previewEventDescription(eventRoute.event_description) }}</div>
+                  </div>
+                </div>
+              </div>
               총 비율 수수료: <span class="font-semibold">{{ computePathFees(path.routes).rate.toFixed(4) }}%</span>
               • 총 고정 수수료: <span class="font-semibold">{{ computePathFees(path.routes).fixed.toFixed(8) }} BTC</span>
               <template v-if="bitcoinPrice && computePathFees(path.routes).fixed">
@@ -543,8 +614,7 @@
 
                     <!-- Event badge (prevent navigation) -->
                     <div v-if="exchange.note"
-                         @click.prevent.stop="showEventDetails(exchange.eventDetails)"
-                         class="absolute -top-2 sm:-top-3 -right-2 sm:-right-3 bg-orange-500 text-white text-[8px] sm:text-xs px-1 sm:px-1.5 py-0.5 rounded-full font-medium shadow whitespace-nowrap cursor-pointer hover:bg-orange-600 transition-colors">
+                         class="absolute -top-2 sm:-top-3 -right-2 sm:-right-3 bg-orange-500 text-white text-[8px] sm:text-xs px-1 sm:px-1.5 py-0.5 rounded-full font-medium shadow whitespace-nowrap">
                       이벤트
                     </div>
                   </component>
@@ -593,8 +663,7 @@
 
                     <!-- Event badge for second exchange (prevent navigation) -->
                     <div v-if="result.exchanges[1].note"
-                         @click.prevent.stop="showEventDetails(result.exchanges[1].eventDetails)"
-                         class="absolute -top-2 sm:-top-3 -right-2 sm:-right-3 bg-orange-500 text-white text-[8px] sm:text-xs px-1 sm:px-1.5 py-0.5 rounded-full font-medium shadow whitespace-nowrap cursor-pointer hover:bg-orange-600 transition-colors">
+                         class="absolute -top-2 sm:-top-3 -right-2 sm:-right-3 bg-orange-500 text-white text-[8px] sm:text-xs px-1 sm:px-1.5 py-0.5 rounded-full font-medium shadow whitespace-nowrap">
                       이벤트
                     </div>
                   </component>
@@ -699,14 +768,6 @@
 
               </div>
             </div>
-
-            <!-- Event Guide Message in Flow View -->
-            <div v-if="result.exchanges.some(ex => ex.note)" class="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-              <div class="text-sm text-gray-700">
-                자세한 이벤트를 보려면 이벤트 표시를 클릭하세요
-              </div>
-            </div>
-
           </div>
         </div>
       </div>
@@ -727,34 +788,13 @@
       </div>
     </div>
 
-    <!-- Event Details Modal -->
-    <div v-if="showEventModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" @click="closeEventModal">
-      <div class="bg-white rounded-lg max-w-md w-full p-6" @click.stop>
-        <div class="flex justify-between items-center mb-4">
-          <h3 class="text-lg font-semibold text-gray-900">이벤트 상세정보</h3>
-          <button @click="closeEventModal" class="text-gray-400 hover:text-gray-600">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div class="text-gray-700">
-          <p v-if="selectedEventDetails" class="whitespace-pre-wrap">{{ selectedEventDetails }}</p>
-          <p v-else class="text-gray-500 italic">이벤트 상세정보가 없습니다.</p>
-        </div>
-        <div class="mt-6 text-right">
-          <button @click="closeEventModal" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
-            닫기
-          </button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { apiGetExchangeRates, apiGetWithdrawalFees, apiGetLightningServices, apiGetOptimalPaths } from '../api'
+import { getUpbitBtcPriceKrw } from '../utils/btcPriceProvider'
 
 // Reactive data
 const inputAmount = ref('')
@@ -770,8 +810,6 @@ const finalError = ref('')
 const isMobile = ref(false)
 const detailsOpenById = ref({})
 const viewMode = ref('flow') // 'cards' or 'flow'
-const showEventModal = ref(false)
-const selectedEventDetails = ref('')
 // Flow container overflow tracking
 // Use non-reactive map to avoid update loops from ref callbacks
 const flowContainerRefs = Object.create(null)
@@ -801,6 +839,32 @@ const withDefaultNodeType = (node) => {
   }
 }
 
+const pathHasEvent = (path) => Array.isArray(path?.routes) && path.routes.some(route => route.is_event)
+const getEventRoutes = (path) => {
+  if (!Array.isArray(path?.routes)) return []
+  return path.routes.filter(route => route.is_event)
+}
+const nodeHasUrl = (node) => Boolean(node?.website_url)
+const navigateToNode = (node) => {
+  if (!nodeHasUrl(node)) return
+  window.open(node.website_url, '_blank', 'noopener,noreferrer')
+}
+const previewEventDescription = (desc) => {
+  if (!desc) return '이벤트 상세정보가 없습니다.'
+  const trimmed = desc.trim()
+  if (trimmed.length > 80) return `${trimmed.slice(0, 80)}…`
+  return trimmed
+}
+const formatEventRouteTitle = (route) => {
+  if (!route) return '이벤트'
+  if (route.event_title) return route.event_title
+  const source = route.source?.display_name || ''
+  const dest = route.destination?.display_name || ''
+  if (source || dest) {
+    return `${source} → ${dest} 이벤트`.trim()
+  }
+  return '이벤트'
+}
 const setFlowContainerRef = (id, el) => {
   if (!id) return
   if (el) {
@@ -1029,22 +1093,19 @@ const setQuickAmount = (value, unit) => {
   calculateFees()
 }
 
-const fetchBitcoinPrice = async () => {
+const fetchBitcoinPrice = async (force = false) => {
+  if (!force && bitcoinPrice.value !== null && !isLoading.value) {
+    return
+  }
   isLoading.value = true
   error.value = null
 
   try {
-    const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=krw')
-    const data = await response.json()
-
-    if (data.bitcoin && data.bitcoin.krw) {
-      bitcoinPrice.value = data.bitcoin.krw
-    } else {
-      throw new Error('비트코인 가격 정보를 가져올 수 없습니다.')
-    }
+    const price = await getUpbitBtcPriceKrw(force)
+    bitcoinPrice.value = price
   } catch (err) {
     error.value = '비트코인 가격을 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'
-    console.error('Bitcoin price fetch error:', err)
+    console.error('Upbit Bitcoin price fetch error:', err)
   } finally {
     isLoading.value = false
   }
@@ -1620,16 +1681,6 @@ const toggleDetails = (id) => {
   detailsOpenById.value[id] = !detailsOpenById.value[id]
 }
 
-const showEventDetails = (eventDetails) => {
-  selectedEventDetails.value = eventDetails
-  showEventModal.value = true
-}
-
-const closeEventModal = () => {
-  showEventModal.value = false
-  selectedEventDetails.value = ''
-}
-
 const getBtcWithdrawalFee = (result) => {
   // 업비트/빗썸의 BTC 출금 수수료는 0.0002 BTC
   if (result.exchanges.length === 1 && result.transferFee > 0) {
@@ -1858,14 +1909,6 @@ onMounted(async () => {
   // Recalculate overflow on resize
   try { window.addEventListener('resize', checkAllOverflows, { passive: true }) } catch (_) { window.addEventListener('resize', checkAllOverflows) }
 
-  // ESC key listener for modal
-  const handleEscKey = (event) => {
-    if (event.key === 'Escape' && showEventModal.value) {
-      closeEventModal()
-    }
-  }
-  document.addEventListener('keydown', handleEscKey)
-
   await fetchBitcoinPrice()
   await loadData()
 
@@ -1886,6 +1929,5 @@ onBeforeUnmount(() => {
       delete el.__overflowScrollHandler
     }
   }
-  window.removeEventListener('resize', checkAllOverflows)
 })
 </script>

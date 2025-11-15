@@ -45,6 +45,9 @@ def main(argv):
             'fee_fixed': float(r.fee_fixed) if r.fee_fixed is not None else None,
             'is_enabled': bool(r.is_enabled),
             'description': r.description or '',
+            'is_event': bool(r.is_event),
+            'event_title': r.event_title or '',
+            'event_description': r.event_description or '',
         })
 
     payload = { 'nodes': nodes, 'routes': routes_list }
