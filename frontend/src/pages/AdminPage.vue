@@ -550,26 +550,44 @@
                       <div><label class="block text-sm font-medium text-gray-700 mb-2">비율 수수료 (%)</label><input v-model="newRoute.feeRate" type="number" step="0.0001" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" /></div>
                       <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">고정 수수료</label>
-                        <div class="flex gap-2">
-                          <input v-model="newRoute.feeFixed" type="number" step="0.00000001" min="0" class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                          <select v-model="newRoute.feeFixedCurrency" class="px-2 py-2 border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none w-24">
-                            <option v-for="option in feeCurrencyOptions" :key="`new-fee-currency-${option.value}`" :value="option.value">{{ option.label }}</option>
-                          </select>
+                        <div class="space-y-3">
+                          <input v-model="newRoute.feeFixed" type="number" step="0.00000001" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                          <div class="flex flex-wrap gap-2">
+                            <label
+                              v-for="option in feeCurrencyOptions"
+                              :key="`new-fee-currency-${option.value}`"
+                              class="cursor-pointer"
+                            >
+                              <input type="radio" class="sr-only" :value="option.value" v-model="newRoute.feeFixedCurrency" />
+                              <span
+                                :class="[
+                                  newRoute.feeFixedCurrency === option.value
+                                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                                    : 'bg-white text-gray-700 border-gray-300 hover:border-blue-300',
+                                  'px-3 py-1 rounded-full border text-sm font-medium inline-flex items-center gap-1 transition-colors'
+                                ]"
+                              >
+                                {{ option.label }}
+                              </span>
+                            </label>
+                          </div>
                         </div>
                       </div>
-                      <div class="md:col-span-2">
-                        <label class="inline-flex items-center gap-2 text-sm text-gray-700">
-                          <input type="checkbox" v-model="newRoute.isEvent" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-                          이벤트
-                        </label>
-                        <div v-if="newRoute.isEvent" class="mt-3 grid sm:grid-cols-2 gap-3">
-                          <div>
-                            <label class="block text-xs font-medium text-gray-600 mb-1">이벤트 제목</label>
-                            <input v-model="newRoute.eventTitle" type="text" placeholder="예: 수수료 50% 할인" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-                          </div>
-                          <div class="sm:col-span-2">
-                            <label class="block text-xs font-medium text-gray-600 mb-1">이벤트 설명</label>
-                            <textarea v-model="newRoute.eventDescription" rows="2" placeholder="이벤트 내용 및 조건을 입력하세요" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"></textarea>
+                      <div class="md:col-span-2 lg:col-span-3">
+                        <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                          <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                            <input type="checkbox" v-model="newRoute.isEvent" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                            이벤트 경로
+                          </label>
+                          <div v-if="newRoute.isEvent" class="mt-3 grid sm:grid-cols-2 gap-3">
+                            <div>
+                              <label class="block text-xs font-medium text-gray-600 mb-1">이벤트 제목</label>
+                              <input v-model="newRoute.eventTitle" type="text" placeholder="예: 수수료 50% 할인" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                            </div>
+                            <div class="sm:col-span-2">
+                              <label class="block text-xs font-medium text-gray-600 mb-1">이벤트 설명</label>
+                              <textarea v-model="newRoute.eventDescription" rows="2" placeholder="이벤트 내용 및 조건을 입력하세요" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"></textarea>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -670,11 +688,27 @@
                             </div>
                             <div>
                               <label class="block text-xs font-medium text-gray-600 mb-1">고정 수수료</label>
-                              <div class="flex items-center gap-2">
+                              <div class="space-y-2">
                                 <input v-model.number="route.edit_fee_fixed" type="number" step="0.00000001" min="0" class="w-full px-2 py-1 border border-gray-300 rounded-md" />
-                                <select v-model="route.edit_fee_fixed_currency" class="px-2 py-1 border border-gray-300 rounded-md bg-white text-xs">
-                                  <option v-for="option in feeCurrencyOptions" :key="`edit-fee-currency-${route.id}-${option.value}`" :value="option.value">{{ option.label }}</option>
-                                </select>
+                                <div class="flex flex-wrap gap-1.5">
+                                  <label
+                                    v-for="option in feeCurrencyOptions"
+                                    :key="`edit-fee-currency-${route.id}-${option.value}`"
+                                    class="cursor-pointer"
+                                  >
+                                    <input type="radio" class="sr-only" :value="option.value" v-model="route.edit_fee_fixed_currency" />
+                                    <span
+                                      :class="[
+                                        route.edit_fee_fixed_currency === option.value
+                                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                                          : 'bg-white text-gray-700 border-gray-300 hover:border-blue-300',
+                                        'px-2.5 py-0.5 rounded-full border text-xs font-medium inline-flex items-center gap-1 transition-colors'
+                                      ]"
+                                    >
+                                      {{ option.label }}
+                                    </span>
+                                  </label>
+                                </div>
                               </div>
                             </div>
                           </div>
