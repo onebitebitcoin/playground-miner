@@ -71,10 +71,23 @@
                 라이트닝 경로 제외
               </label>
               <label class="inline-flex items-center gap-2">
+                <input type="checkbox" v-model="finalFilterExcludeKycWithdrawal" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                KYC 제외
+              </label>
+              <label class="inline-flex items-center gap-2">
                 <input type="checkbox" v-model="finalFilterOnlyEvents" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                 이벤트 경로만 보기
               </label>
             </div>
+            <select
+              v-model="finalFilterNode"
+              class="self-start sm:self-auto px-2 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-sm"
+            >
+              <option value="">전체 경로</option>
+              <option v-for="node in finalNodeOptions" :key="node.value" :value="node.value">
+                {{ node.label }}
+              </option>
+            </select>
 
             <!-- View Mode Toggle -->
             <div class="flex bg-gray-100 rounded-lg p-1 self-start sm:self-auto">
@@ -835,6 +848,7 @@ const finalFilterExcludeLightning = ref(false)
 const finalFilterExcludeKycWithdrawal = ref(false)
 const finalFilterOnlyEvents = ref(false)
 const finalFilterExcludeCustodialServices = ref(false)
+const finalFilterNode = ref('')
 
 const nodeTypeOptions = ['exchange', 'service', 'wallet', 'user']
 const toTruthyBoolean = (value) => value === true || value === 1 || value === '1' || value === 'true'
@@ -977,11 +991,18 @@ const computeTotalFeeKRW = (path) => {
 }
 
 const isLightningRoute = (route) => route?.route_type === 'withdrawal_lightning'
-const isServiceKycNode = (node) => {
+const pathHasLightningRoute = (path) => Array.isArray(path?.routes) && path.routes.some(isLightningRoute)
+const isPersonalWalletNode = (node) => {
   if (!node) return false
   const nodeType = normalizeNodeTypeValue(node.node_type, node.service)
-  const isKyc = toTruthyBoolean(node.is_kyc)
-  return nodeType === 'service' && isKyc
+  if (nodeType === 'wallet') return true
+  return (node.service || '').toString().toLowerCase() === 'personal_wallet'
+}
+const pathHasKycBeforePersonalWallet = (path) => {
+  if (!Array.isArray(path?.routes) || path.routes.length === 0) return false
+  const lastRoute = path.routes[path.routes.length - 1]
+  if (!lastRoute || !isPersonalWalletNode(lastRoute.destination)) return false
+  return toTruthyBoolean(lastRoute.source?.is_kyc)
 }
 const isCustodialServiceNode = (node) => {
   if (!node) return false
@@ -993,17 +1014,45 @@ const routeHasCustodialServiceNode = (route) => {
   if (!route) return false
   return isCustodialServiceNode(route.source) || isCustodialServiceNode(route.destination)
 }
+const nodeMatchesFilter = (node, target) => {
+  if (!node || !target) return false
+  const service = (node.service || '').toString().toLowerCase()
+  const name = (node.display_name || '').toString().toLowerCase()
+  const t = target.toString().toLowerCase()
+  return service === t || name === t
+}
+const pathContainsNode = (path, target) => {
+  if (!target) return true
+  if (!Array.isArray(path?.routes)) return false
+  return path.routes.some(route => nodeMatchesFilter(route.source, target) || nodeMatchesFilter(route.destination, target))
+}
+const finalNodeOptions = computed(() => {
+  const seen = new Set()
+  const options = []
+  for (const path of optimalPaths.value || []) {
+    for (const route of path.routes || []) {
+      for (const node of [route.source, route.destination]) {
+        if (!node) continue
+        const val = (node.service || node.display_name || '').toString()
+        if (!val || seen.has(val)) continue
+        seen.add(val)
+        const label = node.display_name || node.service || val
+        options.push({ value: val, label })
+      }
+    }
+  }
+  return options.sort((a, b) => a.label.localeCompare(b.label, 'ko'))
+})
 
 const filteredOptimalPaths = computed(() => {
   return (optimalPaths.value || []).filter(path => {
     if (!Array.isArray(path.routes)) return true
     if (finalFilterOnlyEvents.value && !pathHasEvent(path)) return false
     if (finalFilterExcludeCustodialServices.value && path.routes.some(routeHasCustodialServiceNode)) return false
-    return !path.routes.some(route => {
-      if (finalFilterExcludeLightning.value && isLightningRoute(route)) return true
-      if (finalFilterExcludeKycWithdrawal.value && isServiceKycNode(route.destination)) return true
-      return false
-    })
+    if (finalFilterExcludeLightning.value && pathHasLightningRoute(path)) return false
+    if (finalFilterExcludeKycWithdrawal.value && pathHasKycBeforePersonalWallet(path)) return false
+    if (finalFilterNode.value && !pathContainsNode(path, finalFilterNode.value)) return false
+    return true
   })
 })
 
@@ -1058,7 +1107,7 @@ watch(sortedOptimalPaths, () => {
   nextTick(() => checkAllOverflows())
 }, { deep: true })
 
-watch([finalFilterExcludeLightning, finalFilterExcludeKycWithdrawal, finalFilterOnlyEvents, finalFilterExcludeCustodialServices, viewMode], () => {
+watch([finalFilterExcludeLightning, finalFilterExcludeKycWithdrawal, finalFilterOnlyEvents, finalFilterExcludeCustodialServices, finalFilterNode, viewMode], () => {
   nextTick(() => checkAllOverflows())
 })
 
