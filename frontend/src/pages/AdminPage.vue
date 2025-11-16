@@ -588,6 +588,10 @@
                               <label class="block text-xs font-medium text-gray-600 mb-1">이벤트 설명</label>
                               <textarea v-model="newRoute.eventDescription" rows="2" placeholder="이벤트 내용 및 조건을 입력하세요" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"></textarea>
                             </div>
+                            <div class="sm:col-span-2">
+                              <label class="block text-xs font-medium text-gray-600 mb-1">이벤트 URL</label>
+                              <input v-model="newRoute.eventUrl" type="url" placeholder="https://example.com/event" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -721,16 +725,20 @@
                               </label>
                             </div>
                             <div v-if="route.edit_is_event" class="mt-2 grid md:grid-cols-2 gap-2">
-                              <div>
-                                <label class="block text-[11px] font-medium text-gray-600 mb-1">제목</label>
-                                <input v-model="route.edit_event_title" type="text" placeholder="예: 라이트닝 50% 할인" class="w-full px-2 py-1 border border-gray-300 rounded-md text-sm" />
-                              </div>
-                              <div class="md:col-span-2">
-                                <label class="block text-[11px] font-medium text-gray-600 mb-1">설명</label>
-                                <textarea v-model="route.edit_event_description" rows="2" placeholder="이벤트 세부 정보를 입력하세요" class="w-full px-2 py-1 border border-gray-300 rounded-md text-sm"></textarea>
-                              </div>
+                            <div>
+                              <label class="block text-[11px] font-medium text-gray-600 mb-1">제목</label>
+                              <input v-model="route.edit_event_title" type="text" placeholder="예: 라이트닝 50% 할인" class="w-full px-2 py-1 border border-gray-300 rounded-md text-sm" />
+                            </div>
+                            <div class="md:col-span-2">
+                              <label class="block text-[11px] font-medium text-gray-600 mb-1">설명</label>
+                              <textarea v-model="route.edit_event_description" rows="2" placeholder="이벤트 세부 정보를 입력하세요" class="w-full px-2 py-1 border border-gray-300 rounded-md text-sm"></textarea>
+                            </div>
+                            <div class="md:col-span-2">
+                              <label class="block text-[11px] font-medium text-gray-600 mb-1">이벤트 URL</label>
+                              <input v-model="route.edit_event_url" type="url" placeholder="https://example.com/event" class="w-full px-2 py-1 border border-gray-300 rounded-md text-sm" />
                             </div>
                           </div>
+                        </div>
                           <div class="flex justify-end">
                             <button @click="updateExistingRoute(route)" :disabled="routingUpdateLoading" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">{{ routingUpdateLoading ? '저장 중...' : '저장' }}</button>
                           </div>
@@ -757,6 +765,9 @@
                             {{ route.event_title || '이벤트 진행중' }}
                           </div>
                           <p class="whitespace-pre-line">{{ route.event_description || '이벤트 상세정보가 없습니다.' }}</p>
+                          <div v-if="route.event_url" class="mt-1">
+                            <a :href="route.event_url" target="_blank" rel="noopener noreferrer" class="text-blue-700 underline break-all">이벤트 링크 열기</a>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1337,7 +1348,8 @@ const newRoute = ref({
   description: '',
   isEvent: false,
   eventTitle: '',
-  eventDescription: ''
+  eventDescription: '',
+  eventUrl: ''
 })
 const routeTypeOptions = [
   {
@@ -2291,6 +2303,7 @@ const loadRoutes = async () => {
           edit_is_event: r.is_event,
           edit_event_title: r.event_title,
           edit_event_description: r.event_description,
+          edit_event_url: r.event_url,
         }
       })
     } else {
@@ -2362,7 +2375,8 @@ const createRoute = async () => {
       newRoute.value.description,
       Boolean(newRoute.value.isEvent),
       newRoute.value.eventTitle || '',
-      newRoute.value.eventDescription || ''
+      newRoute.value.eventDescription || '',
+      newRoute.value.eventUrl || ''
     )
 
     if (response.success) {
@@ -2380,6 +2394,7 @@ const createRoute = async () => {
         edit_is_event: response.route.is_event,
         edit_event_title: response.route.event_title,
         edit_event_description: response.route.event_description,
+        edit_event_url: response.route.event_url,
       })
 
       // Reset form
@@ -2393,7 +2408,8 @@ const createRoute = async () => {
         description: '',
         isEvent: false,
         eventTitle: '',
-        eventDescription: ''
+        eventDescription: '',
+        eventUrl: ''
       }
 
       // Clear success message after 3 seconds
@@ -2469,7 +2485,8 @@ const updateExistingRoute = async (route) => {
       route.description || '',
       Boolean(route.edit_is_event),
       route.edit_event_title || '',
-      route.edit_event_description || ''
+      route.edit_event_description || '',
+      route.edit_event_url || ''
     )
 
     if (!resp.success) {
@@ -2493,6 +2510,7 @@ const updateExistingRoute = async (route) => {
         edit_is_event: updated.is_event,
         edit_event_title: updated.event_title,
         edit_event_description: updated.event_description,
+        edit_event_url: updated.event_url,
       } : r)
     } else {
       // Same key; just patch fields
@@ -2506,6 +2524,7 @@ const updateExistingRoute = async (route) => {
         edit_is_event: updated.is_event,
         edit_event_title: updated.event_title,
         edit_event_description: updated.event_description,
+        edit_event_url: updated.event_url,
       } : r)
     }
 

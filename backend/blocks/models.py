@@ -355,6 +355,7 @@ class Route(models.Model):
     is_event = models.BooleanField(default=False)
     event_title = models.CharField(max_length=255, blank=True, default='')
     event_description = models.TextField(blank=True, default='')
+    event_url = models.URLField(max_length=500, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -388,6 +389,7 @@ class Route(models.Model):
             'is_event': self.is_event,
             'event_title': self.event_title or '',
             'event_description': self.event_description or '',
+            'event_url': self.event_url or '',
             'updated_at': self.updated_at.isoformat(),
         }
 

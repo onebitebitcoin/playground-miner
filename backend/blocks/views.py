@@ -1249,6 +1249,7 @@ def admin_routes_view(request):
         is_event = data.get('is_event', False)
         event_title = data.get('event_title', '')
         event_description = data.get('event_description', '')
+        event_url = data.get('event_url', '')
 
         valid_fee_currencies = {choice[0] for choice in Route.FEE_CURRENCY_CHOICES}
         if fee_fixed_currency not in valid_fee_currencies:
@@ -1285,6 +1286,7 @@ def admin_routes_view(request):
                     'is_event': bool(is_event),
                     'event_title': event_title,
                     'event_description': event_description,
+                    'event_url': event_url,
                 }
             )
 
@@ -1476,6 +1478,7 @@ def routing_snapshot_view(request):
                         'is_event': bool(r.is_event),
                         'event_title': r.event_title or '',
                         'event_description': r.event_description or '',
+                        'event_url': r.event_url or '',
                     })
                 snap, _ = RoutingSnapshot.objects.update_or_create(
                     name='default',
@@ -1530,6 +1533,7 @@ def routing_snapshot_view(request):
                         is_event=bool(r.get('is_event', False)),
                         event_title=r.get('event_title', ''),
                         event_description=r.get('event_description', ''),
+                        event_url=r.get('event_url', ''),
                     )
                     created += 1
                 return JsonResponse({'ok': True, 'restored_nodes': len(service_to_node), 'restored_routes': created})

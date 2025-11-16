@@ -75,6 +75,10 @@
                 KYC 제외
               </label>
               <label class="inline-flex items-center gap-2">
+                <input type="checkbox" v-model="finalFilterExcludeCustodialWithdrawal" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                수탁형 제외
+              </label>
+              <label class="inline-flex items-center gap-2">
                 <input type="checkbox" v-model="finalFilterOnlyEvents" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                 이벤트 경로만 보기
               </label>
@@ -193,6 +197,9 @@
                   <div v-for="(eventRoute, eventIdx) in getEventRoutes(path)" :key="`event-${idx}-${eventIdx}`" class="bg-white/60 px-2 py-1 rounded border border-amber-100">
                     <div class="font-medium">{{ formatEventRouteTitle(eventRoute) }}</div>
                     <div class="text-[11px] text-amber-700">{{ previewEventDescription(eventRoute.event_description) }}</div>
+                    <div v-if="eventRoute.event_url" class="text-[11px] mt-0.5">
+                      <a :href="eventRoute.event_url" target="_blank" rel="noopener noreferrer" class="text-blue-700 underline break-all">이벤트 링크 열기</a>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -297,6 +304,9 @@
                   <div v-for="(eventRoute, eventIdx) in getEventRoutes(path)" :key="`flow-event-${idx}-${eventIdx}`" class="bg-white/60 px-2 py-1 rounded border border-amber-100">
                     <div class="font-medium">{{ formatEventRouteTitle(eventRoute) }}</div>
                     <div class="text-[11px] text-amber-700">{{ previewEventDescription(eventRoute.event_description) }}</div>
+                    <div v-if="eventRoute.event_url" class="text-[11px] mt-0.5">
+                      <a :href="eventRoute.event_url" target="_blank" rel="noopener noreferrer" class="text-blue-700 underline break-all">이벤트 링크 열기</a>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -849,6 +859,7 @@ const finalFilterExcludeKycWithdrawal = ref(false)
 const finalFilterOnlyEvents = ref(false)
 const finalFilterExcludeCustodialServices = ref(false)
 const finalFilterNode = ref('')
+const finalFilterExcludeCustodialWithdrawal = ref(false)
 
 const nodeTypeOptions = ['exchange', 'service', 'wallet', 'user']
 const toTruthyBoolean = (value) => value === true || value === 1 || value === '1' || value === 'true'
@@ -1010,6 +1021,12 @@ const isCustodialServiceNode = (node) => {
   const isCustodial = toTruthyBoolean(node.is_custodial)
   return nodeType === 'service' && isCustodial
 }
+const pathHasCustodialBeforePersonalWallet = (path) => {
+  if (!Array.isArray(path?.routes) || path.routes.length === 0) return false
+  const lastRoute = path.routes[path.routes.length - 1]
+  if (!lastRoute || !isPersonalWalletNode(lastRoute.destination)) return false
+  return toTruthyBoolean(lastRoute.source?.is_custodial)
+}
 const routeHasCustodialServiceNode = (route) => {
   if (!route) return false
   return isCustodialServiceNode(route.source) || isCustodialServiceNode(route.destination)
@@ -1051,6 +1068,7 @@ const filteredOptimalPaths = computed(() => {
     if (finalFilterExcludeCustodialServices.value && path.routes.some(routeHasCustodialServiceNode)) return false
     if (finalFilterExcludeLightning.value && pathHasLightningRoute(path)) return false
     if (finalFilterExcludeKycWithdrawal.value && pathHasKycBeforePersonalWallet(path)) return false
+    if (finalFilterExcludeCustodialWithdrawal.value && pathHasCustodialBeforePersonalWallet(path)) return false
     if (finalFilterNode.value && !pathContainsNode(path, finalFilterNode.value)) return false
     return true
   })
@@ -1107,7 +1125,7 @@ watch(sortedOptimalPaths, () => {
   nextTick(() => checkAllOverflows())
 }, { deep: true })
 
-watch([finalFilterExcludeLightning, finalFilterExcludeKycWithdrawal, finalFilterOnlyEvents, finalFilterExcludeCustodialServices, finalFilterNode, viewMode], () => {
+watch([finalFilterExcludeLightning, finalFilterExcludeKycWithdrawal, finalFilterExcludeCustodialWithdrawal, finalFilterOnlyEvents, finalFilterExcludeCustodialServices, finalFilterNode, viewMode], () => {
   nextTick(() => checkAllOverflows())
 })
 
