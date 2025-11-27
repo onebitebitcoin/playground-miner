@@ -5,6 +5,7 @@ import UTXOPage from '../pages/UTXOPage.vue'
 import WalletKingstonePage from '../pages/WalletKingstonePage.vue'
 import WalletKingstoneDetailPage from '../pages/WalletKingstoneDetailPage.vue'
 import FeePage from '../pages/FeePage.vue'
+import FinancePage from '../pages/FinancePage.vue'
 import AdminPage from '../pages/AdminPage.vue'
 import NicknameSetup from '../pages/NicknameSetup.vue'
 
@@ -63,6 +64,12 @@ const routes = [
     path: '/fee',
     name: 'fee',
     component: FeePage,
+    meta: { requiresNickname: true }
+  },
+  {
+    path: '/finance',
+    name: 'finance',
+    component: FinancePage,
     meta: { requiresNickname: true }
   },
   {

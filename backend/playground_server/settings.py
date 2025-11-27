@@ -71,6 +71,12 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 # Persistent DB connections to reduce cold-connection latency
 CONN_MAX_AGE = 60
 
+# OpenAI configuration for finance insights
+OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
+OPENAI_API_BASE = config('OPENAI_API_BASE', default='https://api.openai.com/v1')
+OPENAI_MODEL = config('OPENAI_MODEL', default='gpt-4o-mini')
+ECOS_API_KEY = config('ECOS_API_KEY', default='')
+
 # Note: No global caching configured to avoid stale heights on real-time UI
 
 # Logging configuration for encryption operations

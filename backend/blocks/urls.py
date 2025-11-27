@@ -6,6 +6,7 @@ urlpatterns = [
     path('blocks', views.blocks_view, name='blocks'),
     path('mine', views.mine_view, name='mine'),
     path('stream', views.stream_view, name='stream'),
+    path('finance/historical-returns', views.finance_historical_returns_view, name='finance_historical_returns'),
     # Accept both with/without trailing slash
     re_path(r'^register_nick/?$', views.register_nick_view, name='register_nick'),
     re_path(r'^check_nick/?$', views.check_nick_view, name='check_nick'),

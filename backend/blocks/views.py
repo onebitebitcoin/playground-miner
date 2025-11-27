@@ -1,14 +1,21 @@
+import csv
+import io
 import json
+import logging
+import re
 import time
 import threading
 import hashlib
+from datetime import datetime, timedelta
 import requests
+import yfinance as yf
 from django.db import transaction
 from django.db.models import Max
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from .models import Block, Nickname, Mnemonic, ExchangeRate, WithdrawalFee, LightningService, ServiceNode, Route, RoutingSnapshot, SidebarConfig, KingstoneWallet
 from django.db import connection
+from django.conf import settings
 from .broadcast import broadcaster
 from .btc import derive_bip84_addresses, fetch_blockstream_balances, calc_total_sats, derive_bip84_account_zpub, derive_master_fingerprint, _normalize_mnemonic
 from mnemonic import Mnemonic as MnemonicValidator
@@ -17,11 +24,112 @@ from mnemonic import Mnemonic as MnemonicValidator
 MAX_NONCE = 100000
 DIFFICULTY_BASE = 5000
 KINGSTONE_WALLET_LIMIT = 3
+FINANCE_DEFAULT_START_YEAR = 2016
+FINANCE_YEAR_SPAN = 10
+FINANCE_MAX_SERIES = 10
+
+SAFE_ASSETS = {
+    'bitcoin': {
+        'label': '비트코인',
+        'ticker': 'BTC-USD',
+        'stooq_symbol': 'btc_usd',
+        'unit': 'USD',
+        'category': '디지털 자산',
+        'aliases': ['비트코인', 'bitcoin', 'btc']
+    },
+    'gold': {
+        'label': '금',
+        'ticker': 'GC=F',
+        'stooq_symbol': 'xauusd',
+        'unit': 'USD',
+        'category': '안전자산',
+        'aliases': ['금', 'gold', '골드']
+    },
+    'us10y': {
+        'label': '미국 10년물 국채',
+        'ticker': '^TNX',
+        'stooq_symbol': 'us10y',
+        'unit': '%',
+        'category': '채권',
+        'aliases': ['미국 10년물 국채', '10년물 국채', 'us 10y', 'us10y', 'treasury']
+    },
+    'silver': {
+        'label': '은',
+        'ticker': 'SI=F',
+        'stooq_symbol': 'xagusd',
+        'unit': 'USD',
+        'category': '안전자산',
+        'aliases': ['은', 'silver']
+    },
+    'sp500': {
+        'label': 'S&P 500',
+        'ticker': '^GSPC',
+        'stooq_symbol': 'spx',
+        'unit': 'index',
+        'category': '주식지수',
+        'aliases': ['s&p 500', 'sp500', 's&p500', '에스앤피500']
+    },
+    'dow': {
+        'label': '다우지수',
+        'ticker': '^DJI',
+        'stooq_symbol': 'dji',
+        'unit': 'index',
+        'category': '주식지수',
+        'aliases': ['다우', '다우지수', 'dow', 'dow jones']
+    },
+    'nasdaq100': {
+        'label': '나스닥 100',
+        'ticker': '^NDX',
+        'stooq_symbol': 'ndq',
+        'unit': 'index',
+        'category': '주식지수',
+        'aliases': ['나스닥 100', '나스닥100', 'nasdaq 100', 'nasdaq100']
+    }
+}
+
+SAFE_ASSET_ALIASES = {}
+for key, cfg in SAFE_ASSETS.items():
+    for alias in cfg.get('aliases', []):
+        SAFE_ASSET_ALIASES[alias.lower()] = key
+
+PRESET_STOCK_GROUPS = {
+    'us_bigtech': [
+        {'id': 'AAPL', 'label': '애플(AAPL)', 'ticker': 'AAPL', 'stooq_symbol': 'aapl.us', 'category': '미국 빅테크', 'unit': 'USD'},
+        {'id': 'MSFT', 'label': '마이크로소프트(MSFT)', 'ticker': 'MSFT', 'stooq_symbol': 'msft.us', 'category': '미국 빅테크', 'unit': 'USD'},
+        {'id': 'GOOGL', 'label': '알파벳(GOOGL)', 'ticker': 'GOOGL', 'stooq_symbol': 'googl.us', 'category': '미국 빅테크', 'unit': 'USD'},
+        {'id': 'AMZN', 'label': '아마존(AMZN)', 'ticker': 'AMZN', 'stooq_symbol': 'amzn.us', 'category': '미국 빅테크', 'unit': 'USD'},
+        {'id': 'META', 'label': '메타(META)', 'ticker': 'META', 'stooq_symbol': 'meta.us', 'category': '미국 빅테크', 'unit': 'USD'},
+        {'id': 'TSLA', 'label': '테슬라(TSLA)', 'ticker': 'TSLA', 'stooq_symbol': 'tsla.us', 'category': '미국 빅테크', 'unit': 'USD'},
+        {'id': 'NVDA', 'label': '엔비디아(NVDA)', 'ticker': 'NVDA', 'stooq_symbol': 'nvda.us', 'category': '미국 빅테크', 'unit': 'USD'},
+        {'id': 'NFLX', 'label': '넷플릭스(NFLX)', 'ticker': 'NFLX', 'stooq_symbol': 'nflx.us', 'category': '미국 빅테크', 'unit': 'USD'},
+        {'id': 'ADBE', 'label': '어도비(ADBE)', 'ticker': 'ADBE', 'stooq_symbol': 'adbe.us', 'category': '미국 빅테크', 'unit': 'USD'},
+        {'id': 'AMD', 'label': 'AMD(AMD)', 'ticker': 'AMD', 'stooq_symbol': 'amd.us', 'category': '미국 빅테크', 'unit': 'USD'}
+    ],
+    'kr_equity': [
+        {'id': '005930.KS', 'label': '삼성전자(005930)', 'ticker': '005930.KS', 'stooq_symbol': '005930.kr', 'category': '국내 주식', 'unit': 'KRW'},
+        {'id': '000660.KS', 'label': 'SK하이닉스(000660)', 'ticker': '000660.KS', 'stooq_symbol': '000660.kr', 'category': '국내 주식', 'unit': 'KRW'},
+        {'id': '035420.KS', 'label': 'NAVER(035420)', 'ticker': '035420.KS', 'stooq_symbol': '035420.kr', 'category': '국내 주식', 'unit': 'KRW'},
+        {'id': '051910.KS', 'label': 'LG화학(051910)', 'ticker': '051910.KS', 'stooq_symbol': '051910.kr', 'category': '국내 주식', 'unit': 'KRW'},
+        {'id': '005380.KS', 'label': '현대차(005380)', 'ticker': '005380.KS', 'stooq_symbol': '005380.kr', 'category': '국내 주식', 'unit': 'KRW'},
+        {'id': '207940.KS', 'label': '삼성바이오로직스(207940)', 'ticker': '207940.KS', 'stooq_symbol': '207940.kr', 'category': '국내 주식', 'unit': 'KRW'},
+        {'id': '006400.KS', 'label': '삼성SDI(006400)', 'ticker': '006400.KS', 'stooq_symbol': '006400.kr', 'category': '국내 주식', 'unit': 'KRW'},
+        {'id': '028260.KS', 'label': '삼성물산(028260)', 'ticker': '028260.KS', 'stooq_symbol': '028260.kr', 'category': '국내 주식', 'unit': 'KRW'},
+        {'id': '105560.KS', 'label': 'KB금융(105560)', 'ticker': '105560.KS', 'stooq_symbol': '105560.kr', 'category': '국내 주식', 'unit': 'KRW'},
+        {'id': '055550.KS', 'label': '신한지주(055550)', 'ticker': '055550.KS', 'stooq_symbol': '055550.kr', 'category': '국내 주식', 'unit': 'KRW'}
+    ]
+}
 
 _guest_counter = 0
 _guest_lock = threading.Lock()
 _btc_usdt_cache = {'price': None, 'expires_at': 0.0}
 _btc_usdt_lock = threading.Lock()
+_usdkrw_cache = {'rate': None, 'expires_at': 0.0}
+_usdkrw_lock = threading.Lock()
+_HTTP_DEFAULT_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (compatible; PlaygroundMiner/1.0; +https://playground-miner)'
+}
+
+logger = logging.getLogger(__name__)
 
 
 def get_cached_btc_usdt_price():
@@ -50,6 +158,101 @@ def get_cached_btc_usdt_price():
             return price
         except Exception:
             return _btc_usdt_cache['price']
+
+
+def get_cached_usdkrw_rate():
+    now = time.time()
+    if _usdkrw_cache['rate'] and now < _usdkrw_cache['expires_at']:
+        return _usdkrw_cache['rate']
+    with _usdkrw_lock:
+        if _usdkrw_cache['rate'] and now < _usdkrw_cache['expires_at']:
+            return _usdkrw_cache['rate']
+        fetchers = []
+        if getattr(settings, 'ECOS_API_KEY', ''):
+            fetchers.append(('bok', _fetch_usdkrw_from_bok))
+        fetchers.extend([
+            ('exchangerate_host', _fetch_usdkrw_from_exchange_host),
+            ('erapi', _fetch_usdkrw_from_erapi),
+            ('jsdelivr', _fetch_usdkrw_from_jsdelivr),
+        ])
+        for source, fetcher in fetchers:
+            try:
+                quote = fetcher()
+            except Exception as exc:
+                logger.warning('Failed to fetch USD/KRW from %s: %s', source, exc)
+                continue
+            if quote and quote > 0:
+                _usdkrw_cache['rate'] = quote
+                _usdkrw_cache['expires_at'] = time.time() + 1800
+                return quote
+        return _usdkrw_cache['rate'] or 1300.0
+
+
+def _fetch_usdkrw_from_bok():
+    api_key = getattr(settings, 'ECOS_API_KEY', '') or ''
+    if not api_key:
+        raise ValueError('ECOS_API_KEY is not configured')
+    now_kst = datetime.utcnow() + timedelta(hours=9)
+    end_date = now_kst.strftime('%Y%m%d')
+    start_date = (now_kst - timedelta(days=31)).strftime('%Y%m%d')
+    url = (
+        f'https://ecos.bok.or.kr/api/StatisticSearch/'
+        f'{api_key}/json/kr/1/10/036Y001/D/{start_date}/{end_date}/USD'
+    )
+    resp = requests.get(url, timeout=10, headers=_HTTP_DEFAULT_HEADERS)
+    resp.raise_for_status()
+    payload = resp.json()
+    data = payload.get('StatisticSearch')
+    rows = None
+    if isinstance(data, dict):
+        rows = data.get('row')
+    elif isinstance(data, list):
+        for entry in data:
+            if isinstance(entry, dict) and entry.get('row'):
+                rows = entry['row']
+                break
+    if not rows:
+        return None
+
+    def _row_time(row):
+        return row.get('TIME') or row.get('TIME_PERIOD') or ''
+
+    for row in sorted(rows, key=_row_time, reverse=True):
+        value = _safe_float(row.get('DATA_VALUE') or row.get('data_value') or row.get('DATA'))
+        if value:
+            return value
+    return None
+
+
+def _fetch_usdkrw_from_exchange_host():
+    resp = requests.get(
+        'https://api.exchangerate.host/latest',
+        params={'base': 'USD', 'symbols': 'KRW'},
+        timeout=10
+    )
+    resp.raise_for_status()
+    payload = resp.json()
+    rate = (payload.get('rates') or {}).get('KRW')
+    return _safe_float(rate)
+
+
+def _fetch_usdkrw_from_erapi():
+    resp = requests.get('https://open.er-api.com/v6/latest/USD', timeout=10)
+    resp.raise_for_status()
+    payload = resp.json()
+    rate = (payload.get('rates') or {}).get('KRW')
+    return _safe_float(rate)
+
+
+def _fetch_usdkrw_from_jsdelivr():
+    resp = requests.get(
+        'https://cdn.jsdelivr.net/gh/fawazahmed0/currency-api@1/latest/currencies/usd/krw.json',
+        timeout=10
+    )
+    resp.raise_for_status()
+    payload = resp.json()
+    rate = payload.get('krw')
+    return _safe_float(rate)
 
 
 def calc_difficulty_for_height(height: int) -> int:
@@ -1614,7 +1817,6 @@ def admin_update_sidebar_config_view(request):
     return JsonResponse({'ok': True, 'config': config.as_dict()})
 
 
-# Kingstone wallet endpoints
 def _load_json_body(request):
     try:
         body = request.body
@@ -1641,6 +1843,596 @@ def _load_json_body(request):
         return None
 
 
+def _safe_float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _detect_safe_assets(prompt, quick_requests):
+    texts = [prompt or '']
+    texts.extend(quick_requests or [])
+    haystack = ' '.join(texts).lower()
+    matched = set()
+    for alias, key in SAFE_ASSET_ALIASES.items():
+        if alias in haystack:
+            matched.add(key)
+    return matched
+
+
+def _fetch_yfinance_history(ticker, start_year, end_year):
+    """Yahoo Finance를 통해 데이터를 가져옵니다."""
+    if not ticker:
+        return []
+    try:
+        start_dt = datetime(start_year, 1, 1)
+        end_dt = datetime(end_year, 12, 31)
+
+        stock = yf.Ticker(ticker)
+        df = stock.history(start=start_dt, end=end_dt, interval='1mo')
+
+        if df.empty:
+            return []
+
+        rows = []
+        for index, row in df.iterrows():
+            close_price = row.get('Close')
+            if close_price is None or close_price <= 0:
+                continue
+            # index는 pandas Timestamp 객체
+            dt = index.to_pydatetime()
+            rows.append((dt, float(close_price)))
+
+        logger.info('Yahoo Finance에서 %s 데이터 %d개 가져옴 (%d-%d)', ticker, len(rows), start_year, end_year)
+        return rows
+    except Exception as exc:
+        logger.warning('Yahoo Finance fetch failed for %s: %s', ticker, exc)
+        raise
+
+
+def _fetch_stooq_history(symbol, start_year, end_year):
+    if not symbol:
+        return []
+    start_dt = datetime(start_year, 1, 1)
+    end_dt = datetime(end_year, 12, 31) + timedelta(days=1)
+    params = {'s': symbol.lower(), 'i': 'm'}
+    resp = requests.get('https://stooq.com/q/d/l/', params=params, timeout=15, headers=_HTTP_DEFAULT_HEADERS)
+    resp.raise_for_status()
+    content = resp.text
+    rows = []
+    reader = csv.DictReader(io.StringIO(content))
+    for row in reader:
+        date_str = row.get('Date') or row.get('date')
+        price = row.get('Close') or row.get('close')
+        if not date_str or price in (None, '', 'null'):
+            continue
+        try:
+            dt = datetime.strptime(date_str, '%Y-%m-%d')
+        except ValueError:
+            continue
+        if dt < start_dt or dt > end_dt:
+            continue
+        value = _safe_float(price)
+        if value is None:
+            continue
+        rows.append((dt, value))
+    logger.info('Stooq에서 %s 데이터 %d개 가져옴 (%d-%d)', symbol, len(rows), start_year, end_year)
+    return rows
+
+
+def _guess_stooq_symbol(ticker: str):
+    if not ticker:
+        return None
+    symbol = ticker.strip().lower()
+    index_map = {
+        '^gspc': 'spx',
+        '^dji': 'dji',
+        '^ndx': 'ndq',
+        '^tnx': 'us10y',
+    }
+    if symbol in index_map:
+        return index_map[symbol]
+    if symbol.endswith('.ks') or symbol.endswith('.kq'):
+        return symbol.split('.')[0] + '.kr'
+    if symbol.endswith('.to'):
+        return symbol.replace('.to', '.ca')
+    if symbol.endswith('.ax'):
+        return symbol.replace('.ax', '.au')
+    if symbol.endswith('=f'):
+        return symbol.replace('=f', '')
+    if '-' in symbol:
+        symbol = symbol.replace('-', '_')
+    if symbol.isalpha():
+        return f"{symbol}.us"
+    return symbol
+
+
+def _fetch_asset_history(cfg, start_year, end_year):
+    """
+    여러 데이터 소스를 순서대로 시도하여 자산 가격 이력을 가져옵니다.
+    우선순위: Yahoo Finance > Stooq
+    """
+    errors = []
+    label = cfg.get('label', 'Unknown')
+    ticker = cfg.get('ticker')
+    stooq_symbol = cfg.get('stooq_symbol') or _guess_stooq_symbol(ticker)
+
+    # 1. Yahoo Finance 시도
+    if ticker:
+        try:
+            logger.info('[%s] Yahoo Finance에서 데이터 가져오기 시도: %s', label, ticker)
+            history = _fetch_yfinance_history(ticker, start_year, end_year)
+            if history:
+                logger.info('[%s] Yahoo Finance에서 데이터 가져오기 성공: %d개', label, len(history))
+                return history
+            else:
+                errors.append('Yahoo Finance: 데이터 없음')
+                logger.warning('[%s] Yahoo Finance에서 데이터를 찾지 못함', label)
+        except Exception as exc:
+            errors.append(f'Yahoo Finance: {exc}')
+            logger.warning('[%s] Yahoo Finance 실패: %s', label, exc)
+
+    # 2. Stooq 시도
+    if stooq_symbol:
+        try:
+            logger.info('[%s] Stooq에서 데이터 가져오기 시도: %s', label, stooq_symbol)
+            history = _fetch_stooq_history(stooq_symbol, start_year, end_year)
+            if history:
+                logger.info('[%s] Stooq에서 데이터 가져오기 성공: %d개', label, len(history))
+                return history
+            else:
+                errors.append('Stooq: 데이터 없음')
+                logger.warning('[%s] Stooq에서 데이터를 찾지 못함', label)
+        except Exception as exc:
+            errors.append(f'Stooq: {exc}')
+            logger.warning('[%s] Stooq 실패: %s', label, exc)
+
+    # 모든 소스 실패
+    error_msg = '; '.join(errors) if errors else '지원되는 시세 제공처가 없습니다.'
+    logger.error('[%s] 모든 데이터 소스에서 가져오기 실패: %s', label, error_msg)
+    raise RuntimeError(error_msg)
+
+
+def _build_asset_series(asset_key, cfg, history, start_year, end_year):
+    if not history:
+        return None
+    yearly_prices = {}
+    for dt, value in history:
+        year = dt.year
+        if year < start_year or year > end_year:
+            continue
+        prev = yearly_prices.get(year)
+        if not prev or dt > prev[0]:
+            yearly_prices[year] = (dt, value)
+    if len(yearly_prices) < 2:
+        return None
+    ordered_years = sorted(yearly_prices.keys())
+    base_year = ordered_years[0]
+    base_value = yearly_prices[base_year][1]
+    if not base_value or base_value <= 0:
+        return None
+
+    points = []
+    for year in ordered_years:
+        price = yearly_prices[year][1]
+        if price is None or price <= 0:
+            continue
+        multiple = price / base_value
+        if year == base_year:
+            annualized_pct = 0.0
+        else:
+            years_elapsed = year - base_year
+            if years_elapsed <= 0:
+                annualized_pct = 0.0
+            else:
+                annualized_pct = ((price / base_value) ** (1 / years_elapsed) - 1) * 100
+        points.append({
+            'year': year,
+            'value': round(annualized_pct, 3),
+            'multiple': round(multiple, 6),
+            'raw_value': round(price, 6)
+        })
+    if len(points) < 2:
+        return None
+
+    start_val = points[0]['multiple'] or 1.0
+    end_val = points[-1]['multiple'] or start_val
+    years_total = points[-1]['year'] - points[0]['year']
+    if years_total > 0 and start_val > 0:
+        agg = (end_val / start_val) ** (1 / years_total) - 1
+    else:
+        agg = 0.0
+
+    return {
+        'id': cfg.get('id') or asset_key,
+        'label': cfg['label'],
+        'category': cfg.get('category', '안전자산'),
+        'unit': cfg.get('unit', ''),
+        'points': points,
+        'annualized_return_pct': round(agg * 100, 2),
+        'multiple_from_start': round(end_val / start_val, 3) if start_val else 0.0,
+    }
+
+
+def _fetch_safe_asset_series(asset_keys, start_year, end_year):
+    results = []
+    errors = []
+    for key in asset_keys:
+        cfg = SAFE_ASSETS.get(key)
+        if not cfg:
+            continue
+        try:
+            history = _fetch_asset_history(cfg, start_year, end_year)
+            series = _build_asset_series(key, cfg, history, start_year, end_year)
+            if series:
+                results.append(series)
+            else:
+                errors.append(f"{cfg.get('label')} 데이터가 부족합니다.")
+        except Exception as exc:
+            logger.warning('Failed to fetch safe asset %s: %s', key, exc)
+            errors.append(f"{cfg.get('label')} 오류: {exc}")
+    return results, errors
+
+
+def _fetch_preset_group(group_name, start_year, end_year):
+    configs = PRESET_STOCK_GROUPS.get(group_name) or []
+    results = []
+    errors = []
+    for cfg in configs[:FINANCE_MAX_SERIES]:
+        try:
+            history = _fetch_asset_history(cfg, start_year, end_year)
+            series = _build_asset_series(cfg.get('id'), cfg, history, start_year, end_year)
+            if series:
+                results.append(series)
+            else:
+                errors.append(f"{cfg.get('label')} 데이터가 부족합니다.")
+        except Exception as exc:
+            logger.warning('Failed to fetch preset asset %s: %s', cfg.get('label'), exc)
+            errors.append(f"{cfg.get('label')} 오류: {exc}")
+    return results, errors
+
+
+def _extract_start_year_from_prompt(prompt):
+    if not prompt:
+        return None
+    years = []
+    for match in re.findall(r'(?:19|20)\d{2}', prompt):
+        try:
+            year = int(match)
+        except ValueError:
+            continue
+        if 1900 <= year <= 2100:
+            years.append(year)
+    return min(years) if years else None
+
+
+def _derive_finance_year_window(year_hint):
+    current_year = datetime.utcnow().year
+    min_year = 2010
+    base_year = year_hint or FINANCE_DEFAULT_START_YEAR
+    start_year = max(min_year, base_year)
+    if start_year > current_year:
+        start_year = max(min_year, current_year - FINANCE_YEAR_SPAN + 1)
+    end_year = min(start_year + FINANCE_YEAR_SPAN - 1, current_year)
+    if end_year - start_year < 1:
+        start_year = max(min_year, end_year - FINANCE_YEAR_SPAN + 1)
+    return start_year, end_year
+
+
+def _build_finance_messages(user_prompt, start_year, end_year, quick_requests):
+    preferred_assets = ', '.join(quick_requests) if quick_requests else ''
+    quick_text = f"\n선호 비교 대상: {preferred_assets}" if preferred_assets else ''
+    user_content = (
+        f"사용자 요청: {user_prompt or '비트코인과 다른 자산의 연평균 수익률을 비교'}\n"
+        f"데이터 구간: {start_year}년부터 {end_year}년까지 연 단위 연평균(연율환산) 수익률.\n"
+        "항상 비트코인은 포함하고, 각 연도 말 기준의 누적 배수(시작 연도=1.0)와 연평균 수익률을 함께 제공하세요."
+        f"{quick_text}\n"
+        f"최대 {FINANCE_MAX_SERIES}개의 자산만 포함하고 의미 없는 자산은 제외하세요.\n"
+        "multiple 값이 없으면 시작 연도 대비 배수를 계산해서 채우세요."
+    )
+    system_prompt = (
+        "너는 한국어로 설명하는 재무 데이터 분석가이다. "
+        "반드시 순수한 JSON만 반환하며 최상위 키는 series(필수), summary(필수), notes(선택)이다. "
+        "series는 최대 10개의 객체 배열이고 각 객체는 {id, label, category, unit, benchmark, points}를 가진다. "
+        "points는 연도별 데이터 배열이며 각 항목은 {\"year\": 2016, \"value\": 12.3, \"multiple\": 1.0, \"note\": \"\"} 형식을 따른다. "
+        "value 필드는 해당 연도까지의 연평균 수익률(%)이고 multiple은 시작 연도 대비 누적 배수이다. "
+        "JSON 외의 텍스트를 추가하지 말고, summary/notes는 간결한 한국어 문장으로 작성한다."
+    )
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_content}
+    ]
+
+
+def _call_openai_finance(messages):
+    api_key = getattr(settings, 'OPENAI_API_KEY', '')
+    if not api_key:
+        raise ValueError('OpenAI API 키가 설정되지 않았습니다.')
+    base_url = getattr(settings, 'OPENAI_API_BASE', 'https://api.openai.com/v1').rstrip('/')
+    model = getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini')
+    try:
+        response = requests.post(
+            f"{base_url}/chat/completions",
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            },
+            json={
+                'model': model,
+                'messages': messages,
+                'temperature': 0.2,
+                'top_p': 0.9,
+                'response_format': {
+                    'type': 'json_object'
+                },
+            },
+            timeout=120,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        choices = payload.get('choices') or []
+        if not choices or 'message' not in choices[0]:
+            raise ValueError('OpenAI 응답에 message가 없습니다.')
+        content = choices[0]['message'].get('content')
+        if not content:
+            raise ValueError('OpenAI 응답 본문이 비어 있습니다.')
+        return json.loads(content)
+    except json.JSONDecodeError as exc:
+        logger.error('Failed to parse OpenAI response: %s', exc)
+        raise
+    except requests.HTTPError as exc:
+        detail = ''
+        if exc.response is not None:
+            try:
+                detail = exc.response.text
+            except Exception:
+                detail = ''
+        logger.error('OpenAI request failed (%s): %s', getattr(exc.response, 'status_code', 'unknown'), detail)
+        raise
+    except requests.RequestException as exc:
+        logger.error('OpenAI request failed: %s', exc)
+        raise
+
+
+def _normalize_finance_series(raw_series, start_year, end_year):
+    normalized = []
+    if not isinstance(raw_series, list):
+        return normalized
+
+    for idx, entry in enumerate(raw_series[:FINANCE_MAX_SERIES]):
+        points = entry.get('points') if isinstance(entry, dict) else None
+        if not isinstance(points, list):
+            continue
+        cleaned = []
+        seen_years = set()
+        base_value = None
+
+        for point in points:
+            year = point.get('year')
+            if not isinstance(year, int):
+                continue
+            if year < start_year or year > end_year:
+                continue
+            if year in seen_years:
+                continue
+            seen_years.add(year)
+            value = _safe_float(point.get('value'))
+            multiple = _safe_float(point.get('multiple'))
+            if base_value is None and value not in (None, 0):
+                base_value = value
+            cleaned.append({
+                'year': year,
+                'value': value,
+                'multiple': multiple,
+            })
+
+        if len(cleaned) < 2:
+            continue
+
+        cleaned.sort(key=lambda p: p['year'])
+        base_multiple = cleaned[0]['multiple']
+        if base_multiple is None or base_multiple <= 0:
+            base_multiple = 1.0
+        if base_value in (None, 0):
+            first_value = next((p['value'] for p in cleaned if p['value'] not in (None, 0)), 1.0)
+            base_value = first_value or 1.0
+
+        prev_multiple = 1.0
+        rebased_points = []
+        for p in cleaned:
+            mul = p['multiple']
+            if mul is None:
+                if p['value'] is not None and base_value:
+                    mul = p['value'] / base_value
+                else:
+                    mul = prev_multiple
+            if mul is None or mul <= 0:
+                mul = prev_multiple if prev_multiple > 0 else 1.0
+            rebased = mul / base_multiple if base_multiple not in (0, 1.0) else mul
+            rebased = max(rebased, 0.0001)
+            rebased = round(float(rebased), 6)
+            years_elapsed = p['year'] - cleaned[0]['year']
+            if years_elapsed > 0:
+                try:
+                    annualized_pct = (rebased ** (1 / years_elapsed) - 1) * 100
+                except Exception:
+                    annualized_pct = 0.0
+            else:
+                annualized_pct = 0.0
+            rebased_points.append({
+                'year': p['year'],
+                'multiple': rebased,
+                'raw_value': p['value'],
+                'value': round(annualized_pct, 3)
+            })
+            prev_multiple = rebased
+
+        if len(rebased_points) < 2:
+            continue
+
+        start_val = rebased_points[0]['multiple']
+        end_val = rebased_points[-1]['multiple']
+        years = rebased_points[-1]['year'] - rebased_points[0]['year']
+        annualized = 0.0
+        if years > 0 and start_val > 0:
+            try:
+                annualized = (end_val / start_val) ** (1 / years) - 1
+            except Exception:
+                annualized = 0.0
+
+        normalized.append({
+            'id': entry.get('id') or entry.get('label') or f'series_{idx + 1}',
+            'label': entry.get('label') or entry.get('id') or f'자산 {idx + 1}',
+            'category': entry.get('category') or entry.get('benchmark') or '',
+            'unit': entry.get('unit') or entry.get('currency') or 'USD',
+            'points': rebased_points,
+            'annualized_return_pct': round(annualized * 100, 2),
+            'multiple_from_start': round(end_val / start_val, 3) if start_val else 0.0,
+        })
+
+    return normalized
+
+
+@csrf_exempt
+def finance_historical_returns_view(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+
+    payload = _load_json_body(request)
+    if payload is None:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    prompt = (payload.get('prompt') or '').strip()
+    quick_requests = payload.get('quick_requests') or []
+    if isinstance(quick_requests, str):
+        quick_requests = [quick_requests]
+    quick_requests = [str(q).strip() for q in quick_requests if str(q).strip()]
+
+    start_hint = payload.get('start_year')
+    try:
+        start_hint = int(start_hint)
+    except (TypeError, ValueError):
+        start_hint = None
+
+    prompt_year = _extract_start_year_from_prompt(prompt)
+    start_year, end_year = _derive_finance_year_window(start_hint or prompt_year)
+    debug_logs = []
+    debug_logs.append(f"Prompt: {prompt or '기본 프롬프트'}")
+    debug_logs.append(f"Quick requests: {', '.join(quick_requests) if quick_requests else '없음'}")
+    debug_logs.append(f"Year window: {start_year}~{end_year}")
+
+    safe_asset_keys = _detect_safe_assets(prompt, quick_requests)
+    debug_logs.append(f"Detected safe assets: {', '.join(sorted(safe_asset_keys)) if safe_asset_keys else '없음'}")
+    safe_series, safe_errors = _fetch_safe_asset_series(safe_asset_keys, start_year, end_year)
+    if safe_series:
+        debug_logs.append(f"Loaded safe asset series: {len(safe_series)}개")
+    else:
+        debug_logs.append("Loaded safe asset series: 없음")
+    for err in safe_errors:
+        debug_logs.append(f"Safe asset error: {err}")
+    context_key = (payload.get('context_key') or '').strip()
+    preset_series = []
+    preset_errors = []
+    if context_key == 'us_bigtech':
+        preset_series, preset_errors = _fetch_preset_group('us_bigtech', start_year, end_year)
+    elif context_key == 'kr_equity':
+        preset_series, preset_errors = _fetch_preset_group('kr_equity', start_year, end_year)
+    if context_key:
+        debug_logs.append(f"Context key: {context_key} (series {len(preset_series)})")
+    else:
+        debug_logs.append("Context key: 없음")
+    for err in preset_errors:
+        debug_logs.append(f"Preset error: {err}")
+    usd_krw_rate = get_cached_usdkrw_rate()
+
+    if not prompt and not quick_requests:
+        prompt = '비트코인과 대표 자산의 과거 연평균 수익률을 비교해줘.'
+
+    try:
+        messages = _build_finance_messages(prompt, start_year, end_year, quick_requests)
+        llm_data = _call_openai_finance(messages)
+        series = _normalize_finance_series(llm_data.get('series'), start_year, end_year)
+        debug_logs.append(f"OpenAI series count: {len(series)}")
+    except ValueError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+    except requests.RequestException:
+        return JsonResponse({'ok': False, 'error': 'OpenAI API 호출에 실패했습니다.'}, status=502)
+    except Exception as exc:
+        logger.exception('finance_historical_returns_view error: %s', exc)
+        return JsonResponse({'ok': False, 'error': '데이터 생성 중 오류가 발생했습니다.'}, status=500)
+
+    if not series and not safe_series and not preset_series:
+        return JsonResponse({'ok': False, 'error': 'LLM 데이터가 비어 있습니다.'}, status=502)
+
+    # ID와 정규화된 label로 중복 체크
+    def normalize_label(label):
+        """종목코드와 괄호를 제거하고 핵심 이름만 추출"""
+        import re
+        # "삼성전자(005930)" -> "삼성전자"
+        normalized = re.sub(r'\([^)]*\)', '', label).strip()
+        # "삼성전자" -> "삼성전자"
+        return normalized.lower()
+
+    existing_ids = set()
+    existing_normalized_labels = set()
+    merged_series = []
+
+    # Safe assets 추가
+    for s in (safe_series or []):
+        merged_series.append(s)
+        existing_ids.add(s['id'])
+        existing_normalized_labels.add(normalize_label(s['label']))
+
+    # Preset series 추가 (중복 체크)
+    if preset_series:
+        for ps in preset_series:
+            ps_id = ps['id']
+            ps_norm_label = normalize_label(ps['label'])
+            if ps_id in existing_ids or ps_norm_label in existing_normalized_labels:
+                continue
+            merged_series.append(ps)
+            existing_ids.add(ps_id)
+            existing_normalized_labels.add(ps_norm_label)
+
+    # OpenAI series 추가 (중복 체크)
+    for item in series:
+        item_id = item['id']
+        item_norm_label = normalize_label(item['label'])
+        if item_id in existing_ids or item_norm_label in existing_normalized_labels:
+            continue
+        merged_series.append(item)
+        existing_ids.add(item_id)
+        existing_normalized_labels.add(item_norm_label)
+
+    base_notes = (llm_data or {}).get('notes', '')
+    notes_parts = []
+    if base_notes:
+        notes_parts.append(base_notes)
+    if safe_series:
+        safe_labels = ', '.join(s['label'] for s in safe_series)
+        notes_parts.append(f"{safe_labels} 데이터는 외부 시세 제공처(Stooq 등)의 월별 종가/수익률을 기반으로 계산했습니다.")
+    if preset_series:
+        preset_labels = ', '.join(s['label'] for s in preset_series)
+        notes_parts.append(f"{preset_labels} 주가는 외부 시세 제공처(Stooq 등) 데이터를 활용해 연평균 수익률로 환산했습니다.")
+    notes = ' '.join(notes_parts).strip()
+    debug_logs.append(f"Final merged series: {len(merged_series)}")
+
+    return JsonResponse({
+        'ok': True,
+        'series': merged_series,
+        'start_year': start_year,
+        'end_year': end_year,
+        'summary': (llm_data or {}).get('summary', ''),
+        'notes': notes,
+        'fx_rate': usd_krw_rate,
+        'logs': debug_logs,
+        'prompt': prompt,
+        'quick_requests': quick_requests,
+    })
+
+
+# Kingstone wallet endpoints
 @csrf_exempt
 def kingstone_wallets_view(request):
     if request.method != 'GET':

@@ -72,6 +72,14 @@ const getIcon = (key) => {
         d: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z'
       })
     ]),
+    finance: () => h('svg', {
+      fill: 'none',
+      stroke: 'currentColor',
+      viewBox: '0 0 24 24'
+    }, [
+      h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M4 19h16M8 19V9m4 10v-6m4 6V5' }),
+      h('circle', { cx: '12', cy: '7', r: '1', 'stroke-width': '2' })
+    ]),
     // Dollar icon for fee calculator
     fee: () => h('svg', {
       fill: 'none',

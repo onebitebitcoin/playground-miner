@@ -141,6 +141,8 @@ const menuItems = computed(() => {
     items.push({ key: 'fee', label: '수수료 계산' })
   }
 
+  items.push({ key: 'finance', label: '재무 관리' })
+
   // Add admin menu only for admin users
   const nickname = localStorage.getItem('nickname')
   const adminStatus = localStorage.getItem('isAdmin')
