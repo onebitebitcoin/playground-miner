@@ -232,22 +232,47 @@
           </button>
         </div>
         <p class="text-sm text-slate-600">
-          모든 자산의 {{ calculationMethod === 'cumulative' ? '누적 수익률' : '연평균 수익률' }}을 서로 비교하기 위해, 각 연도별 {{ calculationMethod === 'cumulative' ? '누적 수익률' : '연평균 수익률' }}(%)을 0에서 100 사이 값으로 스케일링한 뒤 차트에 표시합니다.
+          <template v-if="calculationMethod === 'price'">
+            모든 자산의 시작 시점 가격을 100으로 맞추고(Indexing), 이후 가격 변화를 상대적 비율로 표시합니다.
+          </template>
+          <template v-else>
+            모든 자산의 {{ calculationMethod === 'cumulative' ? '누적 수익률' : calculationMethod === 'yearly_growth' ? '전년 대비 증감률' : '연평균 상승률' }}을 서로 비교하기 위해, 각 연도별 값(%)을 0에서 100 사이로 스케일링한 뒤 차트에 표시합니다.
+          </template>
         </p>
         <p class="text-xs text-slate-500">
-          즉, 시작 연도에 투자했다고 가정하고 해당 연도부터 올해까지의 {{ calculationMethod === 'cumulative' ? '누적' : '연평균(복리)' }} 수익률을 계산해 비교하는 방식입니다.
+          <template v-if="calculationMethod === 'price'">
+            이를 통해 가격 단위가 다른 자산들(예: 비트코인 $50,000 vs 나스닥 1,000)을 동일한 기준(%)으로 비교할 수 있습니다. 예: 비트코인 100만원→500만원(100→500), 나스닥 1,000→1,500(100→150)
+          </template>
+          <template v-else>
+            즉, 시작 연도에 투자했다고 가정하고 해당 연도부터 올해까지의 {{ calculationMethod === 'cumulative' ? '누적' : calculationMethod === 'yearly_growth' ? '전년 대비' : '연평균(복리)' }} 상승률을 계산해 비교하는 방식입니다.
+          </template>
         </p>
         <div class="bg-slate-50 rounded-xl border border-slate-200 p-4 text-sm text-slate-700 space-y-2">
           <p class="font-semibold text-slate-900">계산식</p>
-          <p class="font-mono">
-            정규화 값 = clamp({{ calculationMethod === 'cumulative' ? '누적 수익률' : '연평균 수익률' }} %, 0, 100)
+          <p class="font-mono text-xs">
+            <template v-if="calculationMethod === 'price'">
+              Index = (현재 가격 / 시작 가격) × 100
+            </template>
+            <template v-else>
+              정규화 값 = clamp({{ calculationMethod === 'cumulative' ? '누적 수익률' : calculationMethod === 'yearly_growth' ? '증감률' : '연평균 상승률' }} %, 0, 100)
+            </template>
           </p>
           <p class="text-xs text-slate-500">
-            clamp는 값이 0보다 작으면 0, 100보다 크면 100으로 제한합니다.
+            <template v-if="calculationMethod === 'price'">
+              시작 시점이 항상 100이 되므로, "얼마나 올랐냐/내렸냐"를 같은 기준(%)으로 비교할 수 있습니다. 가장 일반적으로 사용되는 가격 비교 방식입니다.
+            </template>
+            <template v-else>
+              clamp는 값이 0보다 작으면 0, 100보다 크면 100으로 제한합니다.
+            </template>
           </p>
         </div>
         <p class="text-xs text-slate-500">
-          툴팁에서는 정규화된 값(0~100)과 함께 실제 {{ calculationMethod === 'cumulative' ? '누적 수익률' : '연평균 수익률' }}(%)도 함께 표시해 비교에 도움이 되도록 했습니다.
+          <template v-if="calculationMethod === 'price'">
+            툴팁에서는 Index 값과 함께 실제 가격도 표시됩니다.
+          </template>
+          <template v-else>
+            툴팁에서는 정규화된 값(0~100)과 함께 실제 {{ calculationMethod === 'cumulative' ? '누적 수익률' : calculationMethod === 'yearly_growth' ? '증감률' : '연평균 상승률' }}(%)도 함께 표시해 비교에 도움이 되도록 했습니다.
+          </template>
         </p>
         <div class="text-right">
           <button
@@ -442,7 +467,16 @@ const chartTitle = computed(() => {
     return '차트'
   }
   const yearDiff = props.endYear - props.startYear + 1
-  const methodText = props.calculationMethod === 'cumulative' ? '누적 수익률' : '연평균 상승률'
+  let methodText
+  if (props.calculationMethod === 'price') {
+    methodText = `가격 비교 (${props.startYear}년 = 100 기준)`
+  } else if (props.calculationMethod === 'cumulative') {
+    methodText = '누적 수익률'
+  } else if (props.calculationMethod === 'yearly_growth') {
+    methodText = '전년 대비 증감률'
+  } else {
+    methodText = '연평균 상승률'
+  }
   return `${yearDiff}년 ${methodText} 비교 (${props.startYear} ~ ${props.endYear})`
 })
 
@@ -510,11 +544,11 @@ watch(() => props.loading, (newLoading) => {
 
 const clampNormalizedValue = (value) => {
   if (!Number.isFinite(value)) return null
-  // YoY Growth 등 음수가 가능한 지표는 클램핑 하지 않음
-  if (props.calculationMethod === 'yearly_growth') {
+  // Price 모드, YoY Growth, CAGR 등은 음수 및 100 초과가 가능하므로 클램핑 하지 않음
+  if (props.calculationMethod === 'price' || props.calculationMethod === 'yearly_growth' || props.calculationMethod === 'cagr') {
     return value
   }
-  // 기존 정규화 로직 (CAGR/Cumulative)
+  // 누적 수익률(Cumulative)만 0-100 범위로 클램핑
   return Math.max(0, Math.min(100, value))
 }
 
@@ -560,6 +594,12 @@ const chart = computed(() => {
     const orderedPoints = [...series.points].sort((a, b) => a.year - b.year)
     const color = props.colors[series.id] || palette[idx % palette.length]
 
+    // Price 모드인 경우, 시작값을 구함 (Indexing)
+    let firstValue = null
+    if (props.calculationMethod === 'price' && orderedPoints.length > 0) {
+      firstValue = extractAnnualizedRate(orderedPoints[0])
+    }
+
     const rawPoints = orderedPoints
       .map((point) => {
         const annualizedRate = extractAnnualizedRate(point)
@@ -567,7 +607,16 @@ const chart = computed(() => {
           return null
         }
 
-        const normalizedValue = clampNormalizedValue(annualizedRate)
+        let normalizedValue
+        let originalValue = annualizedRate
+
+        // Price 모드: Indexing 방식 (시작값 = 100)
+        if (props.calculationMethod === 'price' && firstValue !== null && firstValue > 0) {
+          normalizedValue = (annualizedRate / firstValue) * 100
+        } else {
+          normalizedValue = clampNormalizedValue(annualizedRate)
+        }
+
         if (normalizedValue === null) {
           return null
         }
@@ -576,7 +625,7 @@ const chart = computed(() => {
         return {
           year: point.year,
           value: normalizedValue,
-          originalValue: annualizedRate,
+          originalValue: originalValue,
           isRaw: false,
           isRate: true
         }
@@ -596,7 +645,6 @@ const chart = computed(() => {
   }
 
   // Y축 스케일링 계산
-  // 정규화 모드(0~100)가 아닌 경우(예: 증감률)에는 데이터의 실제 min/max를 사용
   let minValue = 0
   let maxValue = 100
 
@@ -605,8 +653,14 @@ const chart = computed(() => {
     const realMin = Math.min(...allValues)
     const realMax = Math.max(...allValues)
 
+    // Price 모드: Indexing 방식이므로 동적 범위 사용 (단, 최소값은 0 이상)
+    if (props.calculationMethod === 'price') {
+      const range = realMax - realMin
+      minValue = Math.max(0, Math.floor(realMin - range * 0.1))
+      maxValue = Math.ceil(realMax + range * 0.1)
+    }
     // 데이터가 음수를 포함하거나 100을 크게 초과하는 경우 동적 스케일링 적용
-    if (realMin < 0 || realMax > 120) {
+    else if (realMin < 0 || realMax > 120) {
       // 여유 공간(padding) 추가
       const range = realMax - realMin
       minValue = Math.floor(realMin - range * 0.1)
@@ -655,9 +709,13 @@ const chart = computed(() => {
   const yTicks = Array.from({ length: 5 }).map((_, idx) => {
     const ratio = idx / 4
     const value = minValue + (maxValue - minValue) * ratio
+    // Price 모드: Index 값이므로 정수로 표시
+    // 다른 모드: 정수로 표시
+    const label = value.toFixed(0)
+
     return {
       y: scaleValue(value),
-      label: value.toFixed(0) // 정규화된 값은 정수로 표시
+      label
     }
   })
 
@@ -687,6 +745,23 @@ function isBitcoinLine(label) {
 
 function tooltipValueFormatter(point) {
   if (!point) return '-'
+
+  // Price 모드일 때는 Index 값과 실제 가격을 함께 표시
+  if (props.calculationMethod === 'price') {
+    const indexValue = Number.isFinite(point.value) ? point.value : null
+    const actualPrice = Number.isFinite(point.originalValue) ? point.originalValue : null
+
+    if (indexValue !== null && actualPrice !== null) {
+      const formatter = new Intl.NumberFormat('en-US', {
+        notation: 'compact',
+        maximumFractionDigits: 2
+      })
+      return `Index ${indexValue.toFixed(1)} (실제: ${formatter.format(actualPrice)})`
+    }
+    return '-'
+  }
+
+  // 다른 모드일 때는 % 표시
   if (Number.isFinite(point.originalValue)) {
     return `${point.originalValue.toFixed(1)}%`
   }
