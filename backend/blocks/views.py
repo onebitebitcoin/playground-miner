@@ -2526,6 +2526,12 @@ def _find_known_asset_config(asset_id=None, label=None):
 def _build_yearly_closing_points(history, start_year, end_year):
     if not history:
         return []
+    
+    current_year = datetime.utcnow().year
+    # Allow current year data even if end_year < current_year
+    # This ensures we always show the latest available price for the current year (YTD/Current)
+    effective_end_year = max(end_year, current_year)
+    
     yearly = {}
     for dt, price in history:
         if not dt or price in (None, 0):
@@ -2533,11 +2539,16 @@ def _build_yearly_closing_points(history, start_year, end_year):
         year = getattr(dt, 'year', None)
         if not isinstance(year, int):
             continue
-        if year < start_year or year > end_year:
+            
+        # We still respect the start_year, but allow up to effective_end_year
+        if year < start_year or year > effective_end_year:
             continue
+            
         prev = yearly.get(year)
+        # Keep the latest date's price for the year
         if not prev or dt > prev[0]:
             yearly[year] = (dt, price)
+            
     ordered = []
     for year in sorted(yearly.keys()):
         value = _safe_float(yearly[year][1], allow_negative=False)
