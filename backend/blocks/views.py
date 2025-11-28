@@ -29,7 +29,7 @@ from mnemonic import Mnemonic as MnemonicValidator
 MAX_NONCE = 100000
 DIFFICULTY_BASE = 5000
 KINGSTONE_WALLET_LIMIT = 3
-FINANCE_DEFAULT_START_YEAR = 2016
+FINANCE_DEFAULT_START_YEAR = 2015
 FINANCE_YEAR_SPAN = 10
 FINANCE_MAX_SERIES = 15
 
@@ -3106,6 +3106,9 @@ def _extract_year_span_from_prompt(prompt):
     match = re.search(r'지난\s*(\d{1,3})\s*년', lowered)
     if not match:
         match = re.search(r'(\d{1,3})\s*년\s*(?:간|동안)', lowered)
+    if not match:
+        # "10년 연평균", "10년 수익률" etc.
+        match = re.search(r'(\d{1,3})\s*년\s+(?:연평균|수익률|상승률|전년|증감)', lowered)
     if match:
         try:
             span = int(match.group(1))
