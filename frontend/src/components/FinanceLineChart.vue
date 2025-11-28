@@ -510,6 +510,11 @@ watch(() => props.loading, (newLoading) => {
 
 const clampNormalizedValue = (value) => {
   if (!Number.isFinite(value)) return null
+  // YoY Growth 등 음수가 가능한 지표는 클램핑 하지 않음
+  if (props.calculationMethod === 'yearly_growth') {
+    return value
+  }
+  // 기존 정규화 로직 (CAGR/Cumulative)
   return Math.max(0, Math.min(100, value))
 }
 
@@ -590,17 +595,34 @@ const chart = computed(() => {
     return { lines: [], xLabels: [], yTicks: [], usesRawValues: false, fallbackOnly: false }
   }
 
-  // Y축을 0~100 범위로 제한하되 데이터 크기에 맞춰 상단을 조정
-  const minValue = 0
-  const rawMax = Math.max(...values, 0)
+  // Y축 스케일링 계산
+  // 정규화 모드(0~100)가 아닌 경우(예: 증감률)에는 데이터의 실제 min/max를 사용
+  let minValue = 0
   let maxValue = 100
-  if (Number.isFinite(rawMax) && rawMax > 0) {
-    maxValue = Math.min(100, rawMax * 1.1)
-    if (maxValue < rawMax + 5) {
-      maxValue = Math.min(100, rawMax + 5)
-    }
-    if (maxValue < 20) {
-      maxValue = Math.min(100, 20)
+
+  const allValues = values
+  if (allValues.length > 0) {
+    const realMin = Math.min(...allValues)
+    const realMax = Math.max(...allValues)
+
+    // 데이터가 음수를 포함하거나 100을 크게 초과하는 경우 동적 스케일링 적용
+    if (realMin < 0 || realMax > 120) {
+      // 여유 공간(padding) 추가
+      const range = realMax - realMin
+      minValue = Math.floor(realMin - range * 0.1)
+      maxValue = Math.ceil(realMax + range * 0.1)
+    } else {
+      // 기존 정규화 로직 유지 (CAGR/Cumulative 등 양수 위주 데이터)
+      const rawMax = Math.max(...values, 0)
+      if (Number.isFinite(rawMax) && rawMax > 0) {
+        maxValue = Math.min(100, rawMax * 1.1)
+        if (maxValue < rawMax + 5) {
+          maxValue = Math.min(100, rawMax + 5)
+        }
+        if (maxValue < 20) {
+          maxValue = Math.min(100, 20)
+        }
+      }
     }
   }
 

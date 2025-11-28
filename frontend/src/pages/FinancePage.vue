@@ -359,32 +359,74 @@ const tabs = [
 
 const quickRequestOptions = [
   {
-    key: 'safe',
-    label: '대표 투자 상품과 비교',
-    example: '비트코인, 금, 미국 10년물 국채, 은, S&P 500, 다우지수, 나스닥 100, 달러지수, 원유, 구리의 10년 연 평균 수익률을 비교해줘',
-    quickRequest: '비트코인, 금, 미국 10년물 국채, 은, S&P 500, 다우지수, 나스닥 100, 달러지수, 원유, 구리의 10 년 연평균 수익률을 비교해줘',
+    key: 'safe_cagr',
+    label: '대표 자산 연평균 수익률',
+    example: '비트코인과 대표 자산의 10년 연평균 수익률을 비교해줘',
+    quickRequest: '비트코인, 금, 미국 10년물 국채, 은, S&P 500, 다우지수, 나스닥 100, 달러지수, 원유, 구리의 10년 연평균 수익률을 비교해줘',
     context: 'safe_assets'
   },
   {
-    key: 'm2Compare',
-    label: '미국/한국 M2와 비교',
-    example: '지난 10년간 미국의 M2 통화량 연평균 상승률과 한국의 M2 연평균 상승률, 비트코인을 비교해줘',
-    quickRequest: '지난 10년간 미국의 M2 통화량 연평균 상승률과 한국의 M2 연평균 상승률, 비트코인을 비교해줘',
-    context: 'm2_compare'
-  },
-  {
-    key: 'usTech',
-    label: '미국 빅테크와 비교',
-    example: '비트코인과 미국 빅테크 10개 종목(애플, 마이크로소프트, 알파벳, 아마존, 메타, 테슬라, 엔비디아, 넷플릭스, 어도비, AMD)의 지난 10년 연평균 수익률을 비교해줘',
-    quickRequest: '미국 빅테크 10개 종목의 지난 10년 연평균 수익률을 알려줘',
+    key: 'us_tech_cagr',
+    label: '미국 빅테크 연평균 수익률',
+    example: '비트코인과 미국 빅테크 기업의 10년 연평균 수익률을 비교해줘',
+    quickRequest: '비트코인과 미국 빅테크 10개 종목(애플, 마이크로소프트, 알파벳, 아마존, 메타, 테슬라, 엔비디아, 넷플릭스, 어도비, AMD)의 10년 연평균 수익률을 비교해줘',
     context: 'us_bigtech'
   },
   {
-    key: 'krEquity',
-    label: '국내 주식과 비교',
-    example: '비트코인과 삼성전자, SK하이닉스, NAVER, 카카오, LG에너지솔루션, 현대차, 기아, 삼성바이오로직스, 삼성SDI, 포스코홀딩스의 10년 연평균 수익률을 비교해줘',
-    quickRequest: '비트코인과 삼성전자, SK하이닉스, NAVER, 카카오, LG에너지솔루션, 현대차, 기아, 삼성바이오로직 스, 삼성SDI, 포스코홀딩스의 10년 연평균 수익률을 비교해줘',
+    key: 'kr_equity_cagr',
+    label: '국내 주식 연평균 수익률',
+    example: '비트코인과 국내 대표 주식의 10년 연평균 수익률을 비교해줘',
+    quickRequest: '비트코인과 삼성전자, SK하이닉스, NAVER, 카카오, LG에너지솔루션, 현대차, 기아, 삼성바이오로직스, 삼성SDI, 포스코홀딩스의 10년 연평균 수익률을 비교해줘',
     context: 'kr_equity'
+  },
+  {
+    key: 'safe_price',
+    label: '대표 자산 연말 가격',
+    example: '비트코인과 대표 자산의 연도별 연말 가격을 알려줘',
+    quickRequest: '비트코인, 금, 미국 10년물 국채, 은, S&P 500, 다우지수, 나스닥 100, 달러지수, 원유, 구리의 연도별 연말 가격을 알려줘',
+    context: 'safe_assets'
+  },
+  {
+    key: 'us_tech_price',
+    label: '미국 빅테크 연말 가격',
+    example: '비트코인과 미국 빅테크 기업의 연말 가격을 알려줘',
+    quickRequest: '비트코인과 미국 빅테크 10개 종목의 연도별 연말 가격을 알려줘',
+    context: 'us_bigtech'
+  },
+  {
+    key: 'kr_equity_price',
+    label: '국내 주식 연말 가격',
+    example: '비트코인과 국내 대표 주식의 연말 가격을 알려줘',
+    quickRequest: '비트코인과 삼성전자, SK하이닉스, NAVER, 카카오, LG에너지솔루션, 현대차, 기아, 삼성바이오로직스, 삼성SDI, 포스코홀딩스의 연도별 연말 가격을 알려줘',
+    context: 'kr_equity'
+  },
+  {
+    key: 'safe_yoy',
+    label: '대표 자산 전년 대비 증감률',
+    example: '비트코인과 대표 자산의 전년 대비 증감률을 비교해줘',
+    quickRequest: '비트코인, 금, 미국 10년물 국채, 은, S&P 500, 다우지수, 나스닥 100, 달러지수, 원유, 구리의 전년 대비 증감률을 비교해줘',
+    context: 'safe_assets'
+  },
+  {
+    key: 'us_tech_yoy',
+    label: '미국 빅테크 전년 대비 증감률',
+    example: '비트코인과 미국 빅테크의 전년 대비 증감률을 비교해줘',
+    quickRequest: '비트코인과 미국 빅테크 10개 종목의 전년 대비 증감률을 비교해줘',
+    context: 'us_bigtech'
+  },
+  {
+    key: 'kr_equity_yoy',
+    label: '국내 주식 전년 대비 증감률',
+    example: '비트코인과 국내 주식의 전년 대비 증감률을 비교해줘',
+    quickRequest: '비트코인과 삼성전자, SK하이닉스, NAVER, 카카오, LG에너지솔루션, 현대차, 기아, 삼성바이오로직스, 삼성SDI, 포스코홀딩스의 전년 대비 증감률을 비교해줘',
+    context: 'kr_equity'
+  },
+  {
+    key: 'm2Compare',
+    label: 'M2 통화량 비교',
+    example: '미국/한국 M2 통화량 증가율과 비트코인을 비교해줘',
+    quickRequest: '지난 10년간 미국의 M2 통화량 연평균 상승률과 한국의 M2 연평균 상승률, 비트코인을 비교해줘',
+    context: 'm2_compare'
   }
 ]
 

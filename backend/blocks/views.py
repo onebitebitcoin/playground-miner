@@ -2886,9 +2886,20 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculati
     for idx, (year, adjusted_value) in enumerate(adjusted_series):
         multiple = adjusted_value / base_value
 
-        if calculation_method == 'cumulative':
+        if calculation_method == 'cumulative' or calculation_method == 'price':
             # 누적 상승률: (현재값 / 시작값 - 1) * 100
+            # Price requests are visualized as Cumulative Trend (Index) on the chart for comparison
             return_pct = (multiple - 1) * 100
+        elif calculation_method == 'yearly_growth':
+            # 전년 대비 증감률 (YoY)
+            if idx == 0:
+                return_pct = 0.0
+            else:
+                prev_val = adjusted_series[idx-1][1]
+                if prev_val > 0:
+                    return_pct = (adjusted_value - prev_val) / prev_val * 100
+                else:
+                    return_pct = 0.0
         else:
             # CAGR: 연평균 수익률
             if year == base_year:
@@ -2916,18 +2927,23 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculati
     end_val = points[-1]['multiple'] or start_val
     years_total = points[-1]['year'] - points[0]['year']
 
-    # Calculate final return metric
-    if calculation_method == 'cumulative':
+    # Calculate final return metric for legend/sorting
+    if calculation_method == 'cumulative' or calculation_method == 'price':
         # 누적 상승률
         final_return_pct = (end_val / start_val - 1) * 100 if start_val else 0.0
-        return_label = 'cumulative_return_pct'
+    elif calculation_method == 'yearly_growth':
+        # 증감률의 경우 마지막 해 증감률 또는 평균 증감률을 사용? 
+        # 여기서는 '마지막 해 증감률'을 표시하거나, 전체 기간 단순 평균을 표시
+        # 단순 평균으로 결정
+        growth_sum = sum(p['value'] for p in points[1:]) # 첫해 제외
+        count = len(points) - 1
+        final_return_pct = growth_sum / count if count > 0 else 0.0
     else:
         # CAGR
         if years_total > 0 and start_val > 0:
             final_return_pct = ((end_val / start_val) ** (1 / years_total) - 1) * 100
         else:
             final_return_pct = 0.0
-        return_label = 'annualized_return_pct'
 
     return {
         'id': cfg.get('id') or asset_key,
@@ -2935,8 +2951,7 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculati
         'category': cfg.get('category', '안전자산'),
         'unit': cfg.get('unit', ''),
         'points': points,
-        'annualized_return_pct': round(final_return_pct, 2),  # 호환성을 위해 유지
-        'cumulative_return_pct': round((end_val / start_val - 1) * 100, 2) if start_val else 0.0,
+        'annualized_return_pct': round(final_return_pct, 2),  # Used for sorting
         'multiple_from_start': round(end_val / start_val, 3) if start_val else 0.0,
         'calculation_method': calculation_method,
     }
@@ -3237,12 +3252,14 @@ class IntentClassifierAgent:
             "- 'label': The display name (e.g., 'Samsung Electronics', 'Bitcoin', 'US M2 Money Supply'). "
             "- 'type': One of 'crypto', 'kr_stock', 'us_stock', 'index', 'commodity', 'forex', 'bond', 'economic_indicator'. "
             "- 'calculation_method': REQUIRED. Determine from user's request:\n"
-            "  * 'cagr' (default): If user asks for '연평균', 'CAGR', 'annualized', '평균 수익률'\n"
+            "  * 'cagr' (default): If user asks for '연평균', 'CAGR', 'annualized', '평균 수익률', '수익률 비교'\n"
             "  * 'cumulative': If user asks for '누적', 'total return', '총 상승률', '전체 상승률'\n"
+            "  * 'yearly_growth': If user asks for '전년 대비', '증감률', 'YoY', '성장률', '변동률'\n"
+            "  * 'price': If user asks for '가격', '종가', '시세', 'price', '얼마'\n"
             "  * If unclear, use 'cagr' as default.\n"
             "If the user asks for a group (e.g., 'US Big Tech'), expand it into individual representative stocks (max 10). "
             "IMPORTANT: The 'calculation_method' should be the SAME for all assets unless the user specifically requests different methods for different assets. "
-            "Return ONLY a JSON object with keys 'assets' (list) and 'calculation_method' (string: 'cagr' or 'cumulative')."
+            "Return ONLY a JSON object with keys 'assets' (list) and 'calculation_method' (string: 'cagr', 'cumulative', 'yearly_growth', or 'price')."
         )
 
         user_content = f"User Request: {combined_prompt}"
@@ -3449,8 +3466,16 @@ class CalculatorAgent:
         best = series_list[0]
         worst = series_list[-1]
         
+        method = best.get('calculation_method', 'cagr')
+        if method == 'cumulative' or method == 'price':
+            unit = "누적 수익률"
+        elif method == 'yearly_growth':
+            unit = "평균 증감률"
+        else:
+            unit = "연평균 수익률"
+
         return (f"{start_year}년부터 {end_year}년까지 분석 결과, "
-                f"{best['label']}이(가) 연평균 {best['annualized_return_pct']}%로 가장 높은 성과를 보였으며, "
+                f"{best['label']}이(가) {unit} {best['annualized_return_pct']}%로 가장 높은 성과를 보였으며, "
                 f"{worst['label']}은(는) {worst['annualized_return_pct']}%를 기록했습니다.")
 
 
