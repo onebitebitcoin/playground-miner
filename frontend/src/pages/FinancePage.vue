@@ -452,7 +452,8 @@ const promptIncludesBitcoin = computed(() => {
 
 const filteredSeries = computed(() => {
   if (!analysis.value?.series?.length) return []
-  let effectiveStartYear = displayStartYear.value || analysis.value?.start_year
+  let actualStartYear = displayStartYear.value || analysis.value?.start_year
+  let effectiveStartYear = actualStartYear
 
   // If it's a 10-year period (e.g., 2015-2025, which is 11 years including start year),
   // increment the effective start year by 1 to skip the first year.
@@ -467,14 +468,35 @@ const filteredSeries = computed(() => {
   if (!effectiveStartYear) return baseSeries
 
   return baseSeries.map((series) => {
-    const filteredPoints = series.points.filter((point) => point.year >= effectiveStartYear)
-    if (filteredPoints.length < 2) return null
+    const allSortedPoints = [...series.points].sort((a, b) => a.year - b.year)
+    
+    // Determine the base point for calculation (typically 2015)
+    // If the actual start year point exists, use it as base.
+    // Otherwise, fall back to the first visible point.
+    const basePoint = allSortedPoints.find(p => p.year === actualStartYear)
+    
+    // Filter points for display (typically 2016+)
+    const filteredPoints = allSortedPoints.filter((point) => point.year >= effectiveStartYear)
+    
+    if (filteredPoints.length === 0) return null
 
-    // 재계산: multiple 기준으로 CAGR 계산
-    const sortedPoints = [...filteredPoints].sort((a, b) => a.year - b.year)
-    const startMultiple = Number(sortedPoints[0].multiple)
-    const endMultiple = Number(sortedPoints[sortedPoints.length - 1].multiple)
-    const years = sortedPoints[sortedPoints.length - 1].year - sortedPoints[0].year
+    let startMultiple
+    let baseYear
+    
+    // If we have a valid base point from the actual start year (hidden year), use it
+    if (basePoint && Number.isFinite(basePoint.multiple)) {
+      startMultiple = Number(basePoint.multiple)
+      baseYear = actualStartYear
+    } else {
+      // Fallback: Use first visible point as base
+      if (filteredPoints.length < 2 && analysisResultType.value !== 'price') return null
+      startMultiple = Number(filteredPoints[0].multiple)
+      baseYear = filteredPoints[0].year
+    }
+
+    const endMultiple = Number(filteredPoints[filteredPoints.length - 1].multiple)
+    const endYear = filteredPoints[filteredPoints.length - 1].year
+    const years = endYear - baseYear
 
     let annualizedReturnPct = 0
     let multipleFromStart = 1
@@ -492,7 +514,7 @@ const filteredSeries = computed(() => {
       }
     }
 
-    const rebasedPoints = sortedPoints.map((point) => {
+    const rebasedPoints = filteredPoints.map((point) => {
       const pointMultiple = Number(point.multiple)
       let normalizedMultiple = pointMultiple
       if (Number.isFinite(pointMultiple) && Number.isFinite(startMultiple) && startMultiple > 0) {
@@ -511,7 +533,7 @@ const filteredSeries = computed(() => {
         }
       }
 
-      const yearsElapsed = point.year - sortedPoints[0].year
+      const yearsElapsed = point.year - baseYear
       let recalculatedValue = 0
       if (yearsElapsed > 0) {
         const growthRate = Math.pow(normalizedMultiple, 1 / yearsElapsed) - 1
@@ -519,7 +541,11 @@ const filteredSeries = computed(() => {
           const adjustedGrowth = appliesTax ? growthRate * taxMultiplier : growthRate
           recalculatedValue = adjustedGrowth * 100
         }
+      } else if (yearsElapsed === 0) {
+        // This happens if point.year === baseYear (fallback case)
+        recalculatedValue = 0
       }
+      
       return {
         ...point,
         multiple: normalizedMultiple,
