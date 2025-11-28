@@ -454,13 +454,14 @@ const filteredSeries = computed(() => {
   if (!analysis.value?.series?.length) return []
   
   let effectiveStartYear = displayStartYear.value || analysis.value?.start_year
+  const datasetStartYear = analysis.value?.start_year
 
-  // If it's a 10-year period (e.g., 2015-2025, which is 11 years including start year),
-  // increment the effective start year by 1 to skip the first year ONLY if user hasn't manually selected a year.
-  // This provides the "Start from 2016" default behavior for "Last 10 years" request.
-  if (!displayStartYear.value && analysis.value?.start_year && analysis.value?.end_year &&
-      (analysis.value.end_year - analysis.value.start_year + 1) === 11) {
-    effectiveStartYear = analysis.value.start_year + 1
+  // General Rule: If the effective start year is the same as the dataset's absolute start year,
+  // and we are in a return/growth mode (not 'price'),
+  // we skip this first year to avoid showing a "0%" start point.
+  // The first year serves as the baseline (anchor) for the next year's calculation.
+  if (datasetStartYear && effectiveStartYear === datasetStartYear && analysisResultType.value !== 'price') {
+    effectiveStartYear += 1
   }
 
   const baseSeries = analysis.value.series.filter((series) => promptIncludesBitcoin.value || !isBitcoinLabel(series?.label))
