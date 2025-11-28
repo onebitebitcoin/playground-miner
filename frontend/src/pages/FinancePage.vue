@@ -136,6 +136,7 @@
           :show-year-slider="!loading && !!analysis"
           :show-tax-toggle="showTaxToggle"
           :tax-included="includeTax"
+          :calculation-method="analysisResultType"
           @update:start-year="displayStartYear = $event"
           @toggle-tax="includeTax = $event"
         />
@@ -143,7 +144,9 @@
         <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-4" v-if="!loading">
           <div class="flex items-center justify-between">
             <h4 class="text-sm font-semibold text-slate-900">범례</h4>
-            <span class="text-[11px] text-slate-500">연평균 수익률 순서로 정렬</span>
+            <span class="text-[11px] text-slate-500">
+              {{ analysisResultType === 'cumulative' ? '누적 수익률' : '연평균 수익률' }} 순서로 정렬
+            </span>
           </div>
           <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
             <button
@@ -387,6 +390,7 @@ const showTaxToggle = computed(() => selectedContextKey.value === 'us_bigtech' &
 const loading = ref(false)
 const errorMessage = ref('')
 const analysis = ref(null)
+const analysisResultType = ref('cagr') // 'cagr' or 'cumulative'
 const displayStartYear = ref(null)
 let abortController = null
 const progressLogs = ref([])
@@ -418,7 +422,11 @@ const comparisonYears = computed(() => {
 
 const defaultSummary = computed(() => {
   if (!analysis.value) return ''
-  return `${analysis.value.start_year}년부터 ${analysis.value.end_year}년까지의 누적 수익률입니다.`
+  const period = `${analysis.value.start_year}년부터 ${analysis.value.end_year}년까지의`
+  if (analysisResultType.value === 'cumulative') {
+    return `${period} 누적 수익률입니다.`
+  }
+  return `${period} 연평균 수익률입니다.`
 })
 
 const promptIncludesBitcoin = computed(() => {
@@ -875,6 +883,7 @@ async function runAnalysis() {
     const result = await fetchHistoricalReturnsStream(payload)
 
     analysis.value = result
+    analysisResultType.value = result.calculation_method || 'cagr'
     displayStartYear.value = result.start_year
     hiddenSeries.value = new Set()
 

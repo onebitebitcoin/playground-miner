@@ -318,6 +318,10 @@ const props = defineProps({
   priceData: {
     type: Object,
     default: () => ({})
+  },
+  calculationMethod: {
+    type: String,
+    default: 'cagr' // 'cagr' or 'cumulative'
   }
 })
 
@@ -438,7 +442,8 @@ const chartTitle = computed(() => {
     return '차트'
   }
   const yearDiff = props.endYear - props.startYear + 1
-  return `${yearDiff}년 연평균 상승률 비교 (${props.startYear} ~ ${props.endYear})`
+  const methodText = props.calculationMethod === 'cumulative' ? '누적 수익률' : '연평균 상승률'
+  return `${yearDiff}년 ${methodText} 비교 (${props.startYear} ~ ${props.endYear})`
 })
 
 const loadingProgress = computed(() => {

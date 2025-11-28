@@ -3614,6 +3614,7 @@ def finance_historical_returns_view(request):
             'logs': all_logs,
             'prompt': prompt,
             'quick_requests': quick_requests,
+            'calculation_method': calculation_method,
         }
 
         return JsonResponse(response_payload)
@@ -3712,6 +3713,7 @@ def _finance_analysis_stream(prompt, quick_requests, context_key, start_year, en
             'fx_rate': usd_krw_rate,
             'prompt': prompt,
             'quick_requests': quick_requests,
+            'calculation_method': calculation_method,
         }
 
         yield send_result(result_payload)
