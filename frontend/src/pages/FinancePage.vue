@@ -452,12 +452,22 @@ const promptIncludesBitcoin = computed(() => {
 
 const filteredSeries = computed(() => {
   if (!analysis.value?.series?.length) return []
-  const startYear = displayStartYear.value || analysis.value?.start_year
+  let effectiveStartYear = displayStartYear.value || analysis.value?.start_year
+
+  // If it's a 10-year period (e.g., 2015-2025, which is 11 years including start year),
+  // increment the effective start year by 1 to skip the first year.
+  // This assumes the first year might have incomplete data and the user wants to start from the next year.
+  if (analysis.value?.start_year && analysis.value?.end_year &&
+      (analysis.value.end_year - analysis.value.start_year + 1) === 11 &&
+      effectiveStartYear === analysis.value.start_year) {
+    effectiveStartYear += 1
+  }
+
   const baseSeries = analysis.value.series.filter((series) => promptIncludesBitcoin.value || !isBitcoinLabel(series?.label))
-  if (!startYear) return baseSeries
+  if (!effectiveStartYear) return baseSeries
 
   return baseSeries.map((series) => {
-    const filteredPoints = series.points.filter((point) => point.year >= startYear)
+    const filteredPoints = series.points.filter((point) => point.year >= effectiveStartYear)
     if (filteredPoints.length < 2) return null
 
     // 재계산: multiple 기준으로 CAGR 계산
