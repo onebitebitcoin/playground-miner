@@ -28,7 +28,7 @@
       <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-5">
         <div class="flex flex-col gap-1">
           <h3 class="text-base font-semibold text-slate-900">
-            {{ analysisResultType === 'price' ? '자산의 가격 분석' : analysisResultType === 'cumulative' ? '자산의 누적 수익률 분석' : analysisResultType === 'yearly_growth' ? '자산의 전년 대비 증감률 분석' : '비트코인의 연평균 상승률은?' }}
+            {{ analysisResultType === 'price' ? '자산의 가격 분석' : analysisResultType === 'cumulative' ? '자산의 누적 수익률 분석' : analysisResultType === 'yearly_growth' ? '자산의 전년 대비 증감률 분석' : '비트코인을 다른 자산과 비교해보자' }}
           </h3>
         </div>
 
