@@ -27,7 +27,9 @@
     <section v-if="activeTab === 'historical'" class="space-y-6">
       <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-5">
         <div class="flex flex-col gap-1">
-          <h3 class="text-base font-semibold text-slate-900">비트코인의 연평균 상승률은?</h3>
+          <h3 class="text-base font-semibold text-slate-900">
+            {{ analysisResultType === 'cumulative' ? '자산의 누적 수익률 분석' : '비트코인의 연평균 상승률은?' }}
+          </h3>
         </div>
 
         <div class="space-y-4">

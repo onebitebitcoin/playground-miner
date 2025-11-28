@@ -232,22 +232,22 @@
           </button>
         </div>
         <p class="text-sm text-slate-600">
-          모든 자산의 연평균 수익률을 서로 비교하기 위해, 각 연도별 연평균 수익률(%)을 0에서 100 사이 값으로 스케일링한 뒤 차트에 표시합니다.
+          모든 자산의 {{ calculationMethod === 'cumulative' ? '누적 수익률' : '연평균 수익률' }}을 서로 비교하기 위해, 각 연도별 {{ calculationMethod === 'cumulative' ? '누적 수익률' : '연평균 수익률' }}(%)을 0에서 100 사이 값으로 스케일링한 뒤 차트에 표시합니다.
         </p>
         <p class="text-xs text-slate-500">
-          즉, 시작 연도에 투자했다고 가정하고 해당 연도부터 올해까지의 연평균(복리) 수익률을 계산해 비교하는 방식입니다.
+          즉, 시작 연도에 투자했다고 가정하고 해당 연도부터 올해까지의 {{ calculationMethod === 'cumulative' ? '누적' : '연평균(복리)' }} 수익률을 계산해 비교하는 방식입니다.
         </p>
         <div class="bg-slate-50 rounded-xl border border-slate-200 p-4 text-sm text-slate-700 space-y-2">
           <p class="font-semibold text-slate-900">계산식</p>
           <p class="font-mono">
-            정규화 값 = clamp(연평균 수익률 %, 0, 100)
+            정규화 값 = clamp({{ calculationMethod === 'cumulative' ? '누적 수익률' : '연평균 수익률' }} %, 0, 100)
           </p>
           <p class="text-xs text-slate-500">
             clamp는 값이 0보다 작으면 0, 100보다 크면 100으로 제한합니다.
           </p>
         </div>
         <p class="text-xs text-slate-500">
-          툴팁에서는 정규화된 값(0~100)과 함께 실제 연평균 수익률(%)도 함께 표시해 비교에 도움이 되도록 했습니다.
+          툴팁에서는 정규화된 값(0~100)과 함께 실제 {{ calculationMethod === 'cumulative' ? '누적 수익률' : '연평균 수익률' }}(%)도 함께 표시해 비교에 도움이 되도록 했습니다.
         </p>
         <div class="text-right">
           <button
