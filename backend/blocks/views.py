@@ -9,11 +9,15 @@ import hashlib
 from datetime import datetime, timedelta
 import requests
 import yfinance as yf
+try:
+    from pykrx import stock as pykrx_stock
+except ImportError:  # pragma: no cover - optional dependency
+    pykrx_stock = None
 from django.db import transaction
 from django.db.models import Max
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from .models import Block, Nickname, Mnemonic, ExchangeRate, WithdrawalFee, LightningService, ServiceNode, Route, RoutingSnapshot, SidebarConfig, KingstoneWallet
+from .models import Block, Nickname, Mnemonic, ExchangeRate, WithdrawalFee, LightningService, ServiceNode, Route, RoutingSnapshot, SidebarConfig, KingstoneWallet, FinanceQueryLog
 from django.db import connection
 from django.conf import settings
 from .broadcast import broadcaster
@@ -21,12 +25,13 @@ from .btc import derive_bip84_addresses, fetch_blockstream_balances, calc_total_
 from mnemonic import Mnemonic as MnemonicValidator
 
 
+
 MAX_NONCE = 100000
 DIFFICULTY_BASE = 5000
 KINGSTONE_WALLET_LIMIT = 3
 FINANCE_DEFAULT_START_YEAR = 2016
 FINANCE_YEAR_SPAN = 10
-FINANCE_MAX_SERIES = 10
+FINANCE_MAX_SERIES = 15
 
 SAFE_ASSETS = {
     'bitcoin': {
@@ -48,10 +53,11 @@ SAFE_ASSETS = {
     'us10y': {
         'label': '미국 10년물 국채',
         'ticker': '^TNX',
-        'stooq_symbol': 'us10y',
+        'stooq_symbol': None,  # Stooq doesn't have yield data, use Yahoo Finance only
         'unit': '%',
         'category': '채권',
-        'aliases': ['미국 10년물 국채', '10년물 국채', 'us 10y', 'us10y', 'treasury']
+        'aliases': ['미국 10년물 국채', '10년물 국채', 'us 10y', 'us10y', 'treasury', '미국 국채'],
+        'yield_asset': True  # This is a yield (percentage), not a price
     },
     'silver': {
         'label': '은',
@@ -84,6 +90,30 @@ SAFE_ASSETS = {
         'unit': 'index',
         'category': '주식지수',
         'aliases': ['나스닥 100', '나스닥100', 'nasdaq 100', 'nasdaq100']
+    },
+    'oil': {
+        'label': '원유(USO)',
+        'ticker': 'USO',
+        'stooq_symbol': 'uso.us',
+        'unit': 'USD',
+        'category': '원자재',
+        'aliases': ['원유', 'crude oil', 'oil', 'wti', '브렌트']
+    },
+    'copper': {
+        'label': '구리(CPER)',
+        'ticker': 'CPER',
+        'stooq_symbol': 'cper.us',
+        'unit': 'USD',
+        'category': '원자재',
+        'aliases': ['구리', 'copper']
+    },
+    'dxy': {
+        'label': '달러지수(UUP)',
+        'ticker': 'UUP',
+        'stooq_symbol': 'uup.us',
+        'unit': 'USD',
+        'category': '통화',
+        'aliases': ['달러지수', 'dxy', 'dollar index', '달러 인덱스']
     }
 }
 
@@ -109,13 +139,13 @@ PRESET_STOCK_GROUPS = {
         {'id': '005930.KS', 'label': '삼성전자(005930)', 'ticker': '005930.KS', 'stooq_symbol': '005930.kr', 'category': '국내 주식', 'unit': 'KRW'},
         {'id': '000660.KS', 'label': 'SK하이닉스(000660)', 'ticker': '000660.KS', 'stooq_symbol': '000660.kr', 'category': '국내 주식', 'unit': 'KRW'},
         {'id': '035420.KS', 'label': 'NAVER(035420)', 'ticker': '035420.KS', 'stooq_symbol': '035420.kr', 'category': '국내 주식', 'unit': 'KRW'},
-        {'id': '051910.KS', 'label': 'LG화학(051910)', 'ticker': '051910.KS', 'stooq_symbol': '051910.kr', 'category': '국내 주식', 'unit': 'KRW'},
+        {'id': '035720.KS', 'label': '카카오(035720)', 'ticker': '035720.KS', 'stooq_symbol': '035720.kr', 'category': '국내 주식', 'unit': 'KRW'},
+        {'id': '373220.KS', 'label': 'LG에너지솔루션(373220)', 'ticker': '373220.KS', 'stooq_symbol': '373220.kr', 'category': '국내 주식', 'unit': 'KRW'},
         {'id': '005380.KS', 'label': '현대차(005380)', 'ticker': '005380.KS', 'stooq_symbol': '005380.kr', 'category': '국내 주식', 'unit': 'KRW'},
+        {'id': '000270.KS', 'label': '기아(000270)', 'ticker': '000270.KS', 'stooq_symbol': '000270.kr', 'category': '국내 주식', 'unit': 'KRW'},
         {'id': '207940.KS', 'label': '삼성바이오로직스(207940)', 'ticker': '207940.KS', 'stooq_symbol': '207940.kr', 'category': '국내 주식', 'unit': 'KRW'},
         {'id': '006400.KS', 'label': '삼성SDI(006400)', 'ticker': '006400.KS', 'stooq_symbol': '006400.kr', 'category': '국내 주식', 'unit': 'KRW'},
-        {'id': '028260.KS', 'label': '삼성물산(028260)', 'ticker': '028260.KS', 'stooq_symbol': '028260.kr', 'category': '국내 주식', 'unit': 'KRW'},
-        {'id': '105560.KS', 'label': 'KB금융(105560)', 'ticker': '105560.KS', 'stooq_symbol': '105560.kr', 'category': '국내 주식', 'unit': 'KRW'},
-        {'id': '055550.KS', 'label': '신한지주(055550)', 'ticker': '055550.KS', 'stooq_symbol': '055550.kr', 'category': '국내 주식', 'unit': 'KRW'}
+        {'id': '005490.KS', 'label': '포스코홀딩스(005490)', 'ticker': '005490.KS', 'stooq_symbol': '005490.kr', 'category': '국내 주식', 'unit': 'KRW'}
     ]
 }
 
@@ -125,6 +155,10 @@ _btc_usdt_cache = {'price': None, 'expires_at': 0.0}
 _btc_usdt_lock = threading.Lock()
 _usdkrw_cache = {'rate': None, 'expires_at': 0.0}
 _usdkrw_lock = threading.Lock()
+FINANCE_CACHE_PURGE_VERSIONS = {
+    'safe_assets': 2,
+}
+_purged_finance_contexts = {}
 _HTTP_DEFAULT_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (compatible; PlaygroundMiner/1.0; +https://playground-miner)'
 }
@@ -876,21 +910,29 @@ def validate_mnemonic_view(request):
 
 
 def is_admin(request):
-    """Check if user has admin privileges (supports JSON POST bodies)."""
-    if request.method == 'GET':
-        username = request.GET.get('username', '')
-    else:
-        # Try form-encoded first
-        username = request.POST.get('username', '')
-        # If missing and JSON body is used, parse it
-        if not username:
-            try:
-                content_type = (request.META.get('CONTENT_TYPE') or '').lower()
-                if 'application/json' in content_type:
-                    data = json.loads(request.body.decode('utf-8') or '{}')
-                    username = data.get('username', '')
-            except Exception:
-                username = ''
+    """Check if user has admin privileges (supports JSON POST bodies and cookies)."""
+    username = ''
+
+    # Try to get username from cookie first
+    username = request.COOKIES.get('username', '')
+
+    # If not in cookie, try GET/POST parameters
+    if not username:
+        if request.method == 'GET':
+            username = request.GET.get('username', '')
+        else:
+            # Try form-encoded first
+            username = request.POST.get('username', '')
+            # If missing and JSON body is used, parse it
+            if not username:
+                try:
+                    content_type = (request.META.get('CONTENT_TYPE') or '').lower()
+                    if 'application/json' in content_type:
+                        data = json.loads(request.body.decode('utf-8') or '{}')
+                        username = data.get('username', '')
+                except Exception:
+                    username = ''
+
     return username == 'admin'
 
 
@@ -1817,6 +1859,111 @@ def admin_update_sidebar_config_view(request):
     return JsonResponse({'ok': True, 'config': config.as_dict()})
 
 
+@csrf_exempt
+def admin_finance_logs_view(request):
+    """Admin: get finance query logs"""
+    if not is_admin(request):
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+
+    # Get query parameters
+    limit = int(request.GET.get('limit', 100))
+    offset = int(request.GET.get('offset', 0))
+    success_filter = request.GET.get('success')  # 'true', 'false', or None (all)
+
+    # Build query
+    query = FinanceQueryLog.objects.all()
+
+    if success_filter == 'true':
+        query = query.filter(success=True)
+    elif success_filter == 'false':
+        query = query.filter(success=False)
+
+    # Get total count before pagination
+    total_count = query.count()
+
+    # Apply pagination
+    logs = query[offset:offset + limit]
+
+    # Serialize logs
+    logs_data = []
+    for log in logs:
+        logs_data.append({
+            'id': log.id,
+            'user_identifier': log.user_identifier,
+            'prompt': log.prompt,
+            'quick_requests': log.quick_requests,
+            'context_key': log.context_key,
+            'success': log.success,
+            'error_message': log.error_message,
+            'assets_count': log.assets_count,
+            'processing_time_ms': log.processing_time_ms,
+            'created_at': log.created_at.isoformat(),
+        })
+
+    return JsonResponse({
+        'ok': True,
+        'logs': logs_data,
+        'total': total_count,
+        'offset': offset,
+        'limit': limit,
+    })
+
+
+@csrf_exempt
+def admin_finance_stats_view(request):
+    """Admin: get finance query statistics"""
+    if not is_admin(request):
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+
+    from django.db.models import Count, Avg
+    from datetime import datetime, timedelta
+
+    # Get stats
+    total_queries = FinanceQueryLog.objects.count()
+    successful_queries = FinanceQueryLog.objects.filter(success=True).count()
+    failed_queries = FinanceQueryLog.objects.filter(success=False).count()
+
+    # Average processing time for successful queries
+    avg_processing_time = FinanceQueryLog.objects.filter(
+        success=True,
+        processing_time_ms__isnull=False
+    ).aggregate(Avg('processing_time_ms'))['processing_time_ms__avg']
+
+    # Queries in the last 24 hours
+    last_24h = datetime.now() - timedelta(hours=24)
+    queries_24h = FinanceQueryLog.objects.filter(created_at__gte=last_24h).count()
+
+    # Top users by query count
+    top_users = list(FinanceQueryLog.objects.values('user_identifier').annotate(
+        count=Count('id')
+    ).order_by('-count')[:10])
+
+    # Most common context keys
+    top_contexts = list(FinanceQueryLog.objects.exclude(context_key='').values('context_key').annotate(
+        count=Count('id')
+    ).order_by('-count')[:10])
+
+    return JsonResponse({
+        'ok': True,
+        'stats': {
+            'total_queries': total_queries,
+            'successful_queries': successful_queries,
+            'failed_queries': failed_queries,
+            'success_rate': round(successful_queries / total_queries * 100, 2) if total_queries > 0 else 0,
+            'avg_processing_time_ms': round(avg_processing_time, 2) if avg_processing_time else 0,
+            'queries_last_24h': queries_24h,
+            'top_users': top_users,
+            'top_contexts': top_contexts,
+        }
+    })
+
+
 def _load_json_body(request):
     try:
         body = request.body
@@ -1843,11 +1990,108 @@ def _load_json_body(request):
         return None
 
 
-def _safe_float(value):
+def _get_client_identifier(request):
+    """Get client IP address or identifier from request"""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0].strip()
+    else:
+        ip = request.META.get('REMOTE_ADDR', 'unknown')
+    return ip
+
+
+def _log_finance_query(user_identifier, prompt, quick_requests, context_key, success, error_message='', assets_count=0, processing_time_ms=None):
+    """Log finance query to database"""
     try:
-        return float(value)
+        FinanceQueryLog.objects.create(
+            user_identifier=user_identifier,
+            prompt=prompt,
+            quick_requests=quick_requests if isinstance(quick_requests, list) else [],
+            context_key=context_key,
+            success=success,
+            error_message=error_message,
+            assets_count=assets_count,
+            processing_time_ms=processing_time_ms
+        )
+    except Exception as e:
+        logger.error(f"Failed to log finance query: {e}")
+
+
+def _safe_float(value, allow_negative=False):
+    """
+    안전하게 float로 변환합니다.
+    allow_negative=False인 경우 음수 값은 None을 반환합니다.
+    """
+    try:
+        result = float(value)
+        if not allow_negative and result < 0:
+            return None
+        return result
     except (TypeError, ValueError):
         return None
+
+
+def _normalize_korean_stock_code(ticker):
+    if not ticker:
+        return None
+    symbol = ticker.strip()
+    if '.' in symbol:
+        symbol = symbol.split('.')[0]
+    symbol = symbol.replace('-', '').strip()
+    digits = ''.join(ch for ch in symbol if ch.isdigit())
+    return digits or symbol
+
+
+def _fetch_pykrx_history(ticker, start_year, end_year):
+    if not ticker:
+        return []
+    if pykrx_stock is None:
+        raise RuntimeError('pykrx 패키지가 설치되어 있지 않습니다.')
+
+    stock_code = _normalize_korean_stock_code(ticker)
+    if not stock_code:
+        raise ValueError('유효한 한국 종목 코드를 찾을 수 없습니다.')
+
+    start_dt = datetime(start_year, 1, 1)
+    end_dt = datetime(end_year, 12, 31)
+    current_dt = datetime.utcnow()
+    if end_dt > current_dt:
+        end_dt = current_dt
+
+    start_str = start_dt.strftime('%Y%m%d')
+    end_str = end_dt.strftime('%Y%m%d')
+
+    try:
+        df = pykrx_stock.get_market_ohlcv_by_date(start_str, end_str, stock_code)
+    except Exception as exc:
+        logger.warning('[%s] pykrx 데이터 가져오기 실패: %s', stock_code, exc)
+        raise
+
+    if df is None or df.empty:
+        logger.info('[%s] pykrx 데이터가 비어 있습니다.', stock_code)
+        return []
+
+    rows = []
+    for index, row in df.iterrows():
+        close_price = row.get('종가') or row.get('close') or row.get('Close')
+        price = _safe_float(close_price, allow_negative=False)
+        if price is None or price <= 0:
+            continue
+        if hasattr(index, 'to_pydatetime'):
+            dt = index.to_pydatetime()
+        else:
+            index_str = str(index)
+            try:
+                dt = datetime.strptime(index_str[:10], '%Y-%m-%d')
+            except ValueError:
+                continue
+        if dt < start_dt or dt > end_dt:
+            continue
+        rows.append((dt, price))
+
+    rows.sort(key=lambda item: item[0])
+    logger.info('[%s] pykrx에서 데이터 %d개 가져옴 (%d-%d)', stock_code, len(rows), start_year, end_year)
+    return rows
 
 
 def _detect_safe_assets(prompt, quick_requests):
@@ -1868,6 +2112,7 @@ def _fetch_yfinance_history(ticker, start_year, end_year):
     try:
         start_dt = datetime(start_year, 1, 1)
         end_dt = datetime(end_year, 12, 31)
+        current_dt = datetime.utcnow()
 
         stock = yf.Ticker(ticker)
         df = stock.history(start=start_dt, end=end_dt, interval='1mo')
@@ -1884,10 +2129,55 @@ def _fetch_yfinance_history(ticker, start_year, end_year):
             dt = index.to_pydatetime()
             rows.append((dt, float(close_price)))
 
+        # 현재 연도의 현재 월 데이터가 누락되었을 경우, 일별 데이터로 최신 가격 추가
+        if end_year == current_dt.year and rows:
+            last_row_dt = rows[-1][0]
+            # 마지막 데이터가 현재 월보다 이전이면 최신 데이터 추가
+            if last_row_dt.year < current_dt.year or last_row_dt.month < current_dt.month:
+                try:
+                    # 현재 월의 일별 데이터 가져오기
+                    current_month_start = datetime(current_dt.year, current_dt.month, 1)
+                    df_daily = stock.history(start=current_month_start, end=current_dt, interval='1d')
+                    if not df_daily.empty:
+                        # 가장 최근 데이터 추가
+                        latest_index = df_daily.index[-1]
+                        latest_close = df_daily.iloc[-1]['Close']
+                        if latest_close and latest_close > 0:
+                            latest_dt = latest_index.to_pydatetime()
+                            rows.append((latest_dt, float(latest_close)))
+                            logger.info('[%s] 최신 가격 추가: %s (%.2f)', ticker, latest_dt.strftime('%Y-%m-%d'), latest_close)
+                except Exception as e:
+                    logger.warning('[%s] 최신 가격 가져오기 실패: %s', ticker, e)
+
         logger.info('Yahoo Finance에서 %s 데이터 %d개 가져옴 (%d-%d)', ticker, len(rows), start_year, end_year)
         return rows
     except Exception as exc:
         logger.warning('Yahoo Finance fetch failed for %s: %s', ticker, exc)
+        raise
+
+
+def _fetch_korean_stock_history(ticker, start_year, end_year):
+    """
+    pykrx만 사용하여 한국 주식 데이터를 가져옵니다.
+    ticker 형식: 005930.KS -> pykrx 코드: 005930
+    """
+    try:
+        stock_code = _normalize_korean_stock_code(ticker)
+        if not stock_code:
+            raise ValueError('유효한 한국 종목 코드를 찾지 못했습니다.')
+        if pykrx_stock is None:
+            raise RuntimeError('pykrx 패키지가 설치되어 있지 않습니다.')
+
+        logger.info('[%s] pykrx에서 데이터 가져오기 시도 (code: %s)', ticker, stock_code)
+        history = _fetch_pykrx_history(stock_code, start_year, end_year)
+        if history:
+            logger.info('pykrx에서 %s 데이터 %d개 가져옴 (%d-%d)', ticker, len(history), start_year, end_year)
+            return history
+
+        raise RuntimeError(f'pykrx에서 {ticker} 데이터를 찾지 못했습니다.')
+
+    except Exception as exc:
+        logger.warning('한국 주식 데이터 fetch 실패 (%s): %s', ticker, exc)
         raise
 
 
@@ -1896,6 +2186,9 @@ def _fetch_stooq_history(symbol, start_year, end_year):
         return []
     start_dt = datetime(start_year, 1, 1)
     end_dt = datetime(end_year, 12, 31) + timedelta(days=1)
+    current_dt = datetime.utcnow()
+
+    # 월별 데이터 가져오기
     params = {'s': symbol.lower(), 'i': 'm'}
     resp = requests.get('https://stooq.com/q/d/l/', params=params, timeout=15, headers=_HTTP_DEFAULT_HEADERS)
     resp.raise_for_status()
@@ -1913,10 +2206,48 @@ def _fetch_stooq_history(symbol, start_year, end_year):
             continue
         if dt < start_dt or dt > end_dt:
             continue
-        value = _safe_float(price)
-        if value is None:
+        value = _safe_float(price, allow_negative=False)
+        if value is None or value <= 0:
             continue
         rows.append((dt, value))
+
+    # 현재 연도의 현재 월 데이터가 누락되었을 경우, 일별 데이터로 최신 가격 추가
+    if end_year == current_dt.year and rows:
+        last_row_dt = rows[-1][0]
+        # 마지막 데이터가 현재 월보다 이전이면 최신 데이터 추가
+        if last_row_dt.year < current_dt.year or last_row_dt.month < current_dt.month:
+            try:
+                # 일별 데이터 가져오기
+                params_daily = {'s': symbol.lower(), 'i': 'd'}
+                resp_daily = requests.get('https://stooq.com/q/d/l/', params=params_daily, timeout=15, headers=_HTTP_DEFAULT_HEADERS)
+                resp_daily.raise_for_status()
+                content_daily = resp_daily.text
+                reader_daily = csv.DictReader(io.StringIO(content_daily))
+                daily_rows = []
+                for row in reader_daily:
+                    date_str = row.get('Date') or row.get('date')
+                    price = row.get('Close') or row.get('close')
+                    if not date_str or price in (None, '', 'null'):
+                        continue
+                    try:
+                        dt = datetime.strptime(date_str, '%Y-%m-%d')
+                    except ValueError:
+                        continue
+                    # 현재 월의 데이터만
+                    if dt.year == current_dt.year and dt.month == current_dt.month:
+                        value = _safe_float(price, allow_negative=False)
+                        if value is not None and value > 0:
+                            daily_rows.append((dt, value))
+
+                # 가장 최근 데이터 추가
+                if daily_rows:
+                    daily_rows.sort(key=lambda x: x[0])
+                    latest_dt, latest_price = daily_rows[-1]
+                    rows.append((latest_dt, latest_price))
+                    logger.info('[%s] 최신 가격 추가 (Stooq): %s (%.2f)', symbol, latest_dt.strftime('%Y-%m-%d'), latest_price)
+            except Exception as e:
+                logger.warning('[%s] Stooq 최신 가격 가져오기 실패: %s', symbol, e)
+
     logger.info('Stooq에서 %s 데이터 %d개 가져옴 (%d-%d)', symbol, len(rows), start_year, end_year)
     return rows
 
@@ -1948,24 +2279,480 @@ def _guess_stooq_symbol(ticker: str):
     return symbol
 
 
+def _normalize_asset_label_text(label):
+    if not label:
+        return ''
+    normalized = re.sub(r'\([^)]*\)', '', str(label))
+    return normalized.strip().lower()
+
+
+_BITCOIN_KEYWORDS = {
+    'bitcoin', 'btc', 'btc usd', 'btc-usd', 'btc_usd', 'btc-krw', 'btc krw', 'btcusd', 'btcusdt'
+}
+
+
+def _is_bitcoin_config(cfg):
+    asset_id = _normalize_asset_label_text(cfg.get('id'))
+    label = _normalize_asset_label_text(cfg.get('label'))
+    ticker = _normalize_asset_label_text(cfg.get('ticker'))
+    if asset_id in _BITCOIN_KEYWORDS:
+        return True
+    if label in _BITCOIN_KEYWORDS:
+        return True
+    if ticker.replace('.', '') in _BITCOIN_KEYWORDS:
+        return True
+    return False
+
+
+
+def _parse_upbit_datetime(value):
+    if not value:
+        return None
+    cleaned = value.replace('Z', '')
+    for fmt in ('%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S'):
+        try:
+            return datetime.strptime(cleaned, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _fetch_upbit_monthly_history(start_year, end_year):
+    url = 'https://api.upbit.com/v1/candles/months'
+    cursor = datetime(end_year, 12, 31, 15, 0)
+    rows = []
+    while True:
+        params = {'market': 'KRW-BTC', 'count': 200}
+        if cursor:
+            params['to'] = cursor.strftime('%Y-%m-%d %H:%M:%S')
+        resp = requests.get(url, params=params, timeout=15, headers=_HTTP_DEFAULT_HEADERS)
+        resp.raise_for_status()
+        data = resp.json() or []
+        if not data:
+            break
+        for candle in data:
+            dt = _parse_upbit_datetime(candle.get('candle_date_time_utc') or candle.get('candle_date_time_kst'))
+            value = _safe_float(candle.get('trade_price'), allow_negative=False)
+            if not dt or value is None or value <= 0:
+                continue
+            rows.append((dt, value))
+        last_dt = _parse_upbit_datetime(data[-1].get('candle_date_time_utc') or data[-1].get('candle_date_time_kst'))
+        if not last_dt or last_dt.year <= start_year:
+            break
+        cursor = last_dt - timedelta(days=1)
+        if cursor.year < start_year:
+            break
+    rows.sort(key=lambda item: item[0])
+    logger.info('Upbit에서 BTC KRW 데이터 %d개 가져옴 (%d-%d)', len(rows), start_year, end_year)
+    return rows
+
+
+def _collect_asset_aliases(cfg, requested_id):
+    aliases = set()
+    for candidate in [cfg.get('id'), requested_id, cfg.get('ticker'), cfg.get('stooq_symbol')]:
+        if candidate:
+            aliases.add(str(candidate))
+    label = cfg.get('label')
+    if label:
+        aliases.add(str(label))
+        normalized_label = _normalize_asset_label_text(label)
+        if normalized_label:
+            aliases.add(normalized_label)
+    for alias in cfg.get('aliases', []):
+        aliases.add(alias)
+    normalized = set()
+    for alias in aliases:
+        normalized.add(alias)
+        normalized.add(alias.lower())
+    return sorted(a for a in normalized if a)
+
+
+def _build_bitcoin_price_payload(start_year, end_year):
+    # Use standard fetcher for USD history (Yahoo -> Stooq)
+    usd_source = 'Yahoo Finance'  # default
+    try:
+        usd_history, usd_source = _fetch_asset_history(SAFE_ASSETS['bitcoin'], start_year, end_year)
+    except Exception:
+        usd_history = []
+
+    usd_prices = _build_yearly_closing_points(usd_history, start_year, end_year)
+    krw_history = _fetch_upbit_monthly_history(start_year, end_year)
+    krw_prices = _build_yearly_closing_points(krw_history, start_year, end_year)
+    payload = {
+        'unit': 'USD',
+        'source': usd_source,
+        'prices': usd_prices,
+    }
+    if krw_prices:
+        payload['alt_prices'] = {'krw': krw_prices}
+        payload['alt_sources'] = {'krw': 'Upbit'}
+    return payload
+
+
+def _clone_asset_config(cfg, fallback_id=None):
+    if not cfg:
+        return None
+    cloned = dict(cfg)
+    if fallback_id and not cloned.get('id'):
+        cloned['id'] = fallback_id
+    return cloned
+
+
+def _find_known_asset_config(asset_id=None, label=None):
+    asset_id = (asset_id or '').strip()
+    normalized_id = asset_id.lower()
+    normalized_label = _normalize_asset_label_text(label)
+    normalized_asset_text = _normalize_asset_label_text(asset_id)
+
+    if normalized_id and normalized_id in SAFE_ASSETS:
+        return _clone_asset_config(SAFE_ASSETS[normalized_id], normalized_id)
+
+    alias_candidates = [normalized_id, normalized_asset_text, normalized_label]
+    for candidate in alias_candidates:
+        if not candidate:
+            continue
+        alias_key = SAFE_ASSET_ALIASES.get(candidate)
+        if alias_key and alias_key in SAFE_ASSETS:
+            return _clone_asset_config(SAFE_ASSETS[alias_key], alias_key)
+
+    for key, cfg in SAFE_ASSETS.items():
+        ticker = (cfg.get('ticker') or '').strip().lower()
+        stooq_symbol = (cfg.get('stooq_symbol') or '').strip().lower()
+        label_norm = _normalize_asset_label_text(cfg.get('label'))
+        if normalized_id and normalized_id in {ticker, stooq_symbol}:
+            return _clone_asset_config(cfg, key)
+        if normalized_label and label_norm == normalized_label:
+            return _clone_asset_config(cfg, key)
+
+    for configs in PRESET_STOCK_GROUPS.values():
+        for cfg in configs:
+            cfg_id = (cfg.get('id') or cfg.get('ticker') or '').strip()
+            cfg_id_normalized = cfg_id.lower()
+            ticker = (cfg.get('ticker') or '').strip().lower()
+            stooq_symbol = (cfg.get('stooq_symbol') or '').strip().lower()
+            label_norm = _normalize_asset_label_text(cfg.get('label'))
+            if normalized_id and normalized_id in {cfg_id_normalized, ticker, stooq_symbol}:
+                return _clone_asset_config(cfg, cfg_id or normalized_id)
+            if normalized_label and label_norm == normalized_label:
+                return _clone_asset_config(cfg, cfg_id or label_norm)
+
+    # Fallback: Check if the asset_id or label looks like a Korean stock ticker (e.g. 005930.KS)
+    candidates = [asset_id, label]
+    for cand in candidates:
+        if not cand:
+            continue
+        # Normalize candidate
+        cand_upper = cand.strip().upper()
+        # Check for 6-digit code with optional suffix .KS, .KQ, .KL
+        # Regex: Starts with 6 digits, optionally followed by .KS/KQ/KL/KR
+        if re.match(r'^\d{6}(\.(KS|KQ|KL|KR))?$', cand_upper):
+            # If it's just digits, assume .KS for safety or pass as-is (pykrx usually handles just digits)
+            # But providing a suffix helps is_korean_stock detection downstream.
+            final_ticker = cand_upper
+            if re.match(r'^\d{6}$', cand_upper):
+                final_ticker = f"{cand_upper}.KS"
+            
+            return {
+                'id': final_ticker,
+                'ticker': final_ticker,
+                'label': label or final_ticker,
+                'category': '국내 주식',
+                'unit': 'KRW',
+                'stooq_symbol': f"{final_ticker[:6]}.KR" # Fallback for stooq if needed, though pykrx is preferred
+            }
+
+    return None
+
+
+def _build_yearly_closing_points(history, start_year, end_year):
+    if not history:
+        return []
+    yearly = {}
+    for dt, price in history:
+        if not dt or price in (None, 0):
+            continue
+        year = getattr(dt, 'year', None)
+        if not isinstance(year, int):
+            continue
+        if year < start_year or year > end_year:
+            continue
+        prev = yearly.get(year)
+        if not prev or dt > prev[0]:
+            yearly[year] = (dt, price)
+    ordered = []
+    for year in sorted(yearly.keys()):
+        value = _safe_float(yearly[year][1], allow_negative=False)
+        if value is None or value <= 0:
+            continue
+        ordered.append({'year': year, 'value': round(value, 6)})
+    return ordered
+
+
+def _fetch_yearly_closing_prices(cfg, start_year, end_year):
+    if _is_bitcoin_config(cfg):
+        return _build_bitcoin_price_payload(start_year, end_year)
+
+    ticker = (cfg.get('ticker') or '').strip()
+    stooq_symbol = (cfg.get('stooq_symbol') or '').strip()
+    category = cfg.get('category', '')
+    unit = (cfg.get('unit') or '').upper()
+
+    is_korean_stock = (
+        category == '국내 주식' or
+        unit == 'KRW' or
+        (ticker and ticker.upper().endswith(('.KS', '.KQ', '.KL')))
+    )
+
+    if is_korean_stock:
+        if not ticker:
+            raise ValueError('국내 주식은 종목 코드가 필요합니다.')
+        history = _fetch_korean_stock_history(ticker, start_year, end_year)
+        source = 'pykrx'
+    else:
+        symbol = stooq_symbol or _guess_stooq_symbol(ticker)
+        if not symbol:
+            raise ValueError('Stooq 심볼을 찾을 수 없습니다.')
+        history = _fetch_stooq_history(symbol, start_year, end_year)
+        source = 'stooq'
+
+    prices = _build_yearly_closing_points(history, start_year, end_year)
+    return {
+        'unit': cfg.get('unit') or '',
+        'source': source,
+        'prices': prices,
+    }
+
+
+def _fetch_m2_money_supply_history(ticker, start_year, end_year):
+    """
+    M2 통화량 데이터를 가져옵니다.
+
+    - US: FRED API (M2SL)
+    - Korea: ECOS API (한국은행 광의통화 M2, 통계코드: 101Y002)
+    """
+    from datetime import datetime
+    import requests
+
+    # Determine data source based on ticker
+    if 'US' in ticker.upper():
+        return _fetch_us_m2_from_fred(start_year, end_year)
+    elif 'KR' in ticker.upper():
+        return _fetch_korea_m2_from_ecos(start_year, end_year)
+    else:
+        logger.warning(f"Unknown M2 ticker: {ticker}")
+        return []
+
+
+def _fetch_us_m2_from_fred(start_year, end_year):
+    """FRED API를 통해 미국 M2 데이터를 가져옵니다."""
+    from datetime import datetime
+    import requests
+
+    label = "US M2"
+    series_id = 'M2SL'
+
+    try:
+        start_date = f"{start_year}-01-01"
+        end_date = f"{end_year}-12-31"
+
+        url = f"https://api.stlouisfed.org/fred/series/observations"
+        params = {
+            'series_id': series_id,
+            'api_key': getattr(settings, 'FRED_API_KEY', 'demo'),
+            'file_type': 'json',
+            'observation_start': start_date,
+            'observation_end': end_date,
+            'frequency': 'a',  # Annual frequency
+            'aggregation_method': 'eop',  # End of period
+        }
+
+        logger.info(f"[{label}] FRED API에서 데이터 가져오기 시도: {series_id}")
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+
+        data = response.json()
+        observations = data.get('observations', [])
+
+        if not observations:
+            logger.warning(f"[{label}] FRED API에서 데이터를 찾지 못함")
+            return []
+
+        history = []
+        for obs in observations:
+            date_str = obs.get('date')
+            value_str = obs.get('value')
+
+            if not value_str or value_str == '.':
+                continue
+
+            try:
+                date = datetime.strptime(date_str, '%Y-%m-%d')
+                value = float(value_str)
+                history.append((date, value))
+            except (ValueError, TypeError) as e:
+                logger.warning(f"[{label}] 데이터 파싱 오류: {e}")
+                continue
+
+        logger.info(f"[{label}] FRED API에서 데이터 {len(history)}개 가져옴 ({start_year}-{end_year})")
+        return history
+
+    except Exception as exc:
+        logger.error(f"[{label}] FRED API 요청 실패: {exc}")
+        raise RuntimeError(f"FRED API에서 {label} 데이터를 가져오는데 실패했습니다.")
+
+
+def _fetch_korea_m2_from_ecos(start_year, end_year):
+    """ECOS API를 통해 한국 M2 데이터를 가져옵니다."""
+    from datetime import datetime
+    import requests
+
+    label = "Korean M2"
+    api_key = getattr(settings, 'ECOS_API_KEY', '')
+
+    if not api_key:
+        logger.error(f"[{label}] ECOS_API_KEY가 설정되지 않음")
+        raise RuntimeError("ECOS_API_KEY가 설정되지 않았습니다. .env 파일을 확인하세요.")
+
+    try:
+        # ECOS API 통계표: 101Y001 (M2 말잔, 계절조정계열)
+        # 데이터가 많아서 페이징 필요 - 연도별로 나눠서 요청
+        all_rows = []
+
+        # 연도별로 요청하여 페이징 문제 회피
+        for year in range(start_year, end_year + 1):
+            year_start = f"{year}01"
+            year_end = f"{year}12"
+
+            url = (
+                f"https://ecos.bok.or.kr/api/StatisticSearch/"
+                f"{api_key}/json/kr/1/100/101Y001/M/{year_start}/{year_end}"
+            )
+
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+
+            if 'StatisticSearch' in data:
+                rows = data['StatisticSearch'].get('row', [])
+                all_rows.extend(rows)
+
+        if not all_rows:
+            logger.warning(f"[{label}] ECOS API에서 데이터를 찾지 못함")
+            return []
+
+        # M2 총액 데이터만 필터링 (ITEM_NAME1이 "M2(말잔, 계절조정계열)"인 것)
+        # 각 연도의 마지막 사용 가능한 월 데이터 추출
+        m2_data_by_year = {}
+        for row in all_rows:
+            time_str = row.get('TIME')  # YYYYMM 형식
+            value_str = row.get('DATA_VALUE')
+            item_name = row.get('ITEM_NAME1', '')
+
+            if not time_str or not value_str:
+                continue
+
+            # M2 총액만 선택 (다른 항목 제외)
+            if not item_name.startswith('M2('):
+                continue
+
+            try:
+                year = int(time_str[:4])
+                month = int(time_str[4:6])
+                value = float(value_str)
+
+                # 각 연도의 최신 월 데이터 저장
+                if year not in m2_data_by_year or month > m2_data_by_year[year]['month']:
+                    m2_data_by_year[year] = {
+                        'month': month,
+                        'value': value
+                    }
+            except (ValueError, TypeError) as e:
+                logger.warning(f"[{label}] 데이터 파싱 오류: {e}")
+                continue
+
+        # 연도별 데이터를 히스토리로 변환
+        history = []
+        for year in sorted(m2_data_by_year.keys()):
+            data = m2_data_by_year[year]
+            month = data['month']
+            value = data['value']
+            # 해당 월의 마지막 날로 설정
+            import calendar
+            last_day = calendar.monthrange(year, month)[1]
+            date = datetime(year, month, last_day)
+            history.append((date, value))
+
+        logger.info(f"[{label}] ECOS API에서 데이터 {len(history)}개 가져옴 ({start_year}-{end_year})")
+        return history
+
+    except Exception as exc:
+        logger.error(f"[{label}] ECOS API 요청 실패: {exc}")
+        raise RuntimeError(f"ECOS API에서 {label} 데이터를 가져오는데 실패했습니다.")
+
+
 def _fetch_asset_history(cfg, start_year, end_year):
     """
     여러 데이터 소스를 순서대로 시도하여 자산 가격 이력을 가져옵니다.
-    우선순위: Yahoo Finance > Stooq
+
+    Returns:
+        tuple: (history, source) where source is the name of the data provider
+
+    한국 주식(.KS, .KQ):
+      - pykrx에서만 데이터를 가져옴
+
+    경제 지표 (M2 등):
+      - ECOS (한국) 또는 FRED (미국)
+
+    기타 자산:
+      - 우선순위: Yahoo Finance > Stooq
     """
     errors = []
     label = cfg.get('label', 'Unknown')
     ticker = cfg.get('ticker')
     stooq_symbol = cfg.get('stooq_symbol') or _guess_stooq_symbol(ticker)
+    category = cfg.get('category', '')
+
+    # M2 통화량 지표 여부 확인
+    is_m2_indicator = ticker and ('M2-' in ticker.upper() or ticker.upper().startswith('M2'))
+    if is_m2_indicator:
+        try:
+            history = _fetch_m2_money_supply_history(ticker, start_year, end_year)
+            if history:
+                # Determine source based on ticker
+                source = 'ECOS' if 'KR' in ticker.upper() else 'FRED'
+                return history, source
+            errors.append('M2 데이터: 데이터 없음')
+        except Exception as exc:
+            errors.append(f'M2 데이터: {exc}')
+            logger.error('[%s] M2 데이터 가져오기 실패: %s', label, exc)
+
+    # 한국 주식 여부 확인
+    is_korean_stock = (
+        category == '국내 주식' or
+        (ticker and (ticker.endswith('.KS') or ticker.endswith('.KQ') or ticker.endswith('.KL')))
+    )
+
+    # 한국 주식은 pykrx만 사용
+    if is_korean_stock and ticker:
+        try:
+            history = _fetch_korean_stock_history(ticker, start_year, end_year)
+            if history:
+                return history, 'pykrx'
+            errors.append('pykrx: 데이터 없음')
+        except Exception as exc:
+            errors.append(f'pykrx: {exc}')
+        error_msg = '; '.join(errors) if errors else 'pykrx 데이터를 가져올 수 없습니다.'
+        logger.error('[%s] 한국 주식 데이터 가져오기 실패: %s', label, error_msg)
+        raise RuntimeError(error_msg)
 
     # 1. Yahoo Finance 시도
-    if ticker:
+    if ticker and not is_korean_stock:
         try:
             logger.info('[%s] Yahoo Finance에서 데이터 가져오기 시도: %s', label, ticker)
             history = _fetch_yfinance_history(ticker, start_year, end_year)
             if history:
                 logger.info('[%s] Yahoo Finance에서 데이터 가져오기 성공: %d개', label, len(history))
-                return history
+                return history, 'Yahoo Finance'
             else:
                 errors.append('Yahoo Finance: 데이터 없음')
                 logger.warning('[%s] Yahoo Finance에서 데이터를 찾지 못함', label)
@@ -1973,14 +2760,14 @@ def _fetch_asset_history(cfg, start_year, end_year):
             errors.append(f'Yahoo Finance: {exc}')
             logger.warning('[%s] Yahoo Finance 실패: %s', label, exc)
 
-    # 2. Stooq 시도
+    # 2. Stooq 시도 (한국 주식 제외)
     if stooq_symbol:
         try:
             logger.info('[%s] Stooq에서 데이터 가져오기 시도: %s', label, stooq_symbol)
             history = _fetch_stooq_history(stooq_symbol, start_year, end_year)
             if history:
                 logger.info('[%s] Stooq에서 데이터 가져오기 성공: %d개', label, len(history))
-                return history
+                return history, 'Stooq'
             else:
                 errors.append('Stooq: 데이터 없음')
                 logger.warning('[%s] Stooq에서 데이터를 찾지 못함', label)
@@ -1994,7 +2781,13 @@ def _fetch_asset_history(cfg, start_year, end_year):
     raise RuntimeError(error_msg)
 
 
-def _build_asset_series(asset_key, cfg, history, start_year, end_year):
+def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculation_method='cagr'):
+    """
+    Build asset series for charting.
+
+    Args:
+        calculation_method: 'cagr' (연평균 수익률) or 'cumulative' (누적 상승률)
+    """
     if not history:
         return None
     yearly_prices = {}
@@ -2009,40 +2802,132 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year):
         return None
     ordered_years = sorted(yearly_prices.keys())
     base_year = ordered_years[0]
-    base_value = yearly_prices[base_year][1]
+    is_yield_asset = bool(cfg.get('yield_asset'))
+    adjusted_series = []
+    pseudo_price = 1.0
+
+    # KRW 주식의 경우 스케일 팩터 적용 여부 결정
+    unit = (cfg.get('unit') or '').upper()
+    category = cfg.get('category', '')
+    ticker = cfg.get('ticker', '')
+    is_krw_asset = unit == 'KRW' or category == '국내 주식'
+    scale_factor = 1.0
+
+    # 데이터 소스 판별을 위한 플래그
+    # Stooq는 원화 그대로 제공
+    # Yahoo Finance는 100원 단위로 제공
+    if is_krw_asset and history:
+        is_korean_stock = (
+            ticker.endswith('.KS') or
+            ticker.endswith('.KQ') or
+            ticker.endswith('.KL') or
+            category == '국내 주식'
+        )
+
+        if is_korean_stock:
+            sample_prices = [v for _, v in history if v and v > 0]
+            if sample_prices:
+                recent_prices = sample_prices[-min(3, len(sample_prices)):]
+                avg_price = sum(recent_prices) / len(recent_prices)
+
+                # 가격 범위로 데이터 소스 판별
+                # Stooq: 10,000원 이상 (원화 그대로)
+                # Yahoo Finance: 1,000원 미만 (100원 단위)
+                if avg_price < 10000:
+                    # Yahoo Finance 데이터로 추정 - 100배 스케일 필요
+                    scale_factor = 100.0
+                    logger.info('[%s] 한국 주식 스케일 팩터 100x 적용 (Yahoo Finance: %.2f → %.2f원)',
+                               cfg.get('label', 'Unknown'), avg_price, avg_price * scale_factor)
+                else:
+                    # Stooq 데이터로 추정 - 스케일 불필요
+                    scale_factor = 1.0
+                    logger.info('[%s] 한국 주식 스케일 팩터 적용 안함 (Stooq: %.2f원)',
+                               cfg.get('label', 'Unknown'), avg_price)
+
+    for index, year in enumerate(ordered_years):
+        price = yearly_prices[year][1]
+        if price is None:
+            continue
+
+        if is_yield_asset:
+            rate_pct = _safe_float(price, allow_negative=True)  # 수익률은 음수 가능
+            if rate_pct is None:
+                continue
+            if index == 0:
+                pseudo_price = 1.0
+            else:
+                rate_decimal = max(rate_pct / 100.0, 0.0)
+                pseudo_price *= (1 + rate_decimal)
+            adjusted_value = pseudo_price
+            adjusted_series.append((year, adjusted_value))
+        else:
+            price_val = _safe_float(price, allow_negative=False)  # 가격은 음수 불가
+            if price_val is None or price_val <= 0:
+                logger.warning('[%s] 유효하지 않은 가격 데이터 발견 (연도: %d, 가격: %s)',
+                             cfg.get('label', 'Unknown'), year, price)
+                continue
+            # 스케일 팩터 적용
+            adjusted_value = price_val * scale_factor
+            if adjusted_value <= 0:
+                logger.warning('[%s] 스케일 팩터 적용 후 유효하지 않은 가격 (연도: %d, 가격: %.2f)',
+                               cfg.get('label', 'Unknown'), year, adjusted_value)
+                continue
+
+            adjusted_series.append((year, adjusted_value))
+
+    if len(adjusted_series) < 2:
+        return None
+
+    base_value = adjusted_series[0][1]
     if not base_value or base_value <= 0:
         return None
 
     points = []
-    for year in ordered_years:
-        price = yearly_prices[year][1]
-        if price is None or price <= 0:
-            continue
-        multiple = price / base_value
-        if year == base_year:
-            annualized_pct = 0.0
+    for idx, (year, adjusted_value) in enumerate(adjusted_series):
+        multiple = adjusted_value / base_value
+
+        if calculation_method == 'cumulative':
+            # 누적 상승률: (현재값 / 시작값 - 1) * 100
+            return_pct = (multiple - 1) * 100
         else:
-            years_elapsed = year - base_year
-            if years_elapsed <= 0:
-                annualized_pct = 0.0
+            # CAGR: 연평균 수익률
+            if year == base_year:
+                return_pct = 0.0
             else:
-                annualized_pct = ((price / base_value) ** (1 / years_elapsed) - 1) * 100
+                years_elapsed = year - base_year
+                if years_elapsed <= 0:
+                    return_pct = 0.0
+                else:
+                    try:
+                        return_pct = ((adjusted_value / base_value) ** (1 / years_elapsed) - 1) * 100
+                    except Exception:
+                        return_pct = 0.0
+
         points.append({
             'year': year,
-            'value': round(annualized_pct, 3),
-            'multiple': round(multiple, 6),
-            'raw_value': round(price, 6)
+            'value': round(return_pct, 3),
+            'multiple': round(multiple, 6)
         })
+
     if len(points) < 2:
         return None
 
     start_val = points[0]['multiple'] or 1.0
     end_val = points[-1]['multiple'] or start_val
     years_total = points[-1]['year'] - points[0]['year']
-    if years_total > 0 and start_val > 0:
-        agg = (end_val / start_val) ** (1 / years_total) - 1
+
+    # Calculate final return metric
+    if calculation_method == 'cumulative':
+        # 누적 상승률
+        final_return_pct = (end_val / start_val - 1) * 100 if start_val else 0.0
+        return_label = 'cumulative_return_pct'
     else:
-        agg = 0.0
+        # CAGR
+        if years_total > 0 and start_val > 0:
+            final_return_pct = ((end_val / start_val) ** (1 / years_total) - 1) * 100
+        else:
+            final_return_pct = 0.0
+        return_label = 'annualized_return_pct'
 
     return {
         'id': cfg.get('id') or asset_key,
@@ -2050,8 +2935,10 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year):
         'category': cfg.get('category', '안전자산'),
         'unit': cfg.get('unit', ''),
         'points': points,
-        'annualized_return_pct': round(agg * 100, 2),
+        'annualized_return_pct': round(final_return_pct, 2),  # 호환성을 위해 유지
+        'cumulative_return_pct': round((end_val / start_val - 1) * 100, 2) if start_val else 0.0,
         'multiple_from_start': round(end_val / start_val, 3) if start_val else 0.0,
+        'calculation_method': calculation_method,
     }
 
 
@@ -2107,50 +2994,80 @@ def _extract_start_year_from_prompt(prompt):
     return min(years) if years else None
 
 
-def _derive_finance_year_window(year_hint):
+def _extract_year_span_from_prompt(prompt):
+    if not prompt:
+        return None
+    lowered = prompt.lower()
+    match = re.search(r'지난\s*(\d{1,3})\s*년', lowered)
+    if not match:
+        match = re.search(r'(\d{1,3})\s*년\s*(?:간|동안)', lowered)
+    if match:
+        try:
+            span = int(match.group(1))
+        except ValueError:
+            span = None
+        if span and 2 <= span <= 50:
+            return span
+    return None
+
+
+def _derive_finance_year_window(year_hint, span_hint=None):
     current_year = datetime.utcnow().year
     min_year = 2010
-    base_year = year_hint or FINANCE_DEFAULT_START_YEAR
-    start_year = max(min_year, base_year)
-    if start_year > current_year:
-        start_year = max(min_year, current_year - FINANCE_YEAR_SPAN + 1)
-    end_year = min(start_year + FINANCE_YEAR_SPAN - 1, current_year)
-    if end_year - start_year < 1:
-        start_year = max(min_year, end_year - FINANCE_YEAR_SPAN + 1)
+    if span_hint and span_hint >= 2:
+        end_year = current_year
+        start_year = max(min_year, end_year - span_hint + 1)
+    else:
+        base_year = year_hint or FINANCE_DEFAULT_START_YEAR
+        start_year = max(min_year, base_year)
+        if start_year > current_year:
+            start_year = max(min_year, current_year - FINANCE_YEAR_SPAN + 1)
+        end_year = min(start_year + FINANCE_YEAR_SPAN - 1, current_year)
+        if end_year - start_year < 1:
+            start_year = max(min_year, end_year - FINANCE_YEAR_SPAN + 1)
     return start_year, end_year
+        
 
 
-def _build_finance_messages(user_prompt, start_year, end_year, quick_requests):
-    preferred_assets = ', '.join(quick_requests) if quick_requests else ''
-    quick_text = f"\n선호 비교 대상: {preferred_assets}" if preferred_assets else ''
-    user_content = (
-        f"사용자 요청: {user_prompt or '비트코인과 다른 자산의 연평균 수익률을 비교'}\n"
-        f"데이터 구간: {start_year}년부터 {end_year}년까지 연 단위 연평균(연율환산) 수익률.\n"
-        "항상 비트코인은 포함하고, 각 연도 말 기준의 누적 배수(시작 연도=1.0)와 연평균 수익률을 함께 제공하세요."
-        f"{quick_text}\n"
-        f"최대 {FINANCE_MAX_SERIES}개의 자산만 포함하고 의미 없는 자산은 제외하세요.\n"
-        "multiple 값이 없으면 시작 연도 대비 배수를 계산해서 채우세요."
-    )
-    system_prompt = (
-        "너는 한국어로 설명하는 재무 데이터 분석가이다. "
-        "반드시 순수한 JSON만 반환하며 최상위 키는 series(필수), summary(필수), notes(선택)이다. "
-        "series는 최대 10개의 객체 배열이고 각 객체는 {id, label, category, unit, benchmark, points}를 가진다. "
-        "points는 연도별 데이터 배열이며 각 항목은 {\"year\": 2016, \"value\": 12.3, \"multiple\": 1.0, \"note\": \"\"} 형식을 따른다. "
-        "value 필드는 해당 연도까지의 연평균 수익률(%)이고 multiple은 시작 연도 대비 누적 배수이다. "
-        "JSON 외의 텍스트를 추가하지 말고, summary/notes는 간결한 한국어 문장으로 작성한다."
-    )
-    return [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_content}
-    ]
+def _get_agent_prompt(agent_type, default_prompt=''):
+    """
+    Get agent prompt from database or return default
+    """
+    from .models import AgentPrompt
+    try:
+        agent = AgentPrompt.objects.get(agent_type=agent_type, is_active=True)
+        return agent.system_prompt
+    except AgentPrompt.DoesNotExist:
+        return default_prompt
 
 
-def _call_openai_finance(messages):
+def _check_prompt_intent(prompt):
+    """
+    LLM을 사용하여 프롬프트의 의도를 분류하고 허용 여부를 판단
+    """
     api_key = getattr(settings, 'OPENAI_API_KEY', '')
     if not api_key:
         raise ValueError('OpenAI API 키가 설정되지 않았습니다.')
     base_url = getattr(settings, 'OPENAI_API_BASE', 'https://api.openai.com/v1').rstrip('/')
     model = getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini')
+
+    # Get guardrail prompt from DB
+    guardrail_system_prompt = _get_agent_prompt('guardrail',
+        "당신은 사용자 요청의 의도를 분류하는 전문가입니다.\n\n"
+        "주어진 사용자 요청이 다음 중 어디에 해당하는지 판단하세요:\n\n"
+        "1. **금융 분석 요청**: 자산(예: 비트코인, 삼성전자, S&P 500 등)의 수익률, 가격 변동, 비교 분석 등을 원하는 경우.\n"
+        "   - 이런 경우 'allowed': true를 반환하세요.\n\n"
+        "2. **부적절한 요청**: 금융 분석과 무관하거나, 개인정보를 요구하거나, 시스템 악용을 시도하는 경우.\n"
+        "   - 이런 경우 'allowed': false를 반환하고, 'reason'에 거부 사유를 간단히 설명하세요.\n\n"
+        "응답 형식 (JSON만 반환):\n"
+        "{\n"
+        '  "allowed": true 또는 false,\n'
+        '  "reason": "거부 사유 (allowed가 false일 때만)"\n'
+        "}\n\n"
+    )
+
+    guardrail_prompt = f'사용자 요청: "{prompt}"'
+
     try:
         response = requests.post(
             f"{base_url}/chat/completions",
@@ -2160,142 +3077,655 @@ def _call_openai_finance(messages):
             },
             json={
                 'model': model,
-                'messages': messages,
-                'temperature': 0.2,
-                'top_p': 0.9,
+                'messages': [
+                    {"role": "system", "content": guardrail_system_prompt},
+                    {"role": "user", "content": guardrail_prompt}
+                ],
+                'temperature': 0.1,
                 'response_format': {
                     'type': 'json_object'
                 },
             },
-            timeout=120,
+            timeout=30,
         )
         response.raise_for_status()
         payload = response.json()
         choices = payload.get('choices') or []
         if not choices or 'message' not in choices[0]:
-            raise ValueError('OpenAI 응답에 message가 없습니다.')
+            logger.warning('Guardrail check failed, allowing request by default')
+            return True, '의도 분류 실패'
+
         content = choices[0]['message'].get('content')
         if not content:
-            raise ValueError('OpenAI 응답 본문이 비어 있습니다.')
-        return json.loads(content)
-    except json.JSONDecodeError as exc:
-        logger.error('Failed to parse OpenAI response: %s', exc)
-        raise
-    except requests.HTTPError as exc:
-        detail = ''
-        if exc.response is not None:
+            return True, '의도 분류 실패'
+
+        result = json.loads(content)
+        allowed = result.get('allowed', True)
+        reason = result.get('reason', '')
+
+        return allowed, reason
+
+    except Exception as exc:
+        logger.warning(f'Guardrail check error: {exc}, allowing request by default')
+        return True, '의도 분류 오류'
+
+
+
+
+
+
+
+
+def _generate_cache_key(context_key, start_year, end_year):
+    """Generate cache key for a query"""
+    import hashlib
+    key_str = f"{context_key}:{start_year}:{end_year}"
+    return hashlib.md5(key_str.encode()).hexdigest()
+
+
+def _get_cached_finance_data(context_key, start_year, end_year):
+    """Get cached finance data if available and not expired"""
+    from datetime import datetime, timezone
+    from .models import FinanceQueryCache
+
+    if not context_key:
+        return None
+
+    cache_key = _generate_cache_key(context_key, start_year, end_year)
+
+    try:
+        cache_entry = FinanceQueryCache.objects.get(
+            query_key=cache_key,
+            expires_at__gt=datetime.now(timezone.utc)
+        )
+        cache_entry.increment_hit()
+        logger.info(f"Cache hit for {context_key} ({start_year}-{end_year}), hit_count={cache_entry.hit_count}")
+        return cache_entry.as_dict()
+    except FinanceQueryCache.DoesNotExist:
+        return None
+
+
+def _save_to_cache(context_key, start_year, end_year, series_data, fx_rate):
+    """Save finance data to cache"""
+    from datetime import datetime, timedelta, timezone
+    from .models import FinanceQueryCache
+
+    if not context_key:
+        return
+
+    cache_key = _generate_cache_key(context_key, start_year, end_year)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)  # 24시간 캐시
+
+    try:
+        FinanceQueryCache.objects.update_or_create(
+            query_key=cache_key,
+            defaults={
+                'context_key': context_key,
+                'start_year': start_year,
+                'end_year': end_year,
+                'series_data': series_data,
+                'fx_rate': fx_rate,
+                'expires_at': expires_at,
+            }
+        )
+        logger.info(f"Saved to cache: {context_key} ({start_year}-{end_year})")
+    except Exception as exc:
+        logger.error(f"Failed to save cache: {exc}")
+
+
+def _purge_finance_cache(context_key):
+    """Delete cached finance data for a specific context key."""
+    if not context_key:
+        return
+    from .models import FinanceQueryCache
+    try:
+        deleted, _ = FinanceQueryCache.objects.filter(context_key=context_key).delete()
+        if deleted:
+            logger.info(f"Purged {deleted} cache entries for context {context_key}")
+    except Exception as exc:
+        logger.error(f"Failed to purge cache for {context_key}: {exc}")
+
+
+def _ensure_finance_cache_purged(context_key):
+    if not context_key:
+        return
+    version = FINANCE_CACHE_PURGE_VERSIONS.get(context_key)
+    if not version:
+        return
+    if _purged_finance_contexts.get(context_key) == version:
+        return
+    _purge_finance_cache(context_key)
+    _purged_finance_contexts[context_key] = version
+
+
+# --- Agent Classes ---
+
+class IntentClassifierAgent:
+    """
+    Responsible for understanding the user's request, checking guardrails,
+    and extracting a list of assets to analyze.
+    """
+    def run(self, prompt, quick_requests):
+        logs = []
+        logs.append("[의도 분석] 사용자 요청 분석 중...")
+
+        # Combine prompt and quick requests
+        combined_prompt = f"{prompt} {' '.join(quick_requests)}" if quick_requests else prompt
+        if not combined_prompt.strip():
+            combined_prompt = "비트코인과 대표 자산의 과거 연평균 수익률을 비교해줘."
+
+        # 1. Guardrail Check
+        try:
+            allowed, reason = _check_prompt_intent(combined_prompt)
+            if not allowed:
+                logs.append(f"[의도 분석] 요청 차단됨. 사유: {reason}")
+                return {'allowed': False, 'error': '요청이 거부되었습니다. ' + reason}, logs
+            logs.append("[의도 분석] 보안 검사 통과")
+        except Exception as e:
+            logs.append(f"[의도 분석] 보안 검사 실패 ({e}). 계속 진행합니다.")
+
+        # 2. Asset Extraction and Calculation Method using LLM
+        # We ask the LLM to extract assets and determine the calculation method.
+        system_prompt = _get_agent_prompt('intent_classifier',
+            "You are a financial intent classifier. "
+            "Extract a list of financial assets or economic indicators mentioned in the user's request. "
+            "For each asset/indicator, provide the following fields: "
+            "- 'id': The ticker symbol (e.g., 'AAPL', 'BTC-USD'), Korean stock code (e.g., '005930.KS'), or indicator code (e.g., 'M2-US', 'M2-KR'). "
+            "  **CRITICAL**: For Korean stocks, you MUST provide the 6-digit code followed by '.KS' or '.KQ'. "
+            "  (e.g., Samsung Electronics -> '005930.KS', Kakao -> '035720.KS'). "
+            "  For economic indicators like M2 money supply, use 'M2-US' for US M2, 'M2-KR' for Korean M2. "
+            "- 'label': The display name (e.g., 'Samsung Electronics', 'Bitcoin', 'US M2 Money Supply'). "
+            "- 'type': One of 'crypto', 'kr_stock', 'us_stock', 'index', 'commodity', 'forex', 'bond', 'economic_indicator'. "
+            "- 'calculation_method': REQUIRED. Determine from user's request:\n"
+            "  * 'cagr' (default): If user asks for '연평균', 'CAGR', 'annualized', '평균 수익률'\n"
+            "  * 'cumulative': If user asks for '누적', 'total return', '총 상승률', '전체 상승률'\n"
+            "  * If unclear, use 'cagr' as default.\n"
+            "If the user asks for a group (e.g., 'US Big Tech'), expand it into individual representative stocks (max 10). "
+            "IMPORTANT: The 'calculation_method' should be the SAME for all assets unless the user specifically requests different methods for different assets. "
+            "Return ONLY a JSON object with keys 'assets' (list) and 'calculation_method' (string: 'cagr' or 'cumulative')."
+        )
+
+        user_content = f"User Request: {combined_prompt}"
+
+        try:
+            api_key = getattr(settings, 'OPENAI_API_KEY', '')
+            base_url = getattr(settings, 'OPENAI_API_BASE', 'https://api.openai.com/v1').rstrip('/')
+            model = getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini')
+
+            logs.append("[의도 분석] AI를 사용하여 자산 목록 추출 중...")
+            response = requests.post(
+                f"{base_url}/chat/completions",
+                headers={
+                    'Authorization': f'Bearer {api_key}',
+                    'Content-Type': 'application/json'
+                },
+                json={
+                    'model': model,
+                    'messages': [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content}
+                    ],
+                    'temperature': 0.1,
+                    'response_format': {'type': 'json_object'},
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            content = response.json()['choices'][0]['message']['content']
+            parsed = json.loads(content)
+            assets = parsed.get('assets', [])
+            calculation_method = parsed.get('calculation_method', 'cagr')
+
+            # Basic validation/cleanup
+            clean_assets = []
+            for a in assets:
+                if a.get('id'):
+                    # Add calculation_method to each asset if not already present
+                    if 'calculation_method' not in a:
+                        a['calculation_method'] = calculation_method
+                    clean_assets.append(a)
+
+            method_label = '누적 상승률' if calculation_method == 'cumulative' else '연평균 수익률(CAGR)'
+            logs.append(f"[의도 분석] {len(clean_assets)}개 자산 추출 완료: {', '.join(a['label'] for a in clean_assets)}")
+            logs.append(f"[의도 분석] 계산 방식: {method_label}")
+            return {'allowed': True, 'assets': clean_assets, 'calculation_method': calculation_method}, logs
+
+        except Exception as e:
+            logs.append(f"[의도 분석] 자산 추출 실패: {e}")
+            return {'allowed': False, 'error': '자산 추출 중 오류가 발생했습니다.'}, logs
+
+
+class PriceRetrieverAgent:
+    """
+    Responsible for fetching historical price data for the requested assets.
+    It uses the existing helper functions (_fetch_asset_history, etc.).
+    """
+    def run(self, assets, start_year, end_year):
+        logs = []
+        logs.append(f"[데이터 수집] {len(assets)}개 자산의 {start_year}-{end_year} 데이터 가져오는 중...")
+
+        price_data_map = {}
+
+        for asset in assets:
+            asset_id = asset['id']
+            label = asset['label']
+            asset_type = asset.get('type', 'unknown')
+
+            logs.append(f"[데이터 수집] {label} 처리 중...")
+            
+            # 1. Map to internal config structure
+            # We try to find an existing config or create a dynamic one
+            config = _find_known_asset_config(asset_id, label)
+            
+            if not config:
+                # If not found in presets, construct a config based on the Agent 1 output
+                # This is crucial for the new dynamic behavior
+                config = {
+                    'id': asset_id,
+                    'label': label,
+                    'ticker': asset_id,
+                    'category': self._map_category(asset_type),
+                    # For Korean stocks, force KRW unit if it looks like a code
+                    'unit': 'KRW' if asset_type == 'kr_stock' or re.match(r'\d{6}\.K[SQ]', asset_id) else 'USD'
+                }
+                # Try to guess stooq symbol if not Korean
+                if asset_type != 'kr_stock':
+                     config['stooq_symbol'] = _guess_stooq_symbol(asset_id)
+
+            # 2. Fetch History
             try:
-                detail = exc.response.text
-            except Exception:
-                detail = ''
-        logger.error('OpenAI request failed (%s): %s', getattr(exc.response, 'status_code', 'unknown'), detail)
-        raise
-    except requests.RequestException as exc:
-        logger.error('OpenAI request failed: %s', exc)
-        raise
-
-
-def _normalize_finance_series(raw_series, start_year, end_year):
-    normalized = []
-    if not isinstance(raw_series, list):
-        return normalized
-
-    for idx, entry in enumerate(raw_series[:FINANCE_MAX_SERIES]):
-        points = entry.get('points') if isinstance(entry, dict) else None
-        if not isinstance(points, list):
-            continue
-        cleaned = []
-        seen_years = set()
-        base_value = None
-
-        for point in points:
-            year = point.get('year')
-            if not isinstance(year, int):
-                continue
-            if year < start_year or year > end_year:
-                continue
-            if year in seen_years:
-                continue
-            seen_years.add(year)
-            value = _safe_float(point.get('value'))
-            multiple = _safe_float(point.get('multiple'))
-            if base_value is None and value not in (None, 0):
-                base_value = value
-            cleaned.append({
-                'year': year,
-                'value': value,
-                'multiple': multiple,
-            })
-
-        if len(cleaned) < 2:
-            continue
-
-        cleaned.sort(key=lambda p: p['year'])
-        base_multiple = cleaned[0]['multiple']
-        if base_multiple is None or base_multiple <= 0:
-            base_multiple = 1.0
-        if base_value in (None, 0):
-            first_value = next((p['value'] for p in cleaned if p['value'] not in (None, 0)), 1.0)
-            base_value = first_value or 1.0
-
-        prev_multiple = 1.0
-        rebased_points = []
-        for p in cleaned:
-            mul = p['multiple']
-            if mul is None:
-                if p['value'] is not None and base_value:
-                    mul = p['value'] / base_value
+                result = _fetch_asset_history(config, start_year, end_year)
+                if result:
+                    history, source = result
+                    price_data_map[asset_id] = {
+                        'history': history,
+                        'config': config,
+                        'source': source,
+                        'calculation_method': asset.get('calculation_method', 'cagr')
+                    }
+                    logs.append(f"[데이터 수집] {label}: {source}에서 {len(history)}개 데이터 포인트 수집 완료")
                 else:
-                    mul = prev_multiple
-            if mul is None or mul <= 0:
-                mul = prev_multiple if prev_multiple > 0 else 1.0
-            rebased = mul / base_multiple if base_multiple not in (0, 1.0) else mul
-            rebased = max(rebased, 0.0001)
-            rebased = round(float(rebased), 6)
-            years_elapsed = p['year'] - cleaned[0]['year']
-            if years_elapsed > 0:
-                try:
-                    annualized_pct = (rebased ** (1 / years_elapsed) - 1) * 100
-                except Exception:
-                    annualized_pct = 0.0
-            else:
-                annualized_pct = 0.0
-            rebased_points.append({
-                'year': p['year'],
-                'multiple': rebased,
-                'raw_value': p['value'],
-                'value': round(annualized_pct, 3)
-            })
-            prev_multiple = rebased
+                    logs.append(f"[데이터 수집] {label}: 데이터 없음")
+            except Exception as e:
+                logs.append(f"[데이터 수집] {label} 실패: {e}")
+        
+        return price_data_map, logs
 
-        if len(rebased_points) < 2:
-            continue
+    def _map_category(self, asset_type):
+        mapping = {
+            'crypto': '디지털 자산',
+            'kr_stock': '국내 주식',
+            'us_stock': '미국 주식',
+            'index': '지수',
+            'commodity': '원자재',
+            'bond': '채권',
+            'forex': '통화',
+            'economic_indicator': '경제 지표'
+        }
+        return mapping.get(asset_type, '기타')
 
-        start_val = rebased_points[0]['multiple']
-        end_val = rebased_points[-1]['multiple']
-        years = rebased_points[-1]['year'] - rebased_points[0]['year']
-        annualized = 0.0
-        if years > 0 and start_val > 0:
+
+class CalculatorAgent:
+    """
+    Responsible for processing raw price history into the standardized 'series' format
+    required by the frontend (calculating CAGR or cumulative returns, normalizing to 1.0, etc.).
+    Also prepares the yearly closing prices for the table.
+    """
+    def run(self, price_data_map, start_year, end_year, calculation_method='cagr'):
+        logs = []
+        method_label = '누적 상승률' if calculation_method == 'cumulative' else '연평균 수익률(CAGR)'
+        logs.append(f"[수익률 계산] {method_label} 계산 및 데이터 포맷팅 중...")
+
+        series_list = []
+        yearly_prices_list = []
+
+        for asset_id, data in price_data_map.items():
+            history = data['history']
+            config = data['config']
+            source = data.get('source', 'Unknown')
+
+            # Get calculation method for this specific asset (or use default)
+            asset_calc_method = data.get('calculation_method', calculation_method)
+
+            # 1. Build Series for Chart
             try:
-                annualized = (end_val / start_val) ** (1 / years) - 1
-            except Exception:
-                annualized = 0.0
+                series_obj = _build_asset_series(config['id'], config, history, start_year, end_year, asset_calc_method)
+                if series_obj:
+                    series_obj['id'] = config['id']
+                    series_obj['calculation_method'] = asset_calc_method
+                    series_list.append(series_obj)
+                else:
+                     logs.append(f"[수익률 계산] {config['label']}: 데이터 부족으로 시리즈 생성 불가")
+            except Exception as e:
+                logs.append(f"[수익률 계산] {config['label']} 시리즈 생성 오류: {e}")
 
-        normalized.append({
-            'id': entry.get('id') or entry.get('label') or f'series_{idx + 1}',
-            'label': entry.get('label') or entry.get('id') or f'자산 {idx + 1}',
-            'category': entry.get('category') or entry.get('benchmark') or '',
-            'unit': entry.get('unit') or entry.get('currency') or 'USD',
-            'points': rebased_points,
-            'annualized_return_pct': round(annualized * 100, 2),
-            'multiple_from_start': round(end_val / start_val, 3) if start_val else 0.0,
-        })
+            # 2. Build Yearly Prices for Table
+            try:
+                raw_prices = _build_yearly_closing_points(history, start_year, end_year)
+                if raw_prices:
+                    entry = {
+                        'id': config['id'],
+                        'requested_id': asset_id,
+                        'label': config.get('label') or asset_id,
+                        'unit': config.get('unit') or 'USD',
+                        'category': config.get('category') or '',
+                        'source': source,  # Use actual data source
+                        'prices': raw_prices,
+                        'aliases': _collect_asset_aliases(config, asset_id),
+                        'status': 'success',
+                        'error_message': None,
+                        'alt_prices': {},
+                        'alt_sources': {}
+                    }
 
-    return normalized
+                    # Handle Bitcoin special case for KRW alt prices if needed
+                    if _is_bitcoin_config(config):
+                        try:
+                            krw_history = _fetch_upbit_monthly_history(start_year, end_year)
+                            krw_prices = _build_yearly_closing_points(krw_history, start_year, end_year)
+                            if krw_prices:
+                                entry['alt_prices'] = {'krw': krw_prices}
+                                entry['alt_sources'] = {'krw': 'Upbit'}
+                        except Exception as e:
+                            logs.append(f"[수익률 계산] 경고 - 비트코인 원화 가격(Upbit) 가져오기 실패: {e}")
+
+                    yearly_prices_list.append(entry)
+            except Exception as e:
+                logs.append(f"[수익률 계산] {config['label']} 가격 테이블 생성 오류: {e}")
+
+        # Sort by CAGR descending
+        series_list.sort(key=lambda x: x.get('annualized_return_pct', -999), reverse=True)
+
+        logs.append(f"[수익률 계산] {len(series_list)}개 시리즈 및 {len(yearly_prices_list)}개 가격 항목 생성 완료")
+        
+        summary = self._generate_summary(series_list, start_year, end_year)
+        
+        return series_list, yearly_prices_list, summary, logs
+
+    def _generate_summary(self, series_list, start_year, end_year):
+        if not series_list:
+            return "데이터가 없습니다."
+        
+        best = series_list[0]
+        worst = series_list[-1]
+        
+        return (f"{start_year}년부터 {end_year}년까지 분석 결과, "
+                f"{best['label']}이(가) 연평균 {best['annualized_return_pct']}%로 가장 높은 성과를 보였으며, "
+                f"{worst['label']}은(는) {worst['annualized_return_pct']}%를 기록했습니다.")
 
 
 @csrf_exempt
 def finance_historical_returns_view(request):
+    """
+    Finance analysis endpoint with streaming log support.
+    Use ?stream=1 to enable Server-Sent Events streaming.
+    """
+    import logging
+    import time
+    backend_logger = logging.getLogger('backend')
+    backend_logger.info("=" * 80)
+    backend_logger.info("NEW REQUEST: finance_historical_returns_view")
+
+    # Get client identifier for logging
+    user_identifier = _get_client_identifier(request)
+    start_time = time.time()
+
+    if request.method != 'POST':
+        backend_logger.warning("Method not allowed: %s", request.method)
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+
+    payload = _load_json_body(request)
+    if payload is None:
+        backend_logger.error("Invalid JSON payload")
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    # Check if streaming is requested
+    use_streaming = request.GET.get('stream') == '1'
+
+    # 1. Parse Inputs
+    prompt = (payload.get('prompt') or '').strip()
+    quick_requests = payload.get('quick_requests') or []
+    if isinstance(quick_requests, str):
+        quick_requests = [quick_requests]
+
+    backend_logger.info("Prompt: %s", prompt)
+    backend_logger.info("Quick Requests: %s", quick_requests)
+
+    context_key = (payload.get('context_key') or '').strip()
+    backend_logger.info("Context Key: %s", context_key)
+    _ensure_finance_cache_purged(context_key)
+
+    # Derive years (reusing existing logic helpers)
+    start_hint = payload.get('start_year')
+    try:
+        start_hint = int(start_hint)
+    except (TypeError, ValueError):
+        start_hint = None
+    prompt_year = _extract_start_year_from_prompt(prompt)
+    combined_prompt_text = ' '.join(([prompt] if prompt else []) + quick_requests)
+    span_hint = _extract_year_span_from_prompt(combined_prompt_text or prompt)
+    start_year, end_year = _derive_finance_year_window(start_hint or prompt_year, span_hint)
+
+    backend_logger.info("Year Range: %s - %s", start_year, end_year)
+
+    if use_streaming:
+        # Return a streaming response (logging handled in stream generator)
+        return StreamingHttpResponse(
+            _finance_analysis_stream(prompt, quick_requests, context_key, start_year, end_year, user_identifier, start_time),
+            content_type='text/event-stream'
+        )
+    else:
+        # Original non-streaming implementation
+        all_logs = []
+        all_logs.append(f"시스템: {start_year}-{end_year} 멀티 에이전트 분석 시작")
+
+        # --- Multi-Agent Workflow ---
+
+        # Agent 1: Intent Classifier
+        backend_logger.info("STEP 1: Running IntentClassifierAgent")
+        intent_agent = IntentClassifierAgent()
+        intent_result, intent_logs = intent_agent.run(prompt, quick_requests)
+        all_logs.extend(intent_logs)
+
+        backend_logger.info("Intent Result: %s", intent_result)
+
+        if not intent_result.get('allowed'):
+            backend_logger.warning("Request blocked by guardrail")
+            processing_time_ms = int((time.time() - start_time) * 1000)
+            _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
+                             intent_result.get('error', 'Request blocked'), 0, processing_time_ms)
+            return JsonResponse({
+                'ok': False,
+                'error': intent_result.get('error', 'Request blocked'),
+                'logs': all_logs
+            }, status=400)
+
+        assets = intent_result.get('assets', [])
+        calculation_method = intent_result.get('calculation_method', 'cagr')
+        backend_logger.info("Extracted Assets (%d): %s", len(assets), assets)
+        backend_logger.info("Calculation Method: %s", calculation_method)
+
+        if not assets:
+            backend_logger.error("No assets found - returning 400")
+            processing_time_ms = int((time.time() - start_time) * 1000)
+            _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
+                             '분석할 자산을 찾을 수 없습니다.', 0, processing_time_ms)
+            return JsonResponse({
+                'ok': False,
+                'error': '분석할 자산을 찾을 수 없습니다.',
+                'logs': all_logs
+            }, status=400)
+
+        # Agent 2: Price Retriever
+        backend_logger.info("STEP 2: Running PriceRetrieverAgent")
+        retriever_agent = PriceRetrieverAgent()
+        price_data_map, retriever_logs = retriever_agent.run(assets, start_year, end_year)
+        all_logs.extend(retriever_logs)
+
+        backend_logger.info("Price Data Map Keys: %s", list(price_data_map.keys()) if price_data_map else "EMPTY")
+
+        if not price_data_map:
+            backend_logger.error("No price data retrieved - returning 502")
+            processing_time_ms = int((time.time() - start_time) * 1000)
+            _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
+                             '자산 데이터를 가져올 수 없습니다.', len(assets), processing_time_ms)
+            return JsonResponse({
+                'ok': False,
+                'error': '자산 데이터를 가져올 수 없습니다. (티커를 확인해주세요)',
+                'logs': all_logs
+            }, status=502)
+
+        # Agent 3: Calculator
+        backend_logger.info("STEP 3: Running CalculatorAgent with method: %s", calculation_method)
+        calculator_agent = CalculatorAgent()
+        series_data, yearly_prices_list, summary, calculator_logs = calculator_agent.run(price_data_map, start_year, end_year, calculation_method)
+        all_logs.extend(calculator_logs)
+
+        if not series_data:
+            processing_time_ms = int((time.time() - start_time) * 1000)
+            _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
+                             '유효한 수익률 데이터를 계산할 수 없습니다.', len(assets), processing_time_ms)
+            return JsonResponse({
+                'ok': False,
+                'error': '유효한 수익률 데이터를 계산할 수 없습니다.',
+                'logs': all_logs
+            }, status=502)
+
+        # Cache Result (if context_key is present)
+        usd_krw_rate = get_cached_usdkrw_rate()
+        if context_key in ['safe_assets', 'us_bigtech']:
+            _save_to_cache(context_key, start_year, end_year, series_data, usd_krw_rate)
+
+        # Log successful query
+        processing_time_ms = int((time.time() - start_time) * 1000)
+        _log_finance_query(user_identifier, prompt, quick_requests, context_key, True,
+                         '', len(assets), processing_time_ms)
+
+        # Construct Response
+        response_payload = {
+            'ok': True,
+            'series': series_data,
+            'yearly_prices': yearly_prices_list,
+            'start_year': start_year,
+            'end_year': end_year,
+            'summary': summary,
+            'notes': "본 분석은 AI 에이전트가 실시간 데이터를 수집하여 계산했습니다.",
+            'fx_rate': usd_krw_rate,
+            'logs': all_logs,
+            'prompt': prompt,
+            'quick_requests': quick_requests,
+        }
+
+        return JsonResponse(response_payload)
+
+
+def _finance_analysis_stream(prompt, quick_requests, context_key, start_year, end_year, user_identifier, start_time):
+    """Generator function for streaming finance analysis logs."""
+    import logging
+    import time
+    backend_logger = logging.getLogger('backend')
+
+    def send_log(message):
+        """Helper to send a log message as SSE."""
+        return f"data: {json.dumps({'type': 'log', 'message': message})}\n\n"
+
+    def send_error(error_message):
+        """Helper to send an error as SSE."""
+        return f"data: {json.dumps({'type': 'error', 'message': error_message})}\n\n"
+
+    def send_result(data):
+        """Helper to send final result as SSE."""
+        return f"data: {json.dumps({'type': 'result', 'data': data})}\n\n"
+
+    try:
+        yield send_log(f"시스템: {start_year}-{end_year} 멀티 에이전트 분석 시작")
+
+        # Agent 1: Intent Classifier
+        intent_agent = IntentClassifierAgent()
+        intent_result, intent_logs = intent_agent.run(prompt, quick_requests)
+
+        for log in intent_logs:
+            yield send_log(log)
+
+        if not intent_result.get('allowed'):
+            processing_time_ms = int((time.time() - start_time) * 1000)
+            _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
+                             intent_result.get('error', 'Request blocked'), 0, processing_time_ms)
+            yield send_error(intent_result.get('error', 'Request blocked'))
+            return
+
+        assets = intent_result.get('assets', [])
+        calculation_method = intent_result.get('calculation_method', 'cagr')
+        if not assets:
+            processing_time_ms = int((time.time() - start_time) * 1000)
+            _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
+                             '분석할 자산을 찾을 수 없습니다.', 0, processing_time_ms)
+            yield send_error('분석할 자산을 찾을 수 없습니다.')
+            return
+
+        # Agent 2: Price Retriever
+        retriever_agent = PriceRetrieverAgent()
+        price_data_map, retriever_logs = retriever_agent.run(assets, start_year, end_year)
+
+        for log in retriever_logs:
+            yield send_log(log)
+
+        if not price_data_map:
+            processing_time_ms = int((time.time() - start_time) * 1000)
+            _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
+                             '자산 데이터를 가져올 수 없습니다.', len(assets), processing_time_ms)
+            yield send_error('자산 데이터를 가져올 수 없습니다.')
+            return
+
+        # Agent 3: Calculator
+        calculator_agent = CalculatorAgent()
+        series_data, yearly_prices_list, summary, calculator_logs = calculator_agent.run(price_data_map, start_year, end_year, calculation_method)
+
+        for log in calculator_logs:
+            yield send_log(log)
+
+        if not series_data:
+            processing_time_ms = int((time.time() - start_time) * 1000)
+            _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
+                             '유효한 수익률 데이터를 계산할 수 없습니다.', len(assets), processing_time_ms)
+            yield send_error('유효한 수익률 데이터를 계산할 수 없습니다.')
+            return
+
+        # Cache and send final result
+        usd_krw_rate = get_cached_usdkrw_rate()
+        if context_key in ['safe_assets', 'us_bigtech']:
+            _save_to_cache(context_key, start_year, end_year, series_data, usd_krw_rate)
+
+        # Log successful query
+        processing_time_ms = int((time.time() - start_time) * 1000)
+        _log_finance_query(user_identifier, prompt, quick_requests, context_key, True,
+                         '', len(assets), processing_time_ms)
+
+        result_payload = {
+            'ok': True,
+            'series': series_data,
+            'yearly_prices': yearly_prices_list,
+            'start_year': start_year,
+            'end_year': end_year,
+            'summary': summary,
+            'notes': "본 분석은 AI 에이전트가 실시간 데이터를 수집하여 계산했습니다.",
+            'fx_rate': usd_krw_rate,
+            'prompt': prompt,
+            'quick_requests': quick_requests,
+        }
+
+        yield send_result(result_payload)
+
+    except Exception as e:
+        backend_logger.error(f"Stream error: {e}", exc_info=True)
+        processing_time_ms = int((time.time() - start_time) * 1000)
+        _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
+                         f"분석 중 오류: {str(e)}", 0, processing_time_ms)
+        yield send_error(f"분석 중 오류가 발생했습니다: {str(e)}")
+
+
+@csrf_exempt
+def finance_yearly_closing_prices_view(request):
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
 
@@ -2303,132 +3733,109 @@ def finance_historical_returns_view(request):
     if payload is None:
         return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
 
-    prompt = (payload.get('prompt') or '').strip()
-    quick_requests = payload.get('quick_requests') or []
-    if isinstance(quick_requests, str):
-        quick_requests = [quick_requests]
-    quick_requests = [str(q).strip() for q in quick_requests if str(q).strip()]
+    assets = payload.get('assets')
+    if not isinstance(assets, list) or not assets:
+        return JsonResponse({'ok': False, 'error': 'assets must be a non-empty list'}, status=400)
 
-    start_hint = payload.get('start_year')
     try:
-        start_hint = int(start_hint)
+        start_year = int(payload.get('start_year') or FINANCE_DEFAULT_START_YEAR)
     except (TypeError, ValueError):
-        start_hint = None
-
-    prompt_year = _extract_start_year_from_prompt(prompt)
-    start_year, end_year = _derive_finance_year_window(start_hint or prompt_year)
-    debug_logs = []
-    debug_logs.append(f"Prompt: {prompt or '기본 프롬프트'}")
-    debug_logs.append(f"Quick requests: {', '.join(quick_requests) if quick_requests else '없음'}")
-    debug_logs.append(f"Year window: {start_year}~{end_year}")
-
-    safe_asset_keys = _detect_safe_assets(prompt, quick_requests)
-    debug_logs.append(f"Detected safe assets: {', '.join(sorted(safe_asset_keys)) if safe_asset_keys else '없음'}")
-    safe_series, safe_errors = _fetch_safe_asset_series(safe_asset_keys, start_year, end_year)
-    if safe_series:
-        debug_logs.append(f"Loaded safe asset series: {len(safe_series)}개")
-    else:
-        debug_logs.append("Loaded safe asset series: 없음")
-    for err in safe_errors:
-        debug_logs.append(f"Safe asset error: {err}")
-    context_key = (payload.get('context_key') or '').strip()
-    preset_series = []
-    preset_errors = []
-    if context_key == 'us_bigtech':
-        preset_series, preset_errors = _fetch_preset_group('us_bigtech', start_year, end_year)
-    elif context_key == 'kr_equity':
-        preset_series, preset_errors = _fetch_preset_group('kr_equity', start_year, end_year)
-    if context_key:
-        debug_logs.append(f"Context key: {context_key} (series {len(preset_series)})")
-    else:
-        debug_logs.append("Context key: 없음")
-    for err in preset_errors:
-        debug_logs.append(f"Preset error: {err}")
-    usd_krw_rate = get_cached_usdkrw_rate()
-
-    if not prompt and not quick_requests:
-        prompt = '비트코인과 대표 자산의 과거 연평균 수익률을 비교해줘.'
-
+        start_year = FINANCE_DEFAULT_START_YEAR
     try:
-        messages = _build_finance_messages(prompt, start_year, end_year, quick_requests)
-        llm_data = _call_openai_finance(messages)
-        series = _normalize_finance_series(llm_data.get('series'), start_year, end_year)
-        debug_logs.append(f"OpenAI series count: {len(series)}")
-    except ValueError as exc:
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
-    except requests.RequestException:
-        return JsonResponse({'ok': False, 'error': 'OpenAI API 호출에 실패했습니다.'}, status=502)
-    except Exception as exc:
-        logger.exception('finance_historical_returns_view error: %s', exc)
-        return JsonResponse({'ok': False, 'error': '데이터 생성 중 오류가 발생했습니다.'}, status=500)
+        end_year = int(payload.get('end_year') or datetime.utcnow().year)
+    except (TypeError, ValueError):
+        end_year = datetime.utcnow().year
+    if end_year < start_year:
+        end_year = start_year
 
-    if not series and not safe_series and not preset_series:
-        return JsonResponse({'ok': False, 'error': 'LLM 데이터가 비어 있습니다.'}, status=502)
+    results = []
+    global_errors = [] # Collected for overall response
 
-    # ID와 정규화된 label로 중복 체크
-    def normalize_label(label):
-        """종목코드와 괄호를 제거하고 핵심 이름만 추출"""
-        import re
-        # "삼성전자(005930)" -> "삼성전자"
-        normalized = re.sub(r'\([^)]*\)', '', label).strip()
-        # "삼성전자" -> "삼성전자"
-        return normalized.lower()
+    seen_ids = set() # To prevent duplicate processing if same ID appears multiple times in request
 
-    existing_ids = set()
-    existing_normalized_labels = set()
-    merged_series = []
-
-    # Safe assets 추가
-    for s in (safe_series or []):
-        merged_series.append(s)
-        existing_ids.add(s['id'])
-        existing_normalized_labels.add(normalize_label(s['label']))
-
-    # Preset series 추가 (중복 체크)
-    if preset_series:
-        for ps in preset_series:
-            ps_id = ps['id']
-            ps_norm_label = normalize_label(ps['label'])
-            if ps_id in existing_ids or ps_norm_label in existing_normalized_labels:
-                continue
-            merged_series.append(ps)
-            existing_ids.add(ps_id)
-            existing_normalized_labels.add(ps_norm_label)
-
-    # OpenAI series 추가 (중복 체크)
-    for item in series:
-        item_id = item['id']
-        item_norm_label = normalize_label(item['label'])
-        if item_id in existing_ids or item_norm_label in existing_normalized_labels:
+    for entry in assets:
+        if not isinstance(entry, dict):
+            global_errors.append(f"유효하지 않은 자산 형식: {entry}")
             continue
-        merged_series.append(item)
-        existing_ids.add(item_id)
-        existing_normalized_labels.add(item_norm_label)
 
-    base_notes = (llm_data or {}).get('notes', '')
-    notes_parts = []
-    if base_notes:
-        notes_parts.append(base_notes)
-    if safe_series:
-        safe_labels = ', '.join(s['label'] for s in safe_series)
-        notes_parts.append(f"{safe_labels} 데이터는 외부 시세 제공처(Stooq 등)의 월별 종가/수익률을 기반으로 계산했습니다.")
-    if preset_series:
-        preset_labels = ', '.join(s['label'] for s in preset_series)
-        notes_parts.append(f"{preset_labels} 주가는 외부 시세 제공처(Stooq 등) 데이터를 활용해 연평균 수익률로 환산했습니다.")
-    notes = ' '.join(notes_parts).strip()
-    debug_logs.append(f"Final merged series: {len(merged_series)}")
+        asset_id = (str(entry.get('id') or entry.get('ticker') or '')).strip()
+        label = (entry.get('label') or '').strip()
+        context_label = label or asset_id or '알 수 없는 자산'
+
+        current_result_entry = {
+            'id': asset_id, # Default to requested ID
+            'requested_id': asset_id,
+            'label': label,
+            'unit': entry.get('unit') or '',
+            'category': entry.get('category') or '',
+            'source': '',
+            'prices': [],
+            'aliases': [],
+            'status': 'failed', # Default status
+            'error_message': None,
+            'alt_prices': {},
+            'alt_sources': {},
+        }
+
+        # Check for duplicates in the request payload
+        if asset_id in seen_ids:
+            continue
+        seen_ids.add(asset_id)
+
+        config = _find_known_asset_config(asset_id, label)
+        
+        if not config:
+            current_result_entry['error_message'] = f"{context_label}: 지원되지 않는 자산입니다."
+            global_errors.append(current_result_entry['error_message'])
+            results.append(current_result_entry)
+            continue
+        
+        # Override with canonical config info (e.g. if '삼성전자' maps to '005930.KS')
+        current_result_entry['id'] = config.get('id') or asset_id
+        current_result_entry['label'] = config.get('label') or label or current_result_entry['id']
+        current_result_entry['unit'] = config.get('unit') or entry.get('unit') or ''
+        current_result_entry['category'] = config.get('category') or entry.get('category') or ''
+        current_result_entry['aliases'] = _collect_asset_aliases(config, asset_id)
+
+        try:
+            price_payload = _fetch_yearly_closing_prices(config, start_year, end_year)
+            prices = (price_payload or {}).get('prices') or []
+
+            if not prices:
+                current_result_entry['error_message'] = f"{current_result_entry['label']}: 데이터가 없습니다."
+                global_errors.append(current_result_entry['error_message'])
+            else:
+                current_result_entry['prices'] = prices
+                current_result_entry['source'] = price_payload.get('source') or ''
+                current_result_entry['status'] = 'success'
+
+                alt_prices = price_payload.get('alt_prices') or {}
+                alt_sources = price_payload.get('alt_sources') or {}
+                if alt_prices:
+                    current_result_entry['alt_prices'] = alt_prices
+                if alt_sources:
+                    current_result_entry['alt_sources'] = alt_sources
+
+        except Exception as exc:
+            logger.warning('Failed to fetch yearly closing prices for %s: %s', context_label, exc)
+            current_result_entry['error_message'] = f"{current_result_entry['label']}: {exc}"
+            global_errors.append(current_result_entry['error_message'])
+
+        results.append(current_result_entry)
+
+    if not results and not global_errors: # If no assets were processed and no errors occurred
+         return JsonResponse({'ok': True, 'start_year': start_year, 'end_year': end_year, 'data': [], 'errors': []})
+
+    if not results: # All assets failed and no results
+        status_code = 400 if global_errors else 502
+        return JsonResponse({'ok': False, 'error': '연도별 종가 데이터를 가져올 수 없습니다.', 'errors': global_errors}, status=status_code)
 
     return JsonResponse({
         'ok': True,
-        'series': merged_series,
         'start_year': start_year,
         'end_year': end_year,
-        'summary': (llm_data or {}).get('summary', ''),
-        'notes': notes,
-        'fx_rate': usd_krw_rate,
-        'logs': debug_logs,
-        'prompt': prompt,
-        'quick_requests': quick_requests,
+        'data': results,
+        'errors': global_errors, # Still include for overall context if needed
     })
 
 
@@ -2683,3 +4090,158 @@ def admin_get_wallet_password_view(request):
         return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
     config, _ = SidebarConfig.objects.get_or_create(id=1)
     return JsonResponse({'ok': True, 'password': config.wallet_password_plain or ''})
+
+
+# ============================================================
+# Agent Prompt Management
+# ============================================================
+
+def _get_or_create_default_agent_prompts():
+    """Initialize default agent prompts if they don't exist"""
+    from .models import AgentPrompt
+
+    defaults = {
+        'intent_classifier': {
+            'name': '의도 분석 Agent',
+            'description': '사용자 요청을 분석하여 자산 목록을 추출하고 계산 방식을 결정합니다.',
+            'system_prompt': (
+                "You are a financial intent classifier. "
+                "Extract a list of financial assets or economic indicators mentioned in the user's request. "
+                "For each asset/indicator, provide the following fields: "
+                "- 'id': The ticker symbol (e.g., 'AAPL', 'BTC-USD'), Korean stock code (e.g., '005930.KS'), or indicator code (e.g., 'M2-US', 'M2-KR'). "
+                "  **CRITICAL**: For Korean stocks, you MUST provide the 6-digit code followed by '.KS' or '.KQ'. "
+                "  (e.g., Samsung Electronics -> '005930.KS', Kakao -> '035720.KS'). "
+                "  For economic indicators like M2 money supply, use 'M2-US' for US M2, 'M2-KR' for Korean M2. "
+                "- 'label': The display name (e.g., 'Samsung Electronics', 'Bitcoin', 'US M2 Money Supply'). "
+                "- 'type': One of 'crypto', 'kr_stock', 'us_stock', 'index', 'commodity', 'forex', 'bond', 'economic_indicator'. "
+                "- 'calculation_method': REQUIRED. Determine from user's request:\n"
+                "  * 'cagr' (default): If user asks for '연평균', 'CAGR', 'annualized', '평균 수익률'\n"
+                "  * 'cumulative': If user asks for '누적', 'total return', '총 상승률', '전체 상승률'\n"
+                "  * If unclear, use 'cagr' as default.\n"
+                "If the user asks for a group (e.g., 'US Big Tech'), expand it into individual representative stocks (max 10). "
+                "IMPORTANT: The 'calculation_method' should be the SAME for all assets unless the user specifically requests different methods for different assets. "
+                "Return ONLY a JSON object with keys 'assets' (list) and 'calculation_method' (string: 'cagr' or 'cumulative')."
+            ),
+        },
+        'guardrail': {
+            'name': '가드레일 Agent',
+            'description': '부적절한 요청을 필터링하고 안전성을 검사합니다.',
+            'system_prompt': (
+                "당신은 사용자 요청의 의도를 분류하는 전문가입니다.\n\n"
+                "주어진 사용자 요청이 다음 중 어디에 해당하는지 판단하세요:\n\n"
+                "1. **금융 분석 요청**: 자산(예: 비트코인, 삼성전자, S&P 500 등)의 수익률, 가격 변동, 비교 분석 등을 원하는 경우.\n"
+                "   - 이런 경우 'allowed': true를 반환하세요.\n\n"
+                "2. **부적절한 요청**: 금융 분석과 무관하거나, 개인정보를 요구하거나, 시스템 악용을 시도하는 경우.\n"
+                "   - 이런 경우 'allowed': false를 반환하고, 'reason'에 거부 사유를 간단히 설명하세요.\n\n"
+                "응답 형식 (JSON만 반환):\n"
+                "{\n"
+                '  "allowed": true 또는 false,\n'
+                '  "reason": "거부 사유 (allowed가 false일 때만)"\n'
+                "}\n\n"
+            ),
+        },
+    }
+
+    created = []
+    for agent_type, data in defaults.items():
+        agent, is_new = AgentPrompt.objects.get_or_create(
+            agent_type=agent_type,
+            defaults=data
+        )
+        if is_new:
+            created.append(agent.name)
+
+    return created
+
+
+@csrf_exempt
+def admin_agent_prompts_view(request):
+    """
+    GET: List all agent prompts
+    POST: Create or initialize default agent prompts
+    """
+    from .models import AgentPrompt
+
+    if request.method == 'GET':
+        # Initialize defaults if empty
+        if AgentPrompt.objects.count() == 0:
+            _get_or_create_default_agent_prompts()
+
+        prompts = AgentPrompt.objects.all()
+        return JsonResponse({
+            'ok': True,
+            'prompts': [p.as_dict() for p in prompts]
+        })
+
+    elif request.method == 'POST':
+        # Initialize defaults
+        created = _get_or_create_default_agent_prompts()
+        prompts = AgentPrompt.objects.all()
+        return JsonResponse({
+            'ok': True,
+            'created': created,
+            'prompts': [p.as_dict() for p in prompts]
+        })
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def admin_agent_prompt_detail_view(request, agent_type):
+    """
+    GET: Get specific agent prompt
+    PUT/PATCH: Update agent prompt
+    """
+    from .models import AgentPrompt
+
+    if request.method == 'GET':
+        try:
+            prompt = AgentPrompt.objects.get(agent_type=agent_type)
+            return JsonResponse({
+                'ok': True,
+                'prompt': prompt.as_dict()
+            })
+        except AgentPrompt.DoesNotExist:
+            return JsonResponse({
+                'ok': False,
+                'error': f'Agent prompt not found: {agent_type}'
+            }, status=404)
+
+    elif request.method in ['PUT', 'PATCH']:
+        payload = _load_json_body(request)
+        if payload is None:
+            return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+        try:
+            prompt = AgentPrompt.objects.get(agent_type=agent_type)
+
+            # Update fields
+            if 'name' in payload:
+                prompt.name = payload['name']
+            if 'description' in payload:
+                prompt.description = payload['description']
+            if 'system_prompt' in payload:
+                prompt.system_prompt = payload['system_prompt']
+                # Increment version when prompt changes
+                prompt.version += 1
+            if 'is_active' in payload:
+                prompt.is_active = payload['is_active']
+
+            prompt.save()
+
+            return JsonResponse({
+                'ok': True,
+                'prompt': prompt.as_dict()
+            })
+        except AgentPrompt.DoesNotExist:
+            return JsonResponse({
+                'ok': False,
+                'error': f'Agent prompt not found: {agent_type}'
+            }, status=404)
+        except Exception as e:
+            return JsonResponse({
+                'ok': False,
+                'error': str(e)
+            }, status=500)
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)

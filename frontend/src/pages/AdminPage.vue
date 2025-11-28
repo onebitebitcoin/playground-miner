@@ -52,6 +52,17 @@
                 수수료 계산
               </button>
               <button
+                @click="activeTab = 'finance'"
+                :class="[
+                  activeTab === 'finance'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
+                  'whitespace-nowrap py-2 px-1 border-b-2 font-medium text-xs md:text-sm'
+                ]"
+              >
+                재무 관리
+              </button>
+              <button
                 @click="activeTab = 'sidebar'"
                 :class="[
                   activeTab === 'sidebar'
@@ -1059,6 +1070,213 @@
           </div>
         </div>
 
+        <!-- Finance Management Tab Content -->
+        <div v-if="activeTab === 'finance'">
+          <div class="space-y-6">
+            <!-- Statistics Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div class="bg-white rounded-lg shadow p-6">
+                <div class="text-sm text-gray-600 mb-1">총 쿼리 수</div>
+                <div class="text-2xl font-bold text-gray-900">{{ financeStats.total_queries || 0 }}</div>
+              </div>
+              <div class="bg-white rounded-lg shadow p-6">
+                <div class="text-sm text-gray-600 mb-1">성공률</div>
+                <div class="text-2xl font-bold text-green-600">{{ financeStats.success_rate || 0 }}%</div>
+              </div>
+              <div class="bg-white rounded-lg shadow p-6">
+                <div class="text-sm text-gray-600 mb-1">평균 처리시간</div>
+                <div class="text-2xl font-bold text-blue-600">{{ financeStats.avg_processing_time_ms || 0 }}ms</div>
+              </div>
+              <div class="bg-white rounded-lg shadow p-6">
+                <div class="text-sm text-gray-600 mb-1">최근 24시간</div>
+                <div class="text-2xl font-bold text-purple-600">{{ financeStats.queries_last_24h || 0 }}</div>
+              </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="bg-white rounded-lg shadow p-4">
+              <div class="flex flex-wrap items-center gap-3">
+                <select v-model="financeFilter" @change="loadFinanceLogs"
+                        class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                  <option value="">전체</option>
+                  <option value="true">성공</option>
+                  <option value="false">실패</option>
+                </select>
+                <button @click="loadFinanceLogs"
+                        class="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        title="새로고침">
+                  <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Agent Prompts Management -->
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+              <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 class="text-lg font-semibold text-gray-900">Agent 프롬프트 관리</h3>
+                <button @click="loadAgentPrompts"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                  새로고침
+                </button>
+              </div>
+
+              <div v-if="agentPromptsLoading" class="text-center py-12 text-gray-500">
+                로딩 중...
+              </div>
+
+              <div v-else-if="!agentPrompts.length" class="text-center py-12 text-gray-500">
+                Agent 프롬프트가 없습니다.
+                <button @click="initializeAgentPrompts" class="block mx-auto mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                  기본 프롬프트 초기화
+                </button>
+              </div>
+
+              <div v-else class="divide-y divide-gray-200">
+                <div v-for="agent in agentPrompts" :key="agent.id" class="p-6">
+                  <div class="flex items-start justify-between mb-4">
+                    <div>
+                      <h4 class="text-lg font-semibold text-gray-900">{{ agent.name }}</h4>
+                      <p class="text-sm text-gray-600 mt-1">{{ agent.description }}</p>
+                      <div class="flex items-center gap-3 mt-2">
+                        <span class="text-xs text-gray-500">타입: {{ agent.agent_type }}</span>
+                        <span class="text-xs text-gray-500">버전: v{{ agent.version }}</span>
+                        <span :class="agent.is_active ? 'text-green-600' : 'text-red-600'" class="text-xs font-semibold">
+                          {{ agent.is_active ? '활성' : '비활성' }}
+                        </span>
+                      </div>
+                    </div>
+                    <button @click="toggleAgentPromptEdit(agent.agent_type)"
+                            class="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                      {{ editingAgentType === agent.agent_type ? '취소' : '수정' }}
+                    </button>
+                  </div>
+
+                  <div v-if="editingAgentType === agent.agent_type" class="space-y-4 mt-4 border-t pt-4">
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 mb-1">이름</label>
+                      <input v-model="editingAgentData.name" type="text"
+                             class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 mb-1">설명</label>
+                      <input v-model="editingAgentData.description" type="text"
+                             class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 mb-1">시스템 프롬프트</label>
+                      <textarea v-model="editingAgentData.system_prompt" rows="10"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm">
+                      </textarea>
+                    </div>
+                    <div class="flex items-center">
+                      <input v-model="editingAgentData.is_active" type="checkbox" id="agent-active"
+                             class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                      <label for="agent-active" class="ml-2 text-sm text-gray-700">활성화</label>
+                    </div>
+                    <div class="flex gap-2">
+                      <button @click="saveAgentPrompt(agent.agent_type)"
+                              class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                        저장
+                      </button>
+                      <button @click="editingAgentType = null"
+                              class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                        취소
+                      </button>
+                    </div>
+                  </div>
+
+                  <div v-else class="mt-4">
+                    <div class="bg-gray-50 rounded-lg p-4">
+                      <pre class="text-xs text-gray-700 whitespace-pre-wrap font-mono">{{ agent.system_prompt }}</pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Logs Table -->
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+              <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">재무 쿼리 로그</h3>
+              </div>
+
+              <div v-if="financeLogsLoading" class="text-center py-12 text-gray-500">
+                로딩 중...
+              </div>
+
+              <div v-else-if="!financeLogs.length" class="text-center py-12 text-gray-500">
+                로그가 없습니다.
+              </div>
+
+              <div v-else class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">시간</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사용자</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">프롬프트</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">컨텍스트</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">자산 수</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">처리시간</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상태</th>
+                    </tr>
+                  </thead>
+                  <tbody class="bg-white divide-y divide-gray-200">
+                    <tr v-for="log in financeLogs" :key="log.id" class="hover:bg-gray-50">
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {{ formatDateTime(log.created_at) }}
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {{ log.user_identifier }}
+                      </td>
+                      <td class="px-6 py-4 text-sm text-gray-900 max-w-xs truncate" :title="log.prompt">
+                        {{ log.prompt || '-' }}
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {{ log.context_key || '-' }}
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-center">
+                        {{ log.assets_count }}
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {{ log.processing_time_ms ? log.processing_time_ms + 'ms' : '-' }}
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap">
+                        <span v-if="log.success" class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                          성공
+                        </span>
+                        <span v-else class="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800" :title="log.error_message">
+                          실패
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Pagination -->
+              <div v-if="financeLogs.length" class="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                <div class="text-sm text-gray-600">
+                  {{ financeLogsOffset + 1 }} - {{ Math.min(financeLogsOffset + financeLogsLimit, financeLogsTotal) }} / {{ financeLogsTotal }}
+                </div>
+                <div class="flex gap-2">
+                  <button @click="prevFinanceLogsPage" :disabled="financeLogsOffset === 0"
+                          class="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                    이전
+                  </button>
+                  <button @click="nextFinanceLogsPage" :disabled="financeLogsOffset + financeLogsLimit >= financeLogsTotal"
+                          class="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                    다음
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- Success Message -->
@@ -1262,7 +1480,7 @@ const { successMessage, errorMessage, showSuccess, showError } = useNotification
 
 // State
 const loading = ref(false)
-const activeTab = ref('mnemonics')
+const activeTab = ref('mining')
 const activeRoutingTab = ref('nodes')
 
 // Admin mining reset state
@@ -1306,6 +1524,35 @@ const walletPasswordInput = ref('')
 const savingWalletPassword = ref(false)
 const walletPasswordMessage = ref('')
 const currentWalletPassword = ref('')
+
+// Finance management state
+const financeLogs = ref([])
+const financeLogsLoading = ref(false)
+const financeLogsOffset = ref(0)
+const financeLogsLimit = ref(50)
+const financeLogsTotal = ref(0)
+const financeFilter = ref('')
+const financeStats = ref({
+  total_queries: 0,
+  successful_queries: 0,
+  failed_queries: 0,
+  success_rate: 0,
+  avg_processing_time_ms: 0,
+  queries_last_24h: 0,
+  top_users: [],
+  top_contexts: []
+})
+
+// Agent prompts management state
+const agentPrompts = ref([])
+const agentPromptsLoading = ref(false)
+const editingAgentType = ref(null)
+const editingAgentData = ref({
+  name: '',
+  description: '',
+  system_prompt: '',
+  is_active: true
+})
 
 // Modal state for mnemonic display
 const showMnemonicModal = ref(false)
@@ -2218,7 +2465,138 @@ const saveWalletPassword = async () => {
   }
 }
 
+// Finance management functions
+const loadFinanceLogs = async () => {
+  financeLogsLoading.value = true
+  try {
+    const params = new URLSearchParams({
+      limit: financeLogsLimit.value.toString(),
+      offset: financeLogsOffset.value.toString()
+    })
+    if (financeFilter.value) {
+      params.append('success', financeFilter.value)
+    }
 
+    const response = await fetch(`${import.meta.env.VITE_API_BASE || ''}/api/finance/admin/logs?${params}`)
+    const data = await response.json()
+
+    if (data.ok) {
+      financeLogs.value = data.logs || []
+      financeLogsTotal.value = data.total || 0
+    } else {
+      showError(data.error || '로그를 불러올 수 없습니다')
+    }
+  } catch (error) {
+    showError('로그 로딩 중 오류가 발생했습니다')
+  } finally {
+    financeLogsLoading.value = false
+  }
+}
+
+const loadFinanceStats = async () => {
+  try {
+    const response = await fetch(`${import.meta.env.VITE_API_BASE || ''}/api/finance/admin/stats`)
+    const data = await response.json()
+
+    if (data.ok) {
+      financeStats.value = data.stats || financeStats.value
+    }
+  } catch (error) {
+    console.error('Failed to load finance stats:', error)
+  }
+}
+
+const formatDateTime = (isoString) => {
+  if (!isoString) return '-'
+  const date = new Date(isoString)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+}
+
+const prevFinanceLogsPage = () => {
+  if (financeLogsOffset.value > 0) {
+    financeLogsOffset.value = Math.max(0, financeLogsOffset.value - financeLogsLimit.value)
+    loadFinanceLogs()
+  }
+}
+
+const nextFinanceLogsPage = () => {
+  if (financeLogsOffset.value + financeLogsLimit.value < financeLogsTotal.value) {
+    financeLogsOffset.value += financeLogsLimit.value
+    loadFinanceLogs()
+  }
+}
+
+// Agent prompts management functions
+const loadAgentPrompts = async () => {
+  agentPromptsLoading.value = true
+  try {
+    const { fetchAgentPrompts } = await import('../services/financeService')
+    const data = await fetchAgentPrompts({})
+    agentPrompts.value = data.prompts || []
+  } catch (error) {
+    showError(error.message || 'Agent 프롬프트를 불러올 수 없습니다')
+  } finally {
+    agentPromptsLoading.value = false
+  }
+}
+
+const toggleAgentPromptEdit = (agentType) => {
+  if (editingAgentType.value === agentType) {
+    editingAgentType.value = null
+    editingAgentData.value = {
+      name: '',
+      description: '',
+      system_prompt: '',
+      is_active: true
+    }
+  } else {
+    const agent = agentPrompts.value.find(a => a.agent_type === agentType)
+    if (agent) {
+      editingAgentType.value = agentType
+      editingAgentData.value = {
+        name: agent.name,
+        description: agent.description,
+        system_prompt: agent.system_prompt,
+        is_active: agent.is_active
+      }
+    }
+  }
+}
+
+const saveAgentPrompt = async (agentType) => {
+  try {
+    const { updateAgentPrompt } = await import('../services/financeService')
+    await updateAgentPrompt({
+      agentType,
+      name: editingAgentData.value.name,
+      description: editingAgentData.value.description,
+      systemPrompt: editingAgentData.value.system_prompt,
+      isActive: editingAgentData.value.is_active
+    })
+    showSuccess('Agent 프롬프트가 업데이트되었습니다')
+    editingAgentType.value = null
+    await loadAgentPrompts()
+  } catch (error) {
+    showError(error.message || 'Agent 프롬프트 업데이트에 실패했습니다')
+  }
+}
+
+const initializeAgentPrompts = async () => {
+  try {
+    const { initializeAgentPrompts } = await import('../services/financeService')
+    await initializeAgentPrompts({})
+    showSuccess('기본 Agent 프롬프트가 초기화되었습니다')
+    await loadAgentPrompts()
+  } catch (error) {
+    showError(error.message || 'Agent 프롬프트 초기화에 실패했습니다')
+  }
+}
 
 // (fee management removed)
 
@@ -2762,6 +3140,20 @@ onMounted(async () => {
     } finally {
       routingUpdateLoading.value = false
     }
+  }
+  // Load finance data if finance tab is active
+  if (activeTab.value === 'finance') {
+    await loadFinanceLogs()
+    await loadFinanceStats()
+  }
+})
+
+// Watch for tab changes to load finance data
+watch(activeTab, async (newTab) => {
+  if (newTab === 'finance') {
+    await loadFinanceLogs()
+    await loadFinanceStats()
+    await loadAgentPrompts()
   }
 })
 

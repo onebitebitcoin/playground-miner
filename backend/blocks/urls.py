@@ -7,6 +7,7 @@ urlpatterns = [
     path('mine', views.mine_view, name='mine'),
     path('stream', views.stream_view, name='stream'),
     path('finance/historical-returns', views.finance_historical_returns_view, name='finance_historical_returns'),
+    path('finance/yearly-closing-prices', views.finance_yearly_closing_prices_view, name='finance_yearly_closing_prices'),
     # Accept both with/without trailing slash
     re_path(r'^register_nick/?$', views.register_nick_view, name='register_nick'),
     re_path(r'^check_nick/?$', views.check_nick_view, name='check_nick'),
@@ -52,4 +53,10 @@ urlpatterns = [
     path('wallet/password/admin', views.admin_set_wallet_password_view, name='admin_set_wallet_password'),
     path('wallet/password/check', views.wallet_password_check_view, name='wallet_password_check'),
     path('wallet/password/admin/get', views.admin_get_wallet_password_view, name='admin_get_wallet_password'),
+    # Finance management endpoints
+    path('finance/admin/logs', views.admin_finance_logs_view, name='admin_finance_logs'),
+    path('finance/admin/stats', views.admin_finance_stats_view, name='admin_finance_stats'),
+    # Agent prompt management endpoints
+    path('finance/admin/agent-prompts', views.admin_agent_prompts_view, name='admin_agent_prompts'),
+    path('finance/admin/agent-prompts/<str:agent_type>', views.admin_agent_prompt_detail_view, name='admin_agent_prompt_detail'),
 ]

@@ -475,3 +475,108 @@ class SidebarConfig(models.Model):
             'wallet_password_set': bool(self.wallet_password_hash),
             'updated_at': self.updated_at.isoformat(),
         }
+
+
+class FinanceQueryCache(models.Model):
+    """Cache for frequently used finance queries"""
+    query_key = models.CharField(max_length=255, unique=True, db_index=True)
+    context_key = models.CharField(max_length=50, blank=True, default='')  # e.g., 'us_bigtech', 'kr_equity'
+    start_year = models.PositiveSmallIntegerField()
+    end_year = models.PositiveSmallIntegerField()
+    series_data = models.JSONField()  # Cached series with pre-calculated CAGR
+    fx_rate = models.DecimalField(max_digits=10, decimal_places=4, default=1300)
+    hit_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    expires_at = models.DateTimeField()  # Cache expiration
+
+    class Meta:
+        ordering = ['-hit_count', '-updated_at']
+        indexes = [
+            models.Index(fields=['query_key']),
+            models.Index(fields=['context_key']),
+            models.Index(fields=['expires_at']),
+        ]
+
+    def __str__(self):
+        return f"Cache<{self.context_key}> {self.start_year}-{self.end_year} (hits: {self.hit_count})"
+
+    def as_dict(self):
+        return {
+            'start_year': self.start_year,
+            'end_year': self.end_year,
+            'series': self.series_data,
+            'fx_rate': float(self.fx_rate),
+        }
+
+    def increment_hit(self):
+        """Increment hit count"""
+        self.hit_count += 1
+        self.save(update_fields=['hit_count', 'updated_at'])
+
+
+class FinanceQueryLog(models.Model):
+    """Log for finance query requests"""
+    user_identifier = models.CharField(max_length=255, blank=True, default='')  # IP or username
+    prompt = models.TextField()  # User's prompt
+    quick_requests = models.JSONField(default=list, blank=True)  # Quick request buttons
+    context_key = models.CharField(max_length=50, blank=True, default='')  # e.g., 'us_bigtech', 'kr_equity'
+    success = models.BooleanField(default=False)  # Whether query succeeded
+    error_message = models.TextField(blank=True, default='')  # Error if failed
+    assets_count = models.PositiveSmallIntegerField(default=0)  # Number of assets analyzed
+    processing_time_ms = models.PositiveIntegerField(null=True, blank=True)  # Processing time in milliseconds
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['created_at']),
+            models.Index(fields=['user_identifier']),
+            models.Index(fields=['success']),
+        ]
+
+    def __str__(self):
+        status = "✓" if self.success else "✗"
+        return f"{status} [{self.created_at.strftime('%Y-%m-%d %H:%M')}] {self.user_identifier}: {self.prompt[:50]}"
+
+
+class AgentPrompt(models.Model):
+    """Agent system prompts for finance analysis"""
+    AGENT_CHOICES = [
+        ('intent_classifier', 'Intent Classifier Agent'),
+        ('price_retriever', 'Price Retriever Agent'),
+        ('calculator', 'Calculator Agent'),
+        ('guardrail', 'Guardrail Agent'),
+    ]
+
+    agent_type = models.CharField(max_length=50, choices=AGENT_CHOICES, unique=True, db_index=True)
+    name = models.CharField(max_length=100)  # Display name in Korean/English
+    description = models.TextField(blank=True, default='')  # Agent description
+    system_prompt = models.TextField()  # System prompt for the agent
+    is_active = models.BooleanField(default=True)  # Whether this agent is active
+    version = models.PositiveIntegerField(default=1)  # Version tracking
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['agent_type']
+        indexes = [
+            models.Index(fields=['agent_type']),
+            models.Index(fields=['is_active']),
+        ]
+
+    def __str__(self):
+        return f"{self.name} (v{self.version})"
+
+    def as_dict(self):
+        return {
+            'id': self.id,
+            'agent_type': self.agent_type,
+            'name': self.name,
+            'description': self.description,
+            'system_prompt': self.system_prompt,
+            'is_active': self.is_active,
+            'version': self.version,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat(),
+        }

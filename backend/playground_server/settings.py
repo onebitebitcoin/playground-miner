@@ -1,8 +1,12 @@
 import os
 from pathlib import Path
-from decouple import config
+from decouple import Config, RepositoryEnv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load .env from project root (two levels up from settings.py)
+env_path = BASE_DIR.parent / '.env'
+config = Config(RepositoryEnv(env_path)) if env_path.exists() else Config()
 
 # Load environment variables
 SECRET_KEY = config('SECRET_KEY', default='dev-secret-key-change-in-production')
@@ -77,6 +81,9 @@ OPENAI_API_BASE = config('OPENAI_API_BASE', default='https://api.openai.com/v1')
 OPENAI_MODEL = config('OPENAI_MODEL', default='gpt-4o-mini')
 ECOS_API_KEY = config('ECOS_API_KEY', default='')
 
+# FRED API for M2 Money Supply data
+FRED_API_KEY = config('FRED_API_KEY', default='')
+
 # Note: No global caching configured to avoid stale heights on real-time UI
 
 # Logging configuration for encryption operations
@@ -89,12 +96,22 @@ LOGGING = {
             'class': 'logging.FileHandler',
             'filename': BASE_DIR / 'security.log',
         },
+        'backend_file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'backend.log',
+        },
         'console': {
             'level': 'INFO',
             'class': 'logging.StreamHandler',
         },
     },
     'loggers': {
+        'backend': {
+            'handlers': ['backend_file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
         'blocks.encryption': {
             'handlers': ['file', 'console'],
             'level': 'INFO',
