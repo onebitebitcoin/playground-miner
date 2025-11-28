@@ -3252,13 +3252,14 @@ class IntentClassifierAgent:
             "- 'label': The display name (e.g., 'Samsung Electronics', 'Bitcoin', 'US M2 Money Supply'). "
             "- 'type': One of 'crypto', 'kr_stock', 'us_stock', 'index', 'commodity', 'forex', 'bond', 'economic_indicator'. "
             "- 'calculation_method': REQUIRED. Determine from user's request:\n"
-            "  * 'cagr' (default): If user asks for '연평균', 'CAGR', 'annualized', '평균 수익률', '수익률 비교'\n"
-            "  * 'cumulative': If user asks for '누적', 'total return', '총 상승률', '전체 상승률'\n"
+            "  * 'price': If user asks for '가격' (price), '종가' (close price), '연말 가격' (year-end price), '시세', '얼마', '지수' (index level). This takes precedence if the user asks for values rather than returns.\n"
             "  * 'yearly_growth': If user asks for '전년 대비', '증감률', 'YoY', '성장률', '변동률'\n"
-            "  * 'price': If user asks for '가격', '종가', '시세', 'price', '얼마'\n"
+            "  * 'cumulative': If user asks for '누적', 'total return', '총 상승률', '전체 상승률'\n"
+            "  * 'cagr' (default): If user asks for '연평균', 'CAGR', 'annualized', '평균 수익률', '수익률 비교', or general performance comparison.\n"
             "  * If unclear, use 'cagr' as default.\n"
             "If the user asks for a group (e.g., 'US Big Tech'), expand it into individual representative stocks (max 10). "
-            "IMPORTANT: The 'calculation_method' should be the SAME for all assets unless the user specifically requests different methods for different assets. "
+            "IMPORTANT: If the user asks for 'price' (가격/종가) or 'year-end price', do NOT classify as 'cagr' or 'cumulative'. Classify as 'price'. "
+            "The 'calculation_method' should be the SAME for all assets. "
             "Return ONLY a JSON object with keys 'assets' (list) and 'calculation_method' (string: 'cagr', 'cumulative', 'yearly_growth', or 'price')."
         )
 
