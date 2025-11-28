@@ -128,19 +128,18 @@
           :colors="colorMap"
           :currency-mode="'usd'"
           :fx-rate="fxRate"
-          :price-data="yearlyPriceMap"
           :loading="loading"
-          :loading-progress="loadingProgress"
-          :logs="progressLogs"
-          :start-year="displayStartYear"
+          :logs="analysisLogs"
+          :start-year="displayStartYear || sliderMinYear"
           :end-year="analysis?.end_year"
-          :original-start-year="analysis?.start_year"
-          :show-year-slider="!loading && !!analysis"
-          :show-tax-toggle="showTaxToggle"
+          :original-start-year="sliderMinYear"
+          :show-year-slider="!!analysis"
           :tax-included="includeTax"
+          :show-tax-toggle="true"
+          :price-data="priceTableData"
           :calculation-method="analysisResultType"
           @update:start-year="displayStartYear = $event"
-          @toggle-tax="includeTax = $event"
+          @toggle-tax="includeTax = !includeTax"
         />
 
         <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-4" v-if="!loading">
@@ -450,19 +449,20 @@ const promptIncludesBitcoin = computed(() => {
   return combined.includes('비트코인') || combined.includes('bitcoin') || combined.includes('btc')
 })
 
+const sliderMinYear = computed(() => {
+  if (!analysis.value?.start_year) return null
+  // For return/growth modes, the first year is the baseline, so slider starts from next year
+  if (analysisResultType.value !== 'price') {
+    return analysis.value.start_year + 1
+  }
+  return analysis.value.start_year
+})
+
 const filteredSeries = computed(() => {
   if (!analysis.value?.series?.length) return []
   
-  let effectiveStartYear = displayStartYear.value || analysis.value?.start_year
-  const datasetStartYear = analysis.value?.start_year
-
-  // General Rule: If the effective start year is the same as the dataset's absolute start year,
-  // and we are in a return/growth mode (not 'price'),
-  // we skip this first year to avoid showing a "0%" start point.
-  // The first year serves as the baseline (anchor) for the next year's calculation.
-  if (datasetStartYear && effectiveStartYear === datasetStartYear && analysisResultType.value !== 'price') {
-    effectiveStartYear += 1
-  }
+  // Use sliderMinYear as the default if displayStartYear is not set
+  let effectiveStartYear = displayStartYear.value || sliderMinYear.value
 
   const baseSeries = analysis.value.series.filter((series) => promptIncludesBitcoin.value || !isBitcoinLabel(series?.label))
   if (!effectiveStartYear) return baseSeries
@@ -978,7 +978,9 @@ async function runAnalysis() {
 
     analysis.value = result
     analysisResultType.value = result.calculation_method || 'cagr'
-    displayStartYear.value = result.start_year
+    // Initialize display start year based on calculation method
+    // For CAGR/Growth, start from next year (hide base year)
+    displayStartYear.value = (result.calculation_method !== 'price') ? result.start_year + 1 : result.start_year
     hiddenSeries.value = new Set()
 
     // Use the yearly prices returned directly by the agent system
