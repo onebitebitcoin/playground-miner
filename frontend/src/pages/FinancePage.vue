@@ -452,16 +452,15 @@ const promptIncludesBitcoin = computed(() => {
 
 const filteredSeries = computed(() => {
   if (!analysis.value?.series?.length) return []
-  let actualStartYear = displayStartYear.value || analysis.value?.start_year
-  let effectiveStartYear = actualStartYear
+  
+  let effectiveStartYear = displayStartYear.value || analysis.value?.start_year
 
   // If it's a 10-year period (e.g., 2015-2025, which is 11 years including start year),
-  // increment the effective start year by 1 to skip the first year.
-  // This assumes the first year might have incomplete data and the user wants to start from the next year.
-  if (analysis.value?.start_year && analysis.value?.end_year &&
-      (analysis.value.end_year - analysis.value.start_year + 1) === 11 &&
-      effectiveStartYear === analysis.value.start_year) {
-    effectiveStartYear += 1
+  // increment the effective start year by 1 to skip the first year ONLY if user hasn't manually selected a year.
+  // This provides the "Start from 2016" default behavior for "Last 10 years" request.
+  if (!displayStartYear.value && analysis.value?.start_year && analysis.value?.end_year &&
+      (analysis.value.end_year - analysis.value.start_year + 1) === 11) {
+    effectiveStartYear = analysis.value.start_year + 1
   }
 
   const baseSeries = analysis.value.series.filter((series) => promptIncludesBitcoin.value || !isBitcoinLabel(series?.label))
@@ -470,25 +469,27 @@ const filteredSeries = computed(() => {
   return baseSeries.map((series) => {
     const allSortedPoints = [...series.points].sort((a, b) => a.year - b.year)
     
-    // Determine the base point for calculation (typically 2015)
-    // If the actual start year point exists, use it as base.
-    // Otherwise, fall back to the first visible point.
-    const basePoint = allSortedPoints.find(p => p.year === actualStartYear)
-    
-    // Filter points for display (typically 2016+)
+    // Filter points for display (typically 2016+ or whatever user selected)
     const filteredPoints = allSortedPoints.filter((point) => point.year >= effectiveStartYear)
     
     if (filteredPoints.length === 0) return null
 
+    // Determine the base point for calculation.
+    // ideally we want the year BEFORE the effective start year (e.g. 2015 for 2016 start).
+    const targetBaseYear = effectiveStartYear - 1
+    let basePoint = allSortedPoints.find(p => p.year === targetBaseYear)
+    
     let startMultiple
     let baseYear
     
-    // If we have a valid base point from the actual start year (hidden year), use it
+    // If we found the previous year's data, use it as base
     if (basePoint && Number.isFinite(basePoint.multiple)) {
       startMultiple = Number(basePoint.multiple)
-      baseYear = actualStartYear
+      baseYear = targetBaseYear
     } else {
-      // Fallback: Use first visible point as base
+      // Fallback: Use the first visible point (effectiveStartYear) as base.
+      // This happens if user selects the very first available year (e.g. 2015).
+      // In this case, the first point will start at 0%.
       if (filteredPoints.length < 2 && analysisResultType.value !== 'price') return null
       startMultiple = Number(filteredPoints[0].multiple)
       baseYear = filteredPoints[0].year
