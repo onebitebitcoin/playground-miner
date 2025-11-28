@@ -28,7 +28,7 @@
       <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-5">
         <div class="flex flex-col gap-1">
           <h3 class="text-base font-semibold text-slate-900">
-            {{ analysisResultType === 'cumulative' ? '자산의 누적 수익률 분석' : '비트코인의 연평균 상승률은?' }}
+            {{ analysisResultType === 'price' ? '자산의 가격 분석' : analysisResultType === 'cumulative' ? '자산의 누적 수익률 분석' : analysisResultType === 'yearly_growth' ? '자산의 전년 대비 증감률 분석' : '비트코인의 연평균 상승률은?' }}
           </h3>
         </div>
 
@@ -76,7 +76,7 @@
                 v-model="prompt"
                 type="text"
                 class="flex-1 rounded-2xl border border-slate-200 px-4 py-2.5 text-sm focus:ring-2 focus:ring-slate-900 focus:border-slate-900 disabled:bg-slate-50 disabled:text-slate-400"
-                placeholder="예) 비트코인과 금/미국 국채의 지난 10년 연평균 수익률을 비교해줘"
+                placeholder="예) 비트코인과 금/미국 국채의 지난 10년 연평균 상승률을 비교해줘"
                 :disabled="loading"
                 @keyup.enter.prevent="runAnalysis"
               />
@@ -147,7 +147,7 @@
           <div class="flex items-center justify-between">
             <h4 class="text-sm font-semibold text-slate-900">범례</h4>
             <span class="text-[11px] text-slate-500">
-              {{ analysisResultType === 'cumulative' ? '누적 수익률' : '연평균 수익률' }} 순서로 정렬
+              {{ analysisResultType === 'price' ? '가격 상승률' : analysisResultType === 'cumulative' ? '누적 수익률' : analysisResultType === 'yearly_growth' ? '전년 대비 증감률' : '연평균 상승률' }} 순서로 정렬
             </span>
           </div>
           <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
@@ -176,7 +176,7 @@
                 </div>
               </div>
               <div class="text-xs text-slate-500 text-right">
-                <p>연평균 {{ formatPercent(series.annualized_return_pct) }}</p>
+                <p>{{ analysisResultType === 'price' ? '가격 상승률' : analysisResultType === 'yearly_growth' ? '평균 증감률' : '연평균' }} {{ formatPercent(series.annualized_return_pct) }}</p>
                 <p>{{ formatMultiple(series.multiple_from_start) }}배</p>
               </div>
             </button>
@@ -191,7 +191,7 @@
           class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-3"
         >
           <div class="text-sm font-semibold text-slate-900">
-            {{ analysisResultType === 'cumulative' ? '연도별 누적 수익률 비교' : '연도별 연평균 수익률 비교' }}
+            {{ analysisResultType === 'price' ? '연도별 가격 비교' : analysisResultType === 'cumulative' ? '연도별 누적 수익률 비교' : analysisResultType === 'yearly_growth' ? '연도별 전년 대비 증감률 비교' : '연도별 연평균 상승률 비교' }}
           </div>
           <div class="overflow-x-auto">
             <table class="min-w-full table-fixed text-xs text-slate-600 border-collapse">
@@ -219,7 +219,8 @@
                   <td
                     v-for="year in tableYears"
                     :key="`ret-cell-${series.id}-${year}`"
-                    class="py-2 px-2 text-right font-mono text-slate-600"
+                    class="py-2 px-2 text-right font-mono"
+                    :class="getReturnCellClass(series, year)"
                   >
                     {{ getReturnForYear(series, year) }}
                   </td>
@@ -227,84 +228,6 @@
               </tbody>
             </table>
           </div>
-        </div>
-
-        <div
-          v-if="!loading && tableYears.length && sortedLegend.length"
-          class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-3"
-        >
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="text-sm font-semibold text-slate-900">연도별 종가 비교</div>
-            <div class="flex items-center gap-2">
-              <span class="text-[11px] text-slate-500">표시 통화</span>
-              <div class="inline-flex bg-slate-100 rounded-2xl p-1">
-                <button
-                  class="px-3 py-1 rounded-xl text-[11px] font-semibold transition"
-                  :class="priceDisplayMode === 'usd' ? 'bg-white text-slate-900 shadow' : 'text-slate-500'"
-                  @click="priceDisplayMode = 'usd'"
-                >
-                  USD
-                </button>
-                <button
-                  class="px-3 py-1 rounded-xl text-[11px] font-semibold transition"
-                  :class="priceDisplayMode === 'krw' ? 'bg-white text-slate-900 shadow' : 'text-slate-500'"
-                  @click="priceDisplayMode = 'krw'"
-                >
-                  KRW
-                </button>
-              </div>
-            </div>
-          </div>
-          <p v-if="priceTableLoading" class="text-[11px] text-slate-500">연도별 종가 데이터를 불러오는 중입니다...</p>
-          <p v-else-if="priceTableError" class="text-[11px] text-rose-600">{{ priceTableError }}</p>
-          <div class="overflow-x-auto">
-            <table class="min-w-full table-fixed text-xs text-slate-600 border-collapse">
-              <thead>
-                <tr class="bg-slate-50 text-slate-500">
-                  <th class="py-2 px-2 text-left font-medium w-40">자산</th>
-                  <th
-                    v-for="year in tableYears"
-                    :key="`year-${year}`"
-                    class="py-2 px-2 text-right font-medium"
-                  >
-                    {{ year }}년
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="series in sortedLegend"
-                  :key="`table-${series.id}`"
-                  class="border-t border-slate-100"
-                >
-                  <td class="py-2 px-2 text-left font-semibold text-slate-700">
-                    {{ series.label }}
-                  </td>
-                  <td
-                    v-for="year in tableYears"
-                    :key="`cell-${series.id}-${year}`"
-                    class="py-2 px-2 text-right font-mono text-slate-600"
-                  >
-                    <a
-                      v-if="formatPriceCell(series, year).url"
-                      :href="formatPriceCell(series, year).url"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="text-blue-600 hover:text-blue-800 underline decoration-dotted underline-offset-2"
-                    >
-                      {{ formatPriceCell(series, year).text }}
-                    </a>
-                    <span v-else>
-                      {{ formatPriceCell(series, year).text }}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p class="text-[11px] text-slate-500">
-            종가 데이터 출처: <span v-html="dataSourcesText"></span>
-          </p>
         </div>
       </div>
 
@@ -360,72 +283,72 @@ const tabs = [
 const quickRequestOptions = [
   {
     key: 'safe_cagr',
-    label: '대표 자산 연평균 수익률',
-    example: '비트코인과 대표 자산의 10년 연평균 수익률을 비교해줘',
-    quickRequest: '비트코인, 금, 미국 10년물 국채, 은, S&P 500, 다우지수, 나스닥 100, 달러지수, 원유, 구리의 10년 연평균 수익률을 비교해줘',
+    label: '대표 자산 연평균 상승률',
+    example: '비트코인과 대표 자산의 10년 연평균 상승률을 비교해줘',
+    quickRequest: '비트코인, 금, 미국 10년물 국채, 은, S&P 500, 다우지수, 나스닥 100, 달러지수, 원유, 구리의 10년 연평균 상승률을 비교해줘. 데이터 10개를 가져와줘',
     context: 'safe_assets'
   },
   {
     key: 'us_tech_cagr',
-    label: '미국 빅테크 연평균 수익률',
-    example: '비트코인과 미국 빅테크 기업의 10년 연평균 수익률을 비교해줘',
-    quickRequest: '비트코인과 미국 빅테크 10개 종목(애플, 마이크로소프트, 알파벳, 아마존, 메타, 테슬라, 엔비디아, 넷플릭스, 어도비, AMD)의 10년 연평균 수익률을 비교해줘',
+    label: '미국 빅테크 연평균 상승률',
+    example: '비트코인과 미국 빅테크 기업의 10년 연평균 상승률을 비교해줘',
+    quickRequest: '비트코인과 미국 빅테크 10개 종목(애플, 마이크로소프트, 알파벳, 아마존, 메타, 테슬라, 엔비디아, 넷플릭스, 어도비, AMD)의 10년 연평균 상승률을 비교해줘. 데이터 10개를 가져와줘',
     context: 'us_bigtech'
   },
   {
     key: 'kr_equity_cagr',
-    label: '국내 주식 연평균 수익률',
-    example: '비트코인과 국내 대표 주식의 10년 연평균 수익률을 비교해줘',
-    quickRequest: '비트코인과 삼성전자, SK하이닉스, NAVER, 카카오, LG에너지솔루션, 현대차, 기아, 삼성바이오로직스, 삼성SDI, 포스코홀딩스의 10년 연평균 수익률을 비교해줘',
+    label: '국내 주식 연평균 상승률',
+    example: '비트코인과 국내 대표 주식의 10년 연평균 상승률을 비교해줘',
+    quickRequest: '비트코인과 삼성전자, SK하이닉스, NAVER, 카카오, LG에너지솔루션, 현대차, 기아, 삼성바이오로직스, 삼성SDI, 포스코홀딩스의 10년 연평균 상승률을 비교해줘. 데이터 10개를 가져와줘',
     context: 'kr_equity'
   },
   {
     key: 'safe_price',
     label: '대표 자산 연말 가격',
     example: '비트코인과 대표 자산의 연도별 연말 가격을 알려줘',
-    quickRequest: '비트코인, 금, 미국 10년물 국채, 은, S&P 500, 다우지수, 나스닥 100, 달러지수, 원유, 구리의 연도별 연말 가격을 알려줘',
+    quickRequest: '비트코인, 금, 미국 10년물 국채, 은, S&P 500, 다우지수, 나스닥 100, 달러지수, 원유, 구리의 연도별 연말 가격을 알려줘. 데이터 10개를 가져와줘',
     context: 'safe_assets'
   },
   {
     key: 'us_tech_price',
     label: '미국 빅테크 연말 가격',
     example: '비트코인과 미국 빅테크 기업의 연말 가격을 알려줘',
-    quickRequest: '비트코인과 미국 빅테크 10개 종목의 연도별 연말 가격을 알려줘',
+    quickRequest: '비트코인과 미국 빅테크 10개 종목의 연도별 연말 가격을 알려줘. 데이터 10개를 가져와줘',
     context: 'us_bigtech'
   },
   {
     key: 'kr_equity_price',
     label: '국내 주식 연말 가격',
     example: '비트코인과 국내 대표 주식의 연말 가격을 알려줘',
-    quickRequest: '비트코인과 삼성전자, SK하이닉스, NAVER, 카카오, LG에너지솔루션, 현대차, 기아, 삼성바이오로직스, 삼성SDI, 포스코홀딩스의 연도별 연말 가격을 알려줘',
+    quickRequest: '비트코인과 삼성전자, SK하이닉스, NAVER, 카카오, LG에너지솔루션, 현대차, 기아, 삼성바이오로직스, 삼성SDI, 포스코홀딩스의 연도별 연말 가격을 알려줘. 데이터 10개를 가져와줘',
     context: 'kr_equity'
   },
   {
     key: 'safe_yoy',
     label: '대표 자산 전년 대비 증감률',
     example: '비트코인과 대표 자산의 전년 대비 증감률을 비교해줘',
-    quickRequest: '비트코인, 금, 미국 10년물 국채, 은, S&P 500, 다우지수, 나스닥 100, 달러지수, 원유, 구리의 전년 대비 증감률을 비교해줘',
+    quickRequest: '비트코인, 금, 미국 10년물 국채, 은, S&P 500, 다우지수, 나스닥 100, 달러지수, 원유, 구리의 전년 대비 증감률을 비교해줘. 데이터 10개를 가져와줘',
     context: 'safe_assets'
   },
   {
     key: 'us_tech_yoy',
     label: '미국 빅테크 전년 대비 증감률',
     example: '비트코인과 미국 빅테크의 전년 대비 증감률을 비교해줘',
-    quickRequest: '비트코인과 미국 빅테크 10개 종목의 전년 대비 증감률을 비교해줘',
+    quickRequest: '비트코인과 미국 빅테크 10개 종목의 전년 대비 증감률을 비교해줘. 데이터 10개를 가져와줘',
     context: 'us_bigtech'
   },
   {
     key: 'kr_equity_yoy',
     label: '국내 주식 전년 대비 증감률',
     example: '비트코인과 국내 주식의 전년 대비 증감률을 비교해줘',
-    quickRequest: '비트코인과 삼성전자, SK하이닉스, NAVER, 카카오, LG에너지솔루션, 현대차, 기아, 삼성바이오로직스, 삼성SDI, 포스코홀딩스의 전년 대비 증감률을 비교해줘',
+    quickRequest: '비트코인과 삼성전자, SK하이닉스, NAVER, 카카오, LG에너지솔루션, 현대차, 기아, 삼성바이오로직스, 삼성SDI, 포스코홀딩스의 전년 대비 증감률을 비교해줘. 데이터 10개를 가져와줘',
     context: 'kr_equity'
   },
   {
     key: 'm2Compare',
     label: 'M2 통화량 비교',
     example: '미국/한국 M2 통화량 증가율과 비트코인을 비교해줘',
-    quickRequest: '지난 10년간 미국의 M2 통화량 연평균 상승률과 한국의 M2 연평균 상승률, 비트코인을 비교해줘',
+    quickRequest: '지난 10년간 미국의 M2 통화량 연평균 상승률과 한국의 M2 연평균 상승률, 비트코인을 비교해줘. 데이터 10개를 가져와줘',
     context: 'm2_compare'
   }
 ]
@@ -514,7 +437,7 @@ const defaultSummary = computed(() => {
   if (analysisResultType.value === 'cumulative') {
     return `${period} 누적 수익률입니다.`
   }
-  return `${period} 연평균 수익률입니다.`
+  return `${period} 연평균 상승률입니다.`
 })
 
 const promptIncludesBitcoin = computed(() => {
@@ -568,6 +491,16 @@ const filteredSeries = computed(() => {
       if (!Number.isFinite(normalizedMultiple) || normalizedMultiple <= 0) {
         normalizedMultiple = 1
       }
+
+      // For price mode, keep the original value (actual price)
+      if (analysisResultType.value === 'price') {
+        return {
+          ...point,
+          multiple: normalizedMultiple,
+          value: point.value // Keep original price value
+        }
+      }
+
       const yearsElapsed = point.year - sortedPoints[0].year
       let recalculatedValue = 0
       if (yearsElapsed > 0) {
@@ -749,7 +682,36 @@ function formatPercent(value) {
 function getReturnForYear(series, year) {
   const point = series.points?.find(p => p.year === year)
   if (!point || typeof point.value !== 'number') return '-'
+
+  // For price mode, display actual price instead of percentage
+  if (analysisResultType.value === 'price') {
+    const symbol = series.unit?.toUpperCase() === 'KRW' ? '₩' : series.unit?.toUpperCase() === 'USD' ? '$' : ''
+    const formatted = priceFormatter.format(point.value)
+    return symbol ? `${symbol}${formatted}` : formatted
+  }
+
   return formatPercent(point.value)
+}
+
+function getReturnCellClass(series, year) {
+  // Only apply color for yearly_growth mode
+  if (analysisResultType.value !== 'yearly_growth') {
+    return 'text-slate-600'
+  }
+
+  const point = series.points?.find(p => p.year === year)
+  if (!point || typeof point.value !== 'number') {
+    return 'text-slate-600'
+  }
+
+  // Negative: blue, Positive: red, Zero: default
+  if (point.value < 0) {
+    return 'text-blue-600 font-semibold'
+  } else if (point.value > 0) {
+    return 'text-red-600 font-semibold'
+  } else {
+    return 'text-slate-600'
+  }
 }
 
 function formatMultiple(value) {
