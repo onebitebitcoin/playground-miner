@@ -185,6 +185,50 @@
             데이터 출처: <span v-html="dataSourcesText"></span>
           </p>
         </div>
+
+        <div
+          v-if="!loading && tableYears.length && sortedLegend.length"
+          class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-3"
+        >
+          <div class="text-sm font-semibold text-slate-900">
+            {{ analysisResultType === 'cumulative' ? '연도별 누적 수익률 비교' : '연도별 연평균 수익률 비교' }}
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full table-fixed text-xs text-slate-600 border-collapse">
+              <thead>
+                <tr class="bg-slate-50 text-slate-500">
+                  <th class="py-2 px-2 text-left font-medium w-40">자산</th>
+                  <th
+                    v-for="year in tableYears"
+                    :key="`ret-year-${year}`"
+                    class="py-2 px-2 text-right font-medium"
+                  >
+                    {{ year }}년
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="series in sortedLegend"
+                  :key="`ret-table-${series.id}`"
+                  class="border-t border-slate-100"
+                >
+                  <td class="py-2 px-2 text-left font-semibold text-slate-700">
+                    {{ series.label }}
+                  </td>
+                  <td
+                    v-for="year in tableYears"
+                    :key="`ret-cell-${series.id}-${year}`"
+                    class="py-2 px-2 text-right font-mono text-slate-600"
+                  >
+                    {{ getReturnForYear(series, year) }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div
           v-if="!loading && tableYears.length && sortedLegend.length"
           class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-3"
@@ -658,6 +702,12 @@ function handleQuickRequest(option) {
 function formatPercent(value) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '0.0%'
   return `${value.toFixed(1)}%`
+}
+
+function getReturnForYear(series, year) {
+  const point = series.points?.find(p => p.year === year)
+  if (!point || typeof point.value !== 'number') return '-'
+  return formatPercent(point.value)
 }
 
 function formatMultiple(value) {
