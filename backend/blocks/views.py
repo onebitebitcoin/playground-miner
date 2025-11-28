@@ -3293,6 +3293,19 @@ class IntentClassifierAgent:
             assets = parsed.get('assets', [])
             calculation_method = parsed.get('calculation_method', 'cagr')
 
+            # Heuristic override for calculation_method if keywords are strong
+            prompt_lower = combined_prompt.lower()
+            if '전년' in prompt_lower or '증감률' in prompt_lower or 'yoy' in prompt_lower:
+                if calculation_method != 'yearly_growth':
+                    logs.append(f"[의도 분석] 키워드 감지로 계산 방식 보정: {calculation_method} -> yearly_growth")
+                    calculation_method = 'yearly_growth'
+            elif '가격' in prompt_lower or '종가' in prompt_lower or '시세' in prompt_lower or 'price' in prompt_lower:
+                # '수익률', '상승률'이 없을 때만 가격으로 판단 (e.g. '가격 상승률'은 수익률임)
+                if '수익률' not in prompt_lower and '상승률' not in prompt_lower:
+                    if calculation_method != 'price':
+                        logs.append(f"[의도 분석] 키워드 감지로 계산 방식 보정: {calculation_method} -> price")
+                        calculation_method = 'price'
+
             # Basic validation/cleanup
             clean_assets = []
             for a in assets:
