@@ -2886,10 +2886,17 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculati
     """
     if not history:
         return None
+
+    current_year = datetime.utcnow().year
+    # Allow current year data even if end_year < current_year
+    # This ensures we render the chart up to the latest available point
+    effective_end_year = max(end_year, current_year)
+
     yearly_prices = {}
     for dt, value in history:
         year = dt.year
-        if year < start_year or year > end_year:
+        # Use effective_end_year to include current year data
+        if year < start_year or year > effective_end_year:
             continue
         prev = yearly_prices.get(year)
         if not prev or dt > prev[0]:
