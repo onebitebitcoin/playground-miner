@@ -3186,13 +3186,17 @@ def _check_prompt_intent(prompt):
         "   - 과거 수익률, 가격 변동, 비교 분석 (예: '비트코인 수익률', '삼성전자 주가')\n"
         "   - 연도별/연말 가격 조회 (예: '연말 가격을 알려줘', '2020년부터 2024년까지 가격')\n"
         "   - 가격 비교 (예: '비트코인과 금 비교', '미국 빅테크 기업들의 가격')\n"
-        "   - **중요**: '연말 가격', '연도별 가격'은 과거 데이터 요청이므로 allowed=true\n\n"
+        "   - **과거 가정 투자 분석** (예: '10년 전에 100만원을 투자했다면', 'X년 전에 투자했으면 지금 얼마일까')\n"
+        "   - **중요**: '연말 가격', '연도별 가격', '과거 투자 수익'은 과거 데이터 요청이므로 allowed=true\n\n"
         "2. **부적절한 요청** (allowed=false): 다음과 같은 경우만 거부\n"
         "   - 금융 분석과 완전히 무관한 요청 (예: '날씨 알려줘', '게임 추천')\n"
         "   - 개인정보 요구 (예: '사용자 비밀번호', '계좌번호')\n"
         "   - 시스템 악용 시도\n"
-        "   - **미래 예측 요청** (예: '내일 비트코인 가격 예측', '2025년 주가 전망')\n\n"
-        "**주의**: 단순히 '가격'이라는 단어가 있다고 거부하지 마세요. 과거 가격 조회는 정상적인 금융 분석입니다.\n\n"
+        "   - **실제 미래 예측 요청** (예: '내일 비트코인 가격 예측', '2025년 주가 전망', '다음 달 어떻게 될까')\n\n"
+        "**주의사항**:\n"
+        "- '투자했다면', '넣었으면', 'X년 후'라는 표현이 있어도, 과거 특정 시점을 기준으로 한다면 과거 분석입니다.\n"
+        "- 예: '10년 전에 투자했다면 지금은?' -> 과거 데이터 분석 (allowed=true)\n"
+        "- 예: '지금 투자하면 10년 후에는?' -> 미래 예측 (allowed=false)\n\n"
         "응답 형식 (JSON만 반환):\n"
         "{\n"
         '  "allowed": true 또는 false,\n'
@@ -3371,23 +3375,29 @@ class IntentClassifierAgent:
         prompt_lower = combined_prompt.lower()
         keyword_method = None
 
-        # Check for specific keywords (Priority: Growth > Cumulative > CAGR > Price)
-        # We check Price LAST because asset names might contain 'Index' (지수) or implied value contexts,
-        # but if 'Return' or 'Growth' is explicitly asked, that takes precedence.
-
-        if any(k in prompt_lower for k in ['증감률', 'growth', 'change', 'yoy', '전년', '성장률', '변동률']):
-            keyword_method = 'yearly_growth'
-            logs.append("[의도 분석] 키워드 감지: '증감률(YoY)' 분석 요청")
-
-        elif any(k in prompt_lower for k in ['누적', 'cumulative', 'total return', '총 수익률']):
-            keyword_method = 'cumulative'
-            logs.append("[의도 분석] 키워드 감지: '누적 수익률' 분석 요청")
-
-        elif any(k in prompt_lower for k in ['연평균', 'cagr', 'annualized', '평균 수익률', '평균 상승률']):
+        # Check for specific keywords
+        # PRIORITY 1: Explicit CAGR requests (highest priority for annualized returns)
+        if any(k in prompt_lower for k in ['연평균', 'cagr', 'annualized', '평균 수익률', '평균 상승률']):
             keyword_method = 'cagr'
             logs.append("[의도 분석] 키워드 감지: '연평균 상승률(CAGR)' 분석 요청")
 
-        elif any(k in prompt_lower for k in ['가격', '종가', 'price', 'value', 'year-end', '연말', '시세']):
+        # PRIORITY 2: Year-over-Year Growth
+        elif not keyword_method and any(k in prompt_lower for k in ['증감률', 'growth', 'change', 'yoy', '전년', '성장률', '변동률']):
+            keyword_method = 'yearly_growth'
+            logs.append("[의도 분석] 키워드 감지: '증감률(YoY)' 분석 요청")
+
+        # PRIORITY 3: Cumulative Returns
+        elif not keyword_method and any(k in prompt_lower for k in ['누적', 'cumulative', 'total return', '총 수익률']):
+            keyword_method = 'cumulative'
+            logs.append("[의도 분석] 키워드 감지: '누적 수익률' 분석 요청")
+
+        # PRIORITY 4: Investment/Return questions (need price data to calculate returns)
+        elif not keyword_method and any(k in prompt_lower for k in ['투자했다면', '투자', 'investment', '얼마', 'how much', '만원', '후']):
+            keyword_method = 'price'
+            logs.append("[의도 분석] 키워드 감지: '투자 수익 계산(Price 데이터 필요)' 분석 요청")
+
+        # PRIORITY 5: Explicit Price Requests
+        elif not keyword_method and any(k in prompt_lower for k in ['가격', '종가', 'price', 'value', 'year-end', '연말', '시세']):
             keyword_method = 'price'
             logs.append("[의도 분석] 키워드 감지: '가격(Price)' 분석 요청")
 
@@ -3397,12 +3407,26 @@ class IntentClassifierAgent:
             "**IMPORTANT CONTEXT**: Unless otherwise specified, all analysis requests are for historical data from the past 10 years (지난 10년간의 데이터). "
             "This is the default time period for all financial comparisons and analysis.\n\n"
             "**STEP 1: Determine Calculation Method**\n"
-            "Check for keywords in the user's request in this order:\n"
-            "1. IF prompt contains '가격', '종가', 'price', 'value', 'level', 'year-end' -> Set method = 'price'.\n"
-            "   (Note: 'Compare prices' implies method='price', NOT 'cagr').\n"
-            "2. IF prompt contains '증감률', 'growth', 'change', 'YoY', '전년 대비' -> Set method = 'yearly_growth'.\n"
-            "3. IF prompt contains '누적', 'cumulative', 'total return' -> Set method = 'cumulative'.\n"
-            "4. OTHERWISE (default for comparisons) -> Set method = 'cagr'.\n\n"
+            "Check for keywords in the user's request in this order:\n\n"
+            "**PRIORITY 1: Investment Return Questions (ALWAYS 'price')**\n"
+            "IF the prompt asks about investment returns or final values (e.g., '100만원을 투자했다면', 'if I invested X', '투자 수익', 'X년 후 얼마', 'how much would it be'):\n"
+            "  -> Set method = 'price'\n"
+            "  -> We need actual price data to calculate investment returns accurately\n"
+            "  -> Examples: '10년 전에 비트코인에 100만원을 투자했다면', '100만원을 넣었으면 10년 후에는 얼마일까'\n\n"
+            "**PRIORITY 2: Year-over-Year Growth**\n"
+            "IF prompt contains '증감률', 'growth', 'change', 'YoY', '전년 대비', '성장률', '변동률':\n"
+            "  -> Set method = 'yearly_growth'\n\n"
+            "**PRIORITY 3: Cumulative Returns**\n"
+            "IF prompt contains '누적', 'cumulative', 'total return', '총 수익률':\n"
+            "  -> Set method = 'cumulative'\n\n"
+            "**PRIORITY 4: Annualized Returns**\n"
+            "IF prompt contains '연평균', 'cagr', 'annualized', '평균 수익률', '평균 상승률':\n"
+            "  -> Set method = 'cagr'\n\n"
+            "**PRIORITY 5: Explicit Price Requests**\n"
+            "IF prompt explicitly asks for prices/values:\n"
+            "  - Contains: '가격', '종가', 'price', 'closing price', 'year-end price', '연말 가격', '시세'\n"
+            "  -> Set method = 'price'\n\n"
+            "**DEFAULT**: If none of the above match -> Set method = 'price'\n\n"
             "**STEP 2: Extract Assets**\n"
             "Identify all financial assets. Handle groups explicitly:\n"
             "- If '대표 자산' (Representative Assets) is found -> Expand to: Bitcoin, Gold, US 10Y Treasury, Silver, S&P 500.\n"
@@ -3932,6 +3956,260 @@ class CalculatorAgent:
                 f"{worst['label']}은(는) {worst['annualized_return_pct']}%를 기록했습니다.")
 
 
+class AnalysisAgent:
+    """
+    Analyzes the calculation results and generates a narrative summary
+    focusing on Bitcoin's performance and comparing other assets against it.
+    """
+    def run(self, series_list, start_year, end_year, calculation_method, prompt):
+        logs = []
+        logs.append("[분석 생성] 비트코인 중심 분석 리포트 생성 중...")
+
+        if not series_list:
+            return "분석할 데이터가 없습니다.", logs
+
+        # Find Bitcoin in the series
+        bitcoin = None
+        other_assets = []
+
+        for series in series_list:
+            label_lower = series.get('label', '').lower()
+            if 'bitcoin' in label_lower or '비트코인' in label_lower or 'btc' in label_lower:
+                bitcoin = series
+            else:
+                other_assets.append(series)
+
+        if not bitcoin:
+            # If no Bitcoin found, fall back to generic analysis
+            logs.append("[분석 생성] 비트코인 데이터를 찾을 수 없어 일반 분석으로 대체")
+            return self._generate_generic_analysis(series_list, start_year, end_year, calculation_method), logs
+
+        # Generate Bitcoin-focused analysis using LLM
+        try:
+            analysis_text = self._generate_ai_analysis(bitcoin, other_assets, start_year, end_year, calculation_method, prompt)
+            logs.append("[분석 생성] AI 분석 리포트 생성 완료")
+            return analysis_text, logs
+        except Exception as e:
+            logs.append(f"[분석 생성] AI 분석 실패: {e}, 기본 분석으로 대체")
+            return self._generate_fallback_analysis(bitcoin, other_assets, start_year, end_year, calculation_method), logs
+
+    def _generate_ai_analysis(self, bitcoin, other_assets, start_year, end_year, calculation_method, prompt):
+        """Generate narrative analysis using LLM"""
+        api_key = getattr(settings, 'OPENAI_API_KEY', '')
+        base_url = getattr(settings, 'OPENAI_API_BASE', 'https://api.openai.com/v1').rstrip('/')
+        model = getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini')
+
+        # Prepare data for LLM
+        bitcoin_return = bitcoin.get('annualized_return_pct', 0)
+        bitcoin_multiple = bitcoin.get('multiple_from_start', 1)
+
+        # Get method-specific terminology
+        if calculation_method == 'price':
+            metric_name = "가격 상승률"
+        elif calculation_method == 'cumulative':
+            metric_name = "누적 수익률"
+        elif calculation_method == 'yearly_growth':
+            metric_name = "평균 증감률"
+        else:
+            metric_name = "연평균 상승률"
+
+        # Build comparison data - include ALL assets
+        comparison_data = []
+        for asset in other_assets:  # Include all assets, not just top 10
+            asset_return = asset.get('annualized_return_pct', 0)
+            asset_multiple = asset.get('multiple_from_start', 1)
+            performance_vs_btc = (asset_multiple / bitcoin_multiple * 100) if bitcoin_multiple > 0 else 0
+
+            comparison_data.append({
+                'name': asset.get('label', ''),
+                'return': round(asset_return, 1),
+                'multiple': round(asset_multiple, 1),
+                'vs_bitcoin': round(performance_vs_btc, 1)
+            })
+
+        # Sort by performance
+        comparison_data.sort(key=lambda x: x['return'], reverse=True)
+
+        system_prompt = _get_agent_prompt('analysis_generator',
+            "당신은 금융 데이터 분석 전문가입니다. 비트코인을 중심으로 자산 성과를 분석하고 서술형 리포트를 작성합니다.\n\n"
+            "**작성 원칙:**\n"
+            "1. 비트코인의 성과를 먼저 강조하고, **제공된 모든 자산들**과 비교합니다\n"
+            "2. 구체적인 수치를 포함하되, 자연스러운 문장으로 작성합니다\n"
+            "3. 주요 수치(연도, 퍼센트, 배수)는 하이라이트 태그로 감쌉니다\n"
+            "4. 비트코인 대비 성과가 좋은 자산과 낮은 자산을 구분하여 언급합니다\n"
+            "5. **중요: 제공된 모든 자산을 리스트 형태로 나열하여 누락 없이 표시합니다**\n\n"
+            "**색상 코딩 규칙 (매우 중요!):**\n"
+            "- '비트코인 대비' 값은 (자산의 원금 대비 / 비트코인의 원금 대비 × 100)으로 계산됩니다\n"
+            "- **이 값이 100보다 크면** → 비트코인보다 성과가 좋음 → **빨간색 (bg-red-200 text-red-900)**\n"
+            "- **이 값이 100보다 작거나 같으면** → 비트코인보다 성과가 나쁨 → **파란색 (bg-blue-200 text-blue-900)**\n\n"
+            "**구체적인 예시:**\n"
+            "1. 엔비디아의 비트코인 대비 값이 220.6% (> 100) → 빨간색\n"
+            "   <li><span class='bg-red-200 text-red-900 px-2 py-0.5 rounded font-bold'>엔비디아(NVDA)</span>: 연평균 상승률 <span class='bg-red-200 text-red-900 px-2 py-0.5 rounded font-bold'>129.7%</span>, 원금 대비 <span class='bg-red-200 text-red-900 px-2 py-0.5 rounded font-bold'>12.1배</span> (비트코인 대비 <span class='bg-red-200 text-red-900 px-2 py-0.5 rounded font-bold'>220.6%</span>)</li>\n\n"
+            "2. 금의 비트코인 대비 값이 12.5% (< 100) → 파란색\n"
+            "   <li><span class='bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold'>금</span>: 연평균 상승률 <span class='bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold'>8.2%</span>, 원금 대비 <span class='bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold'>2.1배</span> (비트코인 대비 <span class='bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold'>12.5%</span>)</li>\n\n"
+            "3. 은의 비트코인 대비 값이 43.0% (< 100) → 파란색\n"
+            "   <li><span class='bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold'>은</span>: 연평균 상승률 <span class='bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold'>33.2%</span>, 원금 대비 <span class='bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold'>2.4배</span> (비트코인 대비 <span class='bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold'>43.0%</span>)</li>\n\n"
+            "**하이라이트 규칙:**\n"
+            "- 비트코인 관련 텍스트: <span class='bg-yellow-300 text-yellow-900 px-2 py-1 rounded font-bold text-lg'>비트코인</span>\n"
+            "- 연도: <span class='bg-yellow-200 text-yellow-900 px-2 py-1 rounded font-bold'>2015년</span>\n"
+            "- 비트코인의 숫자(퍼센트, 배수): <span class='bg-yellow-200 text-yellow-900 px-2 py-1 rounded font-bold'>81.5%</span>\n\n"
+            "**출력 형식:**\n"
+            "1. 첫 문단: 비트코인의 성과 요약 (비트코인 단어를 크고 노란색으로 강조)\n"
+            "2. 두 번째 문단: '다른 자산들의 성과는 다음과 같습니다:'\n"
+            "3. 불릿 리스트(<ul><li>): 제공된 모든 자산을 성과 순으로 나열하되, 각 자산의 '비트코인 대비' 값을 확인하여:\n"
+            "   - 값이 100보다 크면 (>100): bg-red-200 text-red-900 (빨간색)\n"
+            "   - 값이 100보다 작거나 같으면 (≤100): bg-blue-200 text-blue-900 (파란색)\n"
+            "   자산명과 모든 수치에 동일한 색상을 적용하세요."
+        )
+
+        user_content = (
+            f"사용자 요청: {prompt}\n\n"
+            f"분석 기간: {start_year}년 ~ {end_year}년\n"
+            f"계산 방식: {metric_name}\n\n"
+            f"비트코인 성과:\n"
+            f"- {metric_name}: {bitcoin_return:.1f}%\n"
+            f"- 원금 대비: {bitcoin_multiple:.1f}배\n\n"
+            f"다른 자산들 (비트코인 대비 상대 성과 포함):\n"
+        )
+
+        for asset in comparison_data:
+            user_content += (
+                f"- {asset['name']}: {metric_name} {asset['return']}%, "
+                f"원금 대비 {asset['multiple']}배, "
+                f"비트코인 대비 {asset['vs_bitcoin']}%\n"
+            )
+
+        user_content += "\n위 데이터를 바탕으로 비트코인을 중심으로 한 분석 리포트를 작성해주세요."
+
+        response = requests.post(
+            f"{base_url}/chat/completions",
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            },
+            json={
+                'model': model,
+                'messages': [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                'temperature': 0.7,
+                'max_tokens': 1000,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        content = response.json()['choices'][0]['message']['content']
+
+        return content.strip()
+
+    def _generate_fallback_analysis(self, bitcoin, other_assets, start_year, end_year, calculation_method):
+        """Generate basic narrative analysis without LLM - shows all assets"""
+        bitcoin_return = bitcoin.get('annualized_return_pct', 0)
+        bitcoin_multiple = bitcoin.get('multiple_from_start', 1)
+
+        if calculation_method == 'price':
+            metric_name = "가격 상승률"
+        elif calculation_method == 'cumulative':
+            metric_name = "누적 수익률"
+        elif calculation_method == 'yearly_growth':
+            metric_name = "평균 증감률"
+        else:
+            metric_name = "연평균 상승률"
+
+        period_years = end_year - start_year
+
+        analysis = (
+            f"<p><span class='bg-yellow-200 text-yellow-900 px-2 py-1 rounded font-bold'>{start_year}년</span>부터 "
+            f"<span class='bg-yellow-200 text-yellow-900 px-2 py-1 rounded font-bold'>{end_year}년</span>까지 "
+            f"<span class='bg-yellow-200 text-yellow-900 px-2 py-1 rounded font-bold'>{period_years}년</span> 동안, "
+            f"<span class='bg-yellow-300 text-yellow-900 px-2 py-1 rounded font-bold text-lg'>비트코인</span>은 {metric_name} <span class='bg-yellow-200 text-yellow-900 px-2 py-1 rounded font-bold'>{bitcoin_return:.1f}%</span>를 기록하며 "
+            f"원금의 <span class='bg-yellow-200 text-yellow-900 px-2 py-1 rounded font-bold'>{bitcoin_multiple:.1f}배</span>로 성장했습니다.</p>"
+        )
+
+        # Compare with ALL other assets
+        if other_assets:
+            # Sort other assets by performance
+            sorted_others = sorted(other_assets, key=lambda x: x.get('annualized_return_pct', 0), reverse=True)
+
+            analysis += "<p class='mt-4'>다른 자산들의 성과는 다음과 같습니다:</p>"
+            analysis += "<ul class='list-disc pl-6 space-y-2 mt-2'>"
+
+            for asset in sorted_others:
+                asset_return = asset.get('annualized_return_pct', 0)
+                asset_multiple = asset.get('multiple_from_start', 1)
+                perf = (asset_multiple / bitcoin_multiple * 100) if bitcoin_multiple > 0 else 0
+
+                # Apply color based on performance vs Bitcoin
+                if perf > 100:
+                    asset_style = "bg-red-200 text-red-900 px-2 py-0.5 rounded font-bold"
+                    number_style = "bg-red-200 text-red-900 px-2 py-0.5 rounded font-bold"
+                else:
+                    asset_style = "bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold"
+                    number_style = "bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold"
+
+                analysis += (
+                    f"<li><span class='{asset_style}'>{asset.get('label')}</span>: "
+                    f"{metric_name} <span class='{number_style}'>{asset_return:.1f}%</span>, "
+                    f"원금 대비 <span class='{number_style}'>{asset_multiple:.1f}배</span> "
+                    f"(비트코인 대비 <span class='{number_style}'>{perf:.1f}%</span>)</li>"
+                )
+
+            analysis += "</ul>"
+
+        return analysis
+
+    def _generate_generic_analysis(self, series_list, start_year, end_year, calculation_method):
+        """Fallback when Bitcoin is not in the data - shows all assets"""
+        if not series_list:
+            return "<p>분석할 데이터가 없습니다.</p>"
+
+        # Sort by performance
+        sorted_assets = sorted(series_list, key=lambda x: x.get('annualized_return_pct', 0), reverse=True)
+
+        best = sorted_assets[0]
+        worst = sorted_assets[-1]
+
+        if calculation_method == 'price':
+            metric_name = "가격 상승률"
+        elif calculation_method == 'cumulative':
+            metric_name = "누적 수익률"
+        elif calculation_method == 'yearly_growth':
+            metric_name = "평균 증감률"
+        else:
+            metric_name = "연평균 상승률"
+
+        period_years = end_year - start_year
+
+        # Start with overview
+        analysis = (
+            f"<p><span class='highlight-year'>{start_year}년</span>부터 "
+            f"<span class='highlight-year'>{end_year}년</span>까지 "
+            f"<span class='highlight-number'>{period_years}년</span> 동안, "
+            f"{best.get('label')}이(가) {metric_name} "
+            f"<span class='highlight-number'>{best.get('annualized_return_pct', 0):.1f}%</span>로 "
+            f"가장 높은 성과를 보였습니다.</p>"
+        )
+
+        # List all assets with their performance
+        if len(sorted_assets) > 1:
+            analysis += "<p class='mt-4'>전체 자산별 성과는 다음과 같습니다:</p>"
+            analysis += "<ul class='list-disc pl-6 space-y-2 mt-2'>"
+
+            for asset in sorted_assets:
+                asset_return = asset.get('annualized_return_pct', 0)
+                asset_multiple = asset.get('multiple_from_start', 1)
+                analysis += (
+                    f"<li><span class='font-semibold'>{asset.get('label')}</span>: "
+                    f"{metric_name} <span class='highlight-number'>{asset_return:.1f}%</span>, "
+                    f"원금 대비 <span class='highlight-number'>{asset_multiple:.1f}배</span></li>"
+                )
+
+            analysis += "</ul>"
+
+        return analysis
+
+
 @csrf_exempt
 def finance_historical_returns_view(request):
     """
@@ -4099,6 +4377,13 @@ def finance_historical_returns_view(request):
                 'logs': all_logs
             }, status=502)
 
+        # Agent 4: Analysis (Generate narrative summary)
+        backend_logger.info("STEP 4: Running AnalysisAgent")
+        analysis_agent = AnalysisAgent()
+        combined_prompt_for_analysis = ' '.join(([prompt] if prompt else []) + quick_requests)
+        analysis_summary, analysis_logs = analysis_agent.run(series_data, start_year, end_year, calculation_method, combined_prompt_for_analysis)
+        all_logs.extend(analysis_logs)
+
         # Cache Result (if context_key is present)
         usd_krw_rate = get_cached_usdkrw_rate()
         if context_key in ['safe_assets', 'us_bigtech']:
@@ -4114,6 +4399,7 @@ def finance_historical_returns_view(request):
             'ok': True,
             'series': series_data,
             'chart_data_table': chart_data_table,  # Chart values as table (replaces yearly_prices)
+            'analysis_summary': analysis_summary,  # AI-generated narrative analysis
             'start_year': start_year,
             'end_year': end_year,
             'summary': summary,
@@ -4226,6 +4512,14 @@ def _finance_analysis_stream(prompt, quick_requests, context_key, start_year, en
             yield send_error('유효한 수익률 데이터를 계산할 수 없습니다.')
             return
 
+        # Agent 4: Analysis (Generate narrative summary)
+        analysis_agent = AnalysisAgent()
+        combined_prompt_for_analysis = ' '.join(([prompt] if prompt else []) + quick_requests)
+        analysis_summary, analysis_logs = analysis_agent.run(series_data, start_year, end_year, calculation_method, combined_prompt_for_analysis)
+
+        for log in analysis_logs:
+            yield send_log(log)
+
         # Cache and send final result
         usd_krw_rate = get_cached_usdkrw_rate()
         if context_key in ['safe_assets', 'us_bigtech']:
@@ -4240,6 +4534,7 @@ def _finance_analysis_stream(prompt, quick_requests, context_key, start_year, en
             'ok': True,
             'series': series_data,
             'chart_data_table': chart_data_table,  # Chart values as table (replaces yearly_prices)
+            'analysis_summary': analysis_summary,  # AI-generated narrative analysis
             'start_year': start_year,
             'end_year': end_year,
             'summary': summary,
