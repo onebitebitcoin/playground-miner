@@ -1,18 +1,21 @@
 <template>
   <div class="w-full bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
     <div class="p-4 border-b border-slate-100 flex items-center justify-between gap-4">
-      <div class="flex items-center gap-2">
-        <h3 class="text-base font-semibold text-slate-900">{{ chartTitle }}</h3>
-        <button
-          type="button"
-          class="text-slate-500 hover:text-slate-900 transition"
-          aria-label="정규화 계산식 설명"
-          @click="showNormalizationInfo = true"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 12v4m0-8h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </button>
+      <div class="flex flex-col gap-1 flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <h3 class="text-base font-semibold text-slate-900">{{ chartTitle }}</h3>
+          <button
+            type="button"
+            class="text-slate-500 hover:text-slate-900 transition"
+            aria-label="정규화 계산식 설명"
+            @click="showNormalizationInfo = true"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 12v4m0-8h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+        </div>
+        <p v-if="bitcoinSummary" class="text-xs text-slate-500 truncate">{{ bitcoinSummary }}</p>
       </div>
 
       <!-- 시작 연도 조절 -->
@@ -52,21 +55,48 @@
         <span class="text-xs font-mono text-slate-700 min-w-[3rem]">{{ startYear }}년</span>
 
         <div
-          v-if="showTaxToggle"
-          class="flex items-center gap-2 pl-3 border-l border-slate-200"
+          v-if="showTaxToggle || showDividendToggle"
+          class="flex items-center gap-4 pl-3 border-l border-slate-200 flex-wrap"
         >
-          <span class="text-xs font-medium text-slate-600 whitespace-nowrap">세금 포함</span>
-          <button
-            type="button"
-            class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
-            :class="taxIncluded ? 'bg-slate-900' : 'bg-slate-200'"
-            @click="toggleTax"
-          >
-            <span
-              class="inline-block h-4 w-4 transform rounded-full bg-white transition"
-              :class="taxIncluded ? 'translate-x-4' : 'translate-x-1'"
-            ></span>
-          </button>
+          <div v-if="showTaxToggle" class="flex items-center gap-2">
+            <span class="text-xs font-medium text-slate-600 whitespace-nowrap">세금 포함</span>
+            <button
+              type="button"
+              class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
+              :class="taxIncluded ? 'bg-slate-900' : 'bg-slate-200'"
+              @click="toggleTax"
+            >
+              <span
+                class="inline-block h-4 w-4 transform rounded-full bg-white transition"
+                :class="taxIncluded ? 'translate-x-4' : 'translate-x-1'"
+              ></span>
+            </button>
+          </div>
+          <div v-if="showDividendToggle" class="flex items-center gap-2">
+            <span class="text-xs font-medium text-slate-600 whitespace-nowrap">배당 포함</span>
+            <button
+              type="button"
+              class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
+              :class="[
+                dividendIncluded ? 'bg-slate-900' : 'bg-slate-200',
+                dividendTogglePending ? 'cursor-wait opacity-60' : ''
+              ]"
+              @click="toggleDividends"
+              :aria-disabled="dividendTogglePending"
+            >
+              <span
+                class="inline-block h-4 w-4 transform rounded-full bg-white transition"
+                :class="dividendIncluded ? 'translate-x-4' : 'translate-x-1'"
+              ></span>
+            </button>
+            <div v-if="dividendTogglePending" class="flex items-center gap-1 text-[10px] text-slate-400">
+              <svg class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke-width="3"></circle>
+                <path class="opacity-75" stroke-width="3" d="M4 12a8 8 0 018-8"></path>
+              </svg>
+              <span>데이터 준비 중</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -233,7 +263,7 @@
         </div>
         <p class="text-sm text-slate-600">
           <template v-if="calculationMethod === 'price'">
-            모든 자산의 시작 시점 가격을 100으로 맞추고(Indexing), 이후 가격 변화를 상대적 비율로 표시합니다.
+            각 자산의 시작 연도 가격을 1배로 정규화한 뒤, 시간이 지날수록 몇 배 상승 혹은 하락했는지를 로그 스케일로 표시합니다.
           </template>
           <template v-else>
             모든 자산의 {{ calculationMethod === 'cumulative' ? '누적 수익률' : calculationMethod === 'yearly_growth' ? '전년 대비 증감률' : '연평균 상승률' }}을 서로 비교하기 위해, 각 연도별 값(%)을 0에서 100 사이로 스케일링한 뒤 차트에 표시합니다.
@@ -241,7 +271,7 @@
         </p>
         <p class="text-xs text-slate-500">
           <template v-if="calculationMethod === 'price'">
-            이를 통해 가격 단위가 다른 자산들(예: 비트코인 $50,000 vs 나스닥 1,000)을 동일한 기준(%)으로 비교할 수 있습니다. 예: 비트코인 100만원→500만원(100→500), 나스닥 1,000→1,500(100→150)
+            서로 다른 가격 단위의 자산도 동일한 배수(Performance Multiple) 기준으로 비교할 수 있어 상대적인 성과를 직관적으로 파악할 수 있습니다.
           </template>
           <template v-else>
             즉, 시작 연도에 투자했다고 가정하고 해당 연도부터 올해까지의 {{ calculationMethod === 'cumulative' ? '누적' : calculationMethod === 'yearly_growth' ? '전년 대비' : '연평균(복리)' }} 상승률을 계산해 비교하는 방식입니다.
@@ -251,7 +281,7 @@
           <p class="font-semibold text-slate-900">계산식</p>
           <p class="font-mono text-xs">
             <template v-if="calculationMethod === 'price'">
-              Index = (현재 가격 / 시작 가격) × 100
+              Y축: Log10(배수) (시작 연도 = 1배)
             </template>
             <template v-else>
               정규화 값 = clamp({{ calculationMethod === 'cumulative' ? '누적 수익률' : calculationMethod === 'yearly_growth' ? '증감률' : '연평균 상승률' }} %, 0, 100)
@@ -259,7 +289,7 @@
           </p>
           <p class="text-xs text-slate-500">
             <template v-if="calculationMethod === 'price'">
-              시작 시점이 항상 100이 되므로, "얼마나 올랐냐/내렸냐"를 같은 기준(%)으로 비교할 수 있습니다. 가장 일반적으로 사용되는 가격 비교 방식입니다.
+              로그 스케일은 동일한 비율(%) 변동을 동일한 간격으로 보여 주어, 어느 자산이 더 많은 배수로 성장했는지 쉽게 확인할 수 있습니다.
             </template>
             <template v-else>
               clamp는 값이 0보다 작으면 0, 100보다 크면 100으로 제한합니다.
@@ -268,7 +298,7 @@
         </div>
         <p class="text-xs text-slate-500">
           <template v-if="calculationMethod === 'price'">
-            툴팁에서는 Index 값과 함께 실제 가격도 표시됩니다.
+            툴팁에서 실제 가격과 배수를 함께 보여주어, 절대가격과 상대 성과를 동시에 확인할 수 있습니다.
           </template>
           <template v-else>
             툴팁에서는 정규화된 값(0~100)과 함께 실제 {{ calculationMethod === 'cumulative' ? '누적 수익률' : calculationMethod === 'yearly_growth' ? '증감률' : '연평균 상승률' }}(%)도 함께 표시해 비교에 도움이 되도록 했습니다.
@@ -340,6 +370,18 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  dividendIncluded: {
+    type: Boolean,
+    default: false
+  },
+  showDividendToggle: {
+    type: Boolean,
+    default: false
+  },
+  dividendTogglePending: {
+    type: Boolean,
+    default: false
+  },
   priceData: {
     type: Object,
     default: () => ({})
@@ -347,10 +389,14 @@ const props = defineProps({
   calculationMethod: {
     type: String,
     default: 'cagr' // 'cagr' or 'cumulative'
+  },
+  bitcoinSummary: {
+    type: String,
+    default: ''
   }
 })
 
-const emit = defineEmits(['update:start-year', 'toggle-tax'])
+const emit = defineEmits(['update:start-year', 'toggle-tax', 'toggle-dividends'])
 
 const palette = ['#0f172a', '#2563eb', '#f97316', '#dc2626', '#059669', '#7c3aed', '#ea580c', '#0891b2', '#be185d', '#4338ca']
 const currencySymbols = {
@@ -371,6 +417,31 @@ const formatCurrencyValue = (value, mode) => {
     maximumFractionDigits: 2
   })
   return `${symbol}${formatter.format(value)}`
+}
+
+const formatMultipleValue = (value) => {
+  if (!Number.isFinite(value)) return '-'
+  if (value >= 10) return `${value.toFixed(0)}배`
+  if (value >= 2) return `${value.toFixed(1)}배`
+  return `${value.toFixed(2)}배`
+}
+
+const convertPriceForMode = (price, unit, mode, fxRate) => {
+  if (!Number.isFinite(price)) return null
+  const normalizedUnit = (unit || '').toLowerCase()
+  if (mode === 'usd') {
+    if (normalizedUnit === 'krw' || normalizedUnit === '₩' || normalizedUnit === 'krw₩') {
+      return price / (fxRate || 1300)
+    }
+    return price
+  }
+  if (mode === 'krw') {
+    if (normalizedUnit === 'krw' || normalizedUnit === '₩' || normalizedUnit === 'krw₩') {
+      return price
+    }
+    return price * (fxRate || 1300)
+  }
+  return price
 }
 
 const resolveRawValue = (point, series, mode, fxRate) => {
@@ -462,6 +533,10 @@ function toggleTax() {
   emit('toggle-tax', !props.taxIncluded)
 }
 
+function toggleDividends() {
+  emit('toggle-dividends', !props.dividendIncluded)
+}
+
 const chartTitle = computed(() => {
   if (!props.startYear || !props.endYear) {
     return '차트'
@@ -469,7 +544,7 @@ const chartTitle = computed(() => {
   const yearDiff = props.endYear - props.startYear + 1
   let methodText
   if (props.calculationMethod === 'price') {
-    methodText = `가격 비교 (${props.startYear}년 = 100 기준)`
+    return `${yearDiff}년 가격 성과 비교 (${props.startYear} ~ ${props.endYear}, 배수 기준)`
   } else if (props.calculationMethod === 'cumulative') {
     methodText = '누적 수익률'
   } else if (props.calculationMethod === 'yearly_growth') {
@@ -594,7 +669,7 @@ const chart = computed(() => {
     const orderedPoints = [...series.points].sort((a, b) => a.year - b.year)
     const color = props.colors[series.id] || palette[idx % palette.length]
 
-    // Price 모드인 경우, 시작값을 구함 (Indexing)
+    // Price 모드: 로그 스케일 적용을 위해 원본 가격(Raw Price) 사용
     let firstValue = null
     if (props.calculationMethod === 'price' && orderedPoints.length > 0) {
       firstValue = extractAnnualizedRate(orderedPoints[0])
@@ -610,9 +685,9 @@ const chart = computed(() => {
         let normalizedValue
         let originalValue = annualizedRate
 
-        // Price 모드: Indexing 방식 (시작값 = 100)
-        if (props.calculationMethod === 'price' && firstValue !== null && firstValue > 0) {
-          normalizedValue = (annualizedRate / firstValue) * 100
+        // Price 모드: 배수 값 그대로 사용
+        if (props.calculationMethod === 'price') {
+          normalizedValue = annualizedRate
         } else {
           normalizedValue = clampNormalizedValue(annualizedRate)
         }
@@ -653,20 +728,18 @@ const chart = computed(() => {
     const realMin = Math.min(...allValues)
     const realMax = Math.max(...allValues)
 
-    // Price 모드: Indexing 방식이므로 동적 범위 사용 (단, 최소값은 0 이상)
+    // Price 모드: 로그 스케일용 범위 (0 이하 제외)
     if (props.calculationMethod === 'price') {
-      const range = realMax - realMin
-      minValue = Math.max(0, Math.floor(realMin - range * 0.1))
-      maxValue = Math.ceil(realMax + range * 0.1)
+      minValue = realMin > 0 ? realMin * 0.9 : 1
+      maxValue = realMax * 1.1
     }
     // 데이터가 음수를 포함하거나 100을 크게 초과하는 경우 동적 스케일링 적용
     else if (realMin < 0 || realMax > 120) {
-      // 여유 공간(padding) 추가
       const range = realMax - realMin
       minValue = Math.floor(realMin - range * 0.1)
       maxValue = Math.ceil(realMax + range * 0.1)
     } else {
-      // 기존 정규화 로직 유지 (CAGR/Cumulative 등 양수 위주 데이터)
+      // 기존 정규화 로직 유지
       const rawMax = Math.max(...values, 0)
       if (Number.isFinite(rawMax) && rawMax > 0) {
         maxValue = Math.min(100, rawMax * 1.1)
@@ -681,6 +754,17 @@ const chart = computed(() => {
   }
 
   const scaleValue = (value) => {
+    // Price 모드: 로그 스케일
+    if (props.calculationMethod === 'price') {
+        if (value <= 0) return dimensions.padding + chartHeight
+        const minLog = Math.log10(minValue)
+        const maxLog = Math.log10(maxValue)
+        const valLog = Math.log10(value)
+        const ratio = (valLog - minLog) / (maxLog - minLog || 1)
+        return dimensions.padding + chartHeight - ratio * chartHeight
+    }
+    
+    // Linear Scale
     const ratio = (value - minValue) / (maxValue - minValue || 1)
     return dimensions.padding + chartHeight - ratio * chartHeight
   }
@@ -707,11 +791,22 @@ const chart = computed(() => {
   })
 
   const yTicks = Array.from({ length: 5 }).map((_, idx) => {
-    const ratio = idx / 4
-    const value = minValue + (maxValue - minValue) * ratio
-    // Price 모드: Index 값이므로 정수로 표시
-    // 다른 모드: 정수로 표시
-    const label = value.toFixed(0)
+    let value
+    let label
+
+    if (props.calculationMethod === 'price') {
+        // Log Scale Ticks (multiples)
+        const minLog = Math.log10(minValue)
+        const maxLog = Math.log10(maxValue)
+        const logVal = minLog + (maxLog - minLog) * (idx / 4)
+        value = Math.pow(10, logVal)
+        label = formatMultipleValue(value)
+    } else {
+        // Linear Scale Ticks
+        const ratio = idx / 4
+        value = minValue + (maxValue - minValue) * ratio
+        label = value.toFixed(0)
+    }
 
     return {
       y: scaleValue(value),
@@ -746,19 +841,19 @@ function isBitcoinLine(label) {
 function tooltipValueFormatter(point) {
   if (!point) return '-'
 
-  // Price 모드일 때는 Index 값과 실제 가격을 함께 표시
+  // Price 모드: 실제 가격 표시
   if (props.calculationMethod === 'price') {
-    const indexValue = Number.isFinite(point.value) ? point.value : null
-    const actualPrice = Number.isFinite(point.originalValue) ? point.originalValue : null
-
-    if (indexValue !== null && actualPrice !== null) {
-      const formatter = new Intl.NumberFormat('en-US', {
-        notation: 'compact',
-        maximumFractionDigits: 2
-      })
-      return `Index ${indexValue.toFixed(1)} (실제: ${formatter.format(actualPrice)})`
+    const multiple = Number(point.value)
+    const rawPrice = Number(point.raw_value ?? point.rawValue)
+    const convertedPrice = convertPriceForMode(rawPrice, point.unit, props.currencyMode, props.fxRate)
+    const parts = []
+    if (Number.isFinite(multiple)) {
+      parts.push(formatMultipleValue(multiple))
     }
-    return '-'
+    if (Number.isFinite(convertedPrice)) {
+      parts.push(formatCurrencyValue(convertedPrice, props.currencyMode))
+    }
+    return parts.length ? parts.join(' · ') : '-'
   }
 
   // 다른 모드일 때는 % 표시

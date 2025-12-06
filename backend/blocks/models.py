@@ -540,6 +540,68 @@ class FinanceQueryLog(models.Model):
         return f"{status} [{self.created_at.strftime('%Y-%m-%d %H:%M')}] {self.user_identifier}: {self.prompt[:50]}"
 
 
+class FinanceQuickRequest(models.Model):
+    label = models.CharField(max_length=150)
+    example = models.TextField(blank=True, default='')
+    quick_request = models.TextField()
+    context_key = models.CharField(max_length=50, blank=True, default='')
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['sort_order', 'id']
+        indexes = [
+            models.Index(fields=['sort_order']),
+            models.Index(fields=['is_active']),
+        ]
+
+    def __str__(self):
+        return f"QuickRequest<{self.label}>"
+
+    def as_dict(self):
+        return {
+            'id': self.id,
+            'label': self.label,
+            'example': self.example,
+            'quick_request': self.quick_request,
+            'context_key': self.context_key,
+            'sort_order': self.sort_order,
+            'is_active': self.is_active,
+        }
+
+
+class FinanceQuickCompareGroup(models.Model):
+    key = models.CharField(max_length=50, unique=True, db_index=True)
+    label = models.CharField(max_length=150)
+    assets = models.JSONField(default=list, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['sort_order', 'id']
+        indexes = [
+            models.Index(fields=['sort_order']),
+            models.Index(fields=['is_active']),
+        ]
+
+    def __str__(self):
+        return f"QuickCompare<{self.label}>"
+
+    def as_dict(self):
+        return {
+            'id': self.id,
+            'key': self.key,
+            'label': self.label,
+            'assets': list(self.assets or []),
+            'sort_order': self.sort_order,
+            'is_active': self.is_active,
+        }
+
+
 class AgentPrompt(models.Model):
     """Agent system prompts for finance analysis"""
     AGENT_CHOICES = [

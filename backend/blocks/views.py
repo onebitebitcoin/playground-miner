@@ -17,7 +17,22 @@ from django.db import transaction
 from django.db.models import Max
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from .models import Block, Nickname, Mnemonic, ExchangeRate, WithdrawalFee, LightningService, ServiceNode, Route, RoutingSnapshot, SidebarConfig, KingstoneWallet, FinanceQueryLog
+from .models import (
+    Block,
+    Nickname,
+    Mnemonic,
+    ExchangeRate,
+    WithdrawalFee,
+    LightningService,
+    ServiceNode,
+    Route,
+    RoutingSnapshot,
+    SidebarConfig,
+    KingstoneWallet,
+    FinanceQueryLog,
+    FinanceQuickRequest,
+    FinanceQuickCompareGroup,
+)
 from django.db import connection
 from django.conf import settings
 from .broadcast import broadcaster
@@ -32,6 +47,8 @@ KINGSTONE_WALLET_LIMIT = 3
 FINANCE_DEFAULT_START_YEAR = 2015
 FINANCE_YEAR_SPAN = 10
 FINANCE_MAX_SERIES = 15
+DIVIDEND_INFO_CACHE = {}
+DIVIDEND_INFO_TTL = 3600  # seconds
 
 SAFE_ASSETS = {
     'bitcoin': {
@@ -43,7 +60,7 @@ SAFE_ASSETS = {
         'aliases': ['비트코인', 'bitcoin', 'btc']
     },
     'gold': {
-        'label': '금',
+        'label': '금 (GC=F)',
         'ticker': 'GC=F',
         'stooq_symbol': 'xauusd',
         'unit': 'USD',
@@ -51,7 +68,7 @@ SAFE_ASSETS = {
         'aliases': ['금', 'gold', '골드']
     },
     'us10y': {
-        'label': '미국 10년물 국채',
+        'label': '미국 10년물 국채 (^TNX)',
         'ticker': '^TNX',
         'stooq_symbol': None,  # Stooq doesn't have yield data, use Yahoo Finance only
         'unit': '%',
@@ -60,7 +77,7 @@ SAFE_ASSETS = {
         'yield_asset': True  # This is a yield (percentage), not a price
     },
     'silver': {
-        'label': '은',
+        'label': '은 (SI=F)',
         'ticker': 'SI=F',
         'stooq_symbol': 'xagusd',
         'unit': 'USD',
@@ -68,7 +85,7 @@ SAFE_ASSETS = {
         'aliases': ['은', 'silver']
     },
     'sp500': {
-        'label': 'S&P 500',
+        'label': 'S&P 500 (^GSPC)',
         'ticker': '^GSPC',
         'stooq_symbol': 'spx',
         'unit': 'index',
@@ -76,7 +93,7 @@ SAFE_ASSETS = {
         'aliases': ['s&p 500', 'sp500', 's&p500', '에스앤피500']
     },
     'dow': {
-        'label': '다우지수',
+        'label': '다우지수 (^DJI)',
         'ticker': '^DJI',
         'stooq_symbol': 'dji',
         'unit': 'index',
@@ -84,12 +101,36 @@ SAFE_ASSETS = {
         'aliases': ['다우', '다우지수', 'dow', 'dow jones']
     },
     'nasdaq100': {
-        'label': '나스닥 100',
+        'label': '나스닥 100 (^NDX)',
         'ticker': '^NDX',
         'stooq_symbol': 'ndq',
         'unit': 'index',
         'category': '주식지수',
         'aliases': ['나스닥 100', '나스닥100', 'nasdaq 100', 'nasdaq100']
+    },
+    'soxx': {
+        'label': 'iShares Semiconductor ETF (SOXX)',
+        'ticker': 'SOXX',
+        'stooq_symbol': 'soxx.us',
+        'unit': 'USD',
+        'category': 'ETF',
+        'aliases': ['soxx', 'semiconductor etf', '반도체 etf', '아이셰어즈 반도체', 'ishares semiconductor']
+    },
+    'nvidia': {
+        'label': '엔비디아 (NVDA)',
+        'ticker': 'NVDA',
+        'stooq_symbol': 'nvda.us',
+        'unit': 'USD',
+        'category': '미국 빅테크',
+        'aliases': ['엔비디아', 'nvidia', 'nvda', '엔비디', 'nVIDIA']
+    },
+    'ief': {
+        'label': 'iShares 7-10 Year Treasury Bond ETF (IEF)',
+        'ticker': 'IEF',
+        'stooq_symbol': 'ief.us',
+        'unit': 'USD',
+        'category': '채권 ETF',
+        'aliases': ['ief', 'us 10y etf', '10년물 etf', '미국채 etf', '미국채 10년물', 'treasury etf']
     },
     'oil': {
         'label': '원유(USO)',
@@ -107,6 +148,14 @@ SAFE_ASSETS = {
         'category': '원자재',
         'aliases': ['구리', 'copper']
     },
+    'cocacola': {
+        'label': '코카콜라(KO)',
+        'ticker': 'KO',
+        'stooq_symbol': 'ko.us',
+        'unit': 'USD',
+        'category': '미국 소비재',
+        'aliases': ['코카콜라', 'coca cola', 'coke', 'ko']
+    },
     'dxy': {
         'label': '달러지수(UUP)',
         'ticker': 'UUP',
@@ -114,6 +163,51 @@ SAFE_ASSETS = {
         'unit': 'USD',
         'category': '통화',
         'aliases': ['달러지수', 'dxy', 'dollar index', '달러 인덱스']
+    },
+    'seoul_apartment': {
+        'id': 'seoul_apartment',
+        'label': '서울 아파트 평균 매매가격',
+        'ticker': 'SEOUL_APT_KB',
+        'stooq_symbol': None,
+        'unit': 'KRW',
+        'category': '부동산',
+        'type': 'real_estate',
+        'data_agent': 'seoul_apartment',
+        'aliases': [
+            '서울 아파트',
+            '서울아파트',
+            '서울 아파트 가격',
+            '서울 지역 아파트',
+            'seoul apartment',
+            'seoul apt kb',
+            'seoul_apt_kb',
+            'seoul apt',
+            'seoul_apartment',
+            'seo ul apartment',
+            'SEOUL_APT_KB'
+        ]
+    },
+    'seoul_apartment_ltv50': {
+        'id': 'seoul_apartment_ltv50',
+        'label': '서울 아파트 (LTV 50%)',
+        'ticker': 'SEOUL_APT_LTV50',
+        'stooq_symbol': None,
+        'unit': 'KRW',
+        'category': '부동산',
+        'type': 'real_estate',
+        'base_asset_id': 'seoul_apartment',
+        'ltv_ratio': 0.5,
+        'allow_negative_prices': False,
+        'aliases': [
+            '서울 아파트 (LTV 50%)',
+            '서울 아파트 LTV50',
+            '서울 아파트 레버리지',
+            '서울 아파트 ltv 50',
+            '서울아파트 ltv50',
+            '서울아파트 LTV 50%',
+            'Seoul apartment LTV 50',
+            'SEOUL_APT_LTV50'
+        ]
     }
 }
 
@@ -121,6 +215,129 @@ SAFE_ASSET_ALIASES = {}
 for key, cfg in SAFE_ASSETS.items():
     for alias in cfg.get('aliases', []):
         SAFE_ASSET_ALIASES[alias.lower()] = key
+
+DEFAULT_FINANCE_QUICK_REQUESTS = [
+    {
+        'label': '10년 전에 비트코인에 100만원 투자',
+        'example': '10년 전에 비트코인에 100만원을 투자했다면 지금 얼마인지 알려주고, 비트코인과 S&P500, 나스닥100, 금, 은, 다우지수, 5년 전 시가총액 상위 5개 기업의 5년 전 대비 가격을 비교해줘',
+        'quick_request': '비트코인에 100만원을 투자했다면 지금 얼마가 되었는지 계산해줘. 그리고 비트코인, S&P 500, 나스닥 100, 금, 은, 다우지수, 5년 전 시가총액 1~5위 기업들의 가격을 5년 전 대비 비교해줘. 각 자산의 5년 전과 현재 가격을 모두 가져와서 표로 정리해줘.',
+        'context_key': 'safe_assets'
+    }
+]
+
+DEFAULT_FINANCE_QUICK_COMPARE_GROUPS = [
+    {
+        'key': 'frequent',
+        'label': '자주 찾는 종목',
+        'sort_order': 0,
+        'assets': [
+            '서울 아파트',
+            '서울 아파트 (LTV 50%)',
+            '금',
+            '미국 10년물 국채',
+            'S&P 500',
+            '코스피',
+            '나스닥 100',
+            '엔비디아',
+            '코카콜라',
+            '테슬라',
+            '애플',
+            '버크셔해서웨이',
+        ],
+    },
+    {
+        'key': 'us_bigtech',
+        'label': '미국 빅테크',
+        'sort_order': 10,
+        'assets': ['애플', '엔비디아', '아마존', '메타', '구글', '마이크로소프트', '테슬라'],
+    },
+    {
+        'key': 'kr_bluechips',
+        'label': '국내 주요 주식',
+        'sort_order': 20,
+        'assets': ['삼성전자', 'SK 하이닉스', 'LG 에너지솔루션', '삼성 바이오로직스', '현대차', 'KB 금융', '카카오', '네이버'],
+    },
+    {
+        'key': 'dividend_favorites',
+        'label': '주요 배당주 TOP10',
+        'sort_order': 99,
+        'assets': [
+            '삼성전자',
+            'SK텔레콤',
+            'KT&G',
+            'KB 금융',
+            '신한지주',
+            '코카콜라',
+            '프록터 앤 갬블',
+            '존슨앤존슨',
+            '맥도날드',
+            'AT&T',
+        ],
+    },
+]
+
+SEOUL_APARTMENT_FALLBACK_DATA = [
+    # Values aggregated from KB부동산 월간 KB주택가격동향 (세대당 평균 매매가격, KRW)
+    {'year': 2010, 'avg_price_krw': 472_000_000},
+    {'year': 2011, 'avg_price_krw': 478_000_000},
+    {'year': 2012, 'avg_price_krw': 481_000_000},
+    {'year': 2013, 'avg_price_krw': 505_000_000},
+    {'year': 2014, 'avg_price_krw': 534_000_000},
+    {'year': 2015, 'avg_price_krw': 575_000_000},
+    {'year': 2016, 'avg_price_krw': 612_000_000},
+    {'year': 2017, 'avg_price_krw': 667_000_000},
+    {'year': 2018, 'avg_price_krw': 742_000_000},
+    {'year': 2019, 'avg_price_krw': 826_000_000},
+    {'year': 2020, 'avg_price_krw': 928_000_000},
+    {'year': 2021, 'avg_price_krw': 1_082_000_000},
+    {'year': 2022, 'avg_price_krw': 1_134_000_000},
+    {'year': 2023, 'avg_price_krw': 1_072_000_000},
+    {'year': 2024, 'avg_price_krw': 1_108_000_000},
+]
+
+_SEOUL_APARTMENT_HISTORY_CACHE = {}
+
+
+def _ensure_default_finance_quick_requests():
+    from .models import FinanceQuickRequest
+
+    if FinanceQuickRequest.objects.exists():
+        return False
+
+    created = False
+    for idx, entry in enumerate(DEFAULT_FINANCE_QUICK_REQUESTS):
+        FinanceQuickRequest.objects.create(
+            label=entry.get('label', f'요청 #{idx + 1}'),
+            example=entry.get('example', ''),
+            quick_request=entry.get('quick_request', ''),
+            context_key=entry.get('context_key', ''),
+            sort_order=idx
+        )
+        created = True
+
+    return created
+
+
+def _ensure_default_finance_quick_compare_groups():
+    existing_keys = set(
+        FinanceQuickCompareGroup.objects.values_list('key', flat=True)
+    )
+    created = False
+    for idx, entry in enumerate(DEFAULT_FINANCE_QUICK_COMPARE_GROUPS):
+        key = entry.get('key') or f'group_{idx + 1}'
+        if key in existing_keys:
+            continue
+        FinanceQuickCompareGroup.objects.create(
+            key=key,
+            label=entry.get('label', f'그룹 #{idx + 1}'),
+            assets=list(entry.get('assets') or []),
+            sort_order=entry.get('sort_order', idx),
+            is_active=entry.get('is_active', True),
+        )
+        existing_keys.add(key)
+        created = True
+
+    return created
 
 PRESET_STOCK_GROUPS = {
     'us_bigtech': [
@@ -148,6 +365,33 @@ PRESET_STOCK_GROUPS = {
         {'id': '005490.KS', 'label': '포스코홀딩스(005490)', 'ticker': '005490.KS', 'stooq_symbol': '005490.kr', 'category': '국내 주식', 'unit': 'KRW', 'aliases': ['posco holdings', '포스코홀딩스', 'posco', '005490']}
     ]
 }
+
+HISTORICAL_MARKET_CAP_GROUPS = [
+    {
+        'key': 'market_cap_top5_10y',
+        'label': '2015년 글로벌 시가총액 Top 5',
+        'match_phrases': ['10년 전', '10년전', '10년 전에', '2015년', '2014년'],
+        'assets': [
+            {'id': 'AAPL', 'label': '애플(AAPL)', 'type': 'us_stock', 'market_cap_usd': 750_000_000_000},
+            {'id': 'MSFT', 'label': '마이크로소프트(MSFT)', 'type': 'us_stock', 'market_cap_usd': 340_000_000_000},
+            {'id': 'GOOGL', 'label': '알파벳(GOOGL)', 'type': 'us_stock', 'market_cap_usd': 365_000_000_000},
+            {'id': 'XOM', 'label': '엑슨모빌(XOM)', 'type': 'us_stock', 'market_cap_usd': 356_000_000_000},
+            {'id': 'BRK.B', 'label': '버크셔해서웨이(BRK.B)', 'type': 'us_stock', 'market_cap_usd': 352_000_000_000},
+        ],
+    },
+    {
+        'key': 'market_cap_top5_5y',
+        'label': '2020년 글로벌 시가총액 Top 5',
+        'match_phrases': ['5년 전', '5년전', '5년 전에', '2020년', '2019년'],
+        'assets': [
+            {'id': 'AAPL', 'label': '애플(AAPL)', 'type': 'us_stock', 'market_cap_usd': 2_000_000_000_000},
+            {'id': 'MSFT', 'label': '마이크로소프트(MSFT)', 'type': 'us_stock', 'market_cap_usd': 1_600_000_000_000},
+            {'id': 'AMZN', 'label': '아마존(AMZN)', 'type': 'us_stock', 'market_cap_usd': 1_500_000_000_000},
+            {'id': 'GOOGL', 'label': '알파벳(GOOGL)', 'type': 'us_stock', 'market_cap_usd': 1_200_000_000_000},
+            {'id': 'META', 'label': '메타(META)', 'type': 'us_stock', 'market_cap_usd': 780_000_000_000},
+        ],
+    },
+]
 
 _guest_counter = 0
 _guest_lock = threading.Lock()
@@ -2031,6 +2275,200 @@ def _safe_float(value, allow_negative=False):
         return None
 
 
+def _build_fallback_seoul_apartment_history(start_year, end_year):
+    """Return static KB average price data when the agent is unavailable."""
+    target_year = max(end_year, datetime.utcnow().year)
+    entries = []
+    for item in SEOUL_APARTMENT_FALLBACK_DATA:
+        year = item.get('year')
+        price = _safe_float(item.get('avg_price_krw'))
+        if year is None or price is None:
+            continue
+        try:
+            year_int = int(year)
+        except (TypeError, ValueError):
+            continue
+        if year_int < start_year or year_int > target_year:
+            continue
+        entries.append((datetime(year_int, 12, 31), price))
+    entries.sort(key=lambda row: row[0])
+    return _extend_history_to_year(entries, target_year)
+
+
+def _extend_history_to_year(history, target_year):
+    if not history:
+        return history
+
+    entries = list(history)
+    entries.sort(key=lambda row: row[0])
+    last_dt, last_price = entries[-1]
+    if not isinstance(last_dt, datetime):
+        return entries
+
+    try:
+        last_price_val = _safe_float(last_price)
+    except Exception:
+        last_price_val = None
+    if last_price_val is None or last_price_val <= 0:
+        return entries
+
+    current_year = last_dt.year
+    if target_year <= current_year:
+        return entries
+
+    for year in range(current_year + 1, target_year + 1):
+        entries.append((datetime(year, 12, 31), last_price_val))
+
+    return entries
+
+
+def _call_seoul_apartment_data_agent(start_year, end_year):
+    """Request structured Seoul apartment data from the price retriever agent."""
+    api_key = getattr(settings, 'OPENAI_API_KEY', '')
+    if not api_key:
+        logger.info('[서울 아파트] OPENAI_API_KEY가 없어 Agent 호출을 건너뜁니다.')
+        return [], None
+
+    base_url = getattr(settings, 'OPENAI_API_BASE', 'https://api.openai.com/v1').rstrip('/')
+    model = getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini')
+
+    default_prompt = (
+        "You are a data researcher that compiles verified South Korean real estate statistics. "
+        "When asked for Seoul apartment prices, you must rely on KB부동산 리브온 (KB Housing Price Trend) "
+        "or 한국부동산원 official releases. Return structured JSON, include evidence text, and never guess."
+    )
+    system_prompt = _get_agent_prompt('price_retriever', default_prompt)
+
+    user_prompt = (
+        f"서울특별시 아파트의 세대당 평균 매매가격을 {start_year}년부터 {end_year}년까지 연도별로 정리해 주세요.\n"
+        "조건:\n"
+        "1) KB부동산 리브온 KB주택가격동향 또는 한국부동산원 통계를 우선 사용하고 출처명을 source에 명시합니다.\n"
+        "2) 각 연도 값은 해당 연도 12월(또는 연말) 기준 세대당 평균 매매가격이며 단위는 KRW 입니다.\n"
+        "3) 금액에는 콤마/통화기호를 넣지 말고 숫자만 사용합니다 (예: 928000000).\n"
+        "4) JSON만 반환하고 schema는 {\"source\": \"...\", \"unit\": \"KRW\", \"data\": [{\"year\": 2020, \"avg_price_krw\": 928000000, \"evidence\": \"자료명\"}] } 입니다.\n"
+        "5) 요청된 연도 범위를 모두 포함하고, 사용할 수 없는 연도는 누락 이유를 evidence에 명시합니다."
+    )
+
+    try:
+        response = requests.post(
+            f"{base_url}/chat/completions",
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            },
+            json={
+                'model': model,
+                'messages': [
+                    {'role': 'system', 'content': system_prompt},
+                    {'role': 'user', 'content': user_prompt}
+                ],
+                'temperature': 0.1,
+                'max_tokens': 1200,
+                'response_format': {'type': 'json_object'},
+            },
+            timeout=45
+        )
+        response.raise_for_status()
+        payload = response.json()
+        choices = payload.get('choices') or []
+        if not choices:
+            raise RuntimeError('에이전트 응답이 비어 있습니다.')
+        content = (choices[0]['message'] or {}).get('content', '').strip()
+        if not content:
+            raise RuntimeError('에이전트 응답을 파싱할 수 없습니다.')
+        parsed = json.loads(content)
+    except Exception as exc:
+        raise RuntimeError(f'에이전트 호출 실패: {exc}') from exc
+
+    rows = []
+    for entry in parsed.get('data') or []:
+        year = entry.get('year')
+        price = (
+            entry.get('avg_price_krw') or entry.get('average_price_krw') or
+            entry.get('average_price') or entry.get('price_krw') or entry.get('price')
+        )
+        price_value = _safe_float(price)
+        try:
+            year_int = int(year)
+        except (TypeError, ValueError):
+            continue
+        if price_value is None:
+            continue
+        if year_int < start_year or year_int > end_year:
+            continue
+        rows.append((datetime(year_int, 12, 31), price_value))
+
+    rows.sort(key=lambda row: row[0])
+    source_label = parsed.get('source') or 'KB부동산 (Agent)'
+    if not rows:
+        raise RuntimeError('에이전트가 유효한 연도별 데이터를 반환하지 않았습니다.')
+    logger.info('[서울 아파트] Agent 데이터 %d개 수신 (source=%s)', len(rows), source_label)
+    return rows, source_label
+
+
+def _fetch_seoul_apartment_history(start_year, end_year):
+    cache_key = (start_year, end_year)
+    cached = _SEOUL_APARTMENT_HISTORY_CACHE.get(cache_key)
+    if cached:
+        return cached
+
+    history = []
+    source = 'KB부동산'
+    target_year = max(end_year, datetime.utcnow().year)
+
+    try:
+        history, source = _call_seoul_apartment_data_agent(start_year, end_year)
+    except Exception as exc:
+        logger.warning('[서울 아파트] Agent 데이터를 가져오지 못했습니다: %s', exc)
+        history = []
+
+    if not history:
+        history = _build_fallback_seoul_apartment_history(start_year, end_year)
+        source = 'KB부동산 (정적)' if history else source
+        if history:
+            logger.info('[서울 아파트] Fallback KB 데이터를 사용합니다. (%d개)', len(history))
+
+    history = _extend_history_to_year(history, target_year)
+
+    if not history:
+        raise RuntimeError('서울 아파트 평균 매매가격 데이터를 찾을 수 없습니다.')
+
+    _SEOUL_APARTMENT_HISTORY_CACHE[cache_key] = (history, source)
+    return history, source
+
+
+def _build_ltv_equity_history(base_history, ltv_ratio):
+    if not base_history:
+        return []
+
+    try:
+        ratio = float(ltv_ratio)
+    except (TypeError, ValueError):
+        ratio = 0.5
+    ratio = max(0.0, min(0.95, ratio))
+
+    base_price = None
+    loan_amount = None
+    min_equity = 1.0
+    adjusted = []
+    for dt, raw_price in base_history:
+        price_val = _safe_float(raw_price)
+        if price_val is None or price_val <= 0:
+            continue
+        if base_price is None:
+            base_price = price_val
+            loan_amount = base_price * ratio
+            min_equity = max(base_price * 0.001, 1.0)
+        if loan_amount is None:
+            continue
+        equity_value = price_val - loan_amount
+        if equity_value <= 0:
+            equity_value = min_equity
+        adjusted.append((dt, equity_value))
+
+    return adjusted
+
+
 def _normalize_korean_stock_code(ticker):
     if not ticker:
         return None
@@ -2105,8 +2543,12 @@ def _detect_safe_assets(prompt, quick_requests):
     return matched
 
 
-def _fetch_yfinance_history(ticker, start_year, end_year):
-    """Yahoo Finance를 통해 데이터를 가져옵니다."""
+def _fetch_yfinance_history(ticker, start_year, end_year, adjust_for_dividends=False):
+    """Yahoo Finance를 통해 데이터를 가져옵니다.
+
+    Args:
+        adjust_for_dividends (bool): True이면 배당/분할 조정 가격 사용
+    """
     if not ticker:
         return []
     try:
@@ -2115,7 +2557,7 @@ def _fetch_yfinance_history(ticker, start_year, end_year):
         current_dt = datetime.utcnow()
 
         stock = yf.Ticker(ticker)
-        df = stock.history(start=start_dt, end=end_dt, interval='1mo')
+        df = stock.history(start=start_dt, end=end_dt, interval='1mo', auto_adjust=adjust_for_dividends)
 
         if df.empty:
             return []
@@ -2137,7 +2579,7 @@ def _fetch_yfinance_history(ticker, start_year, end_year):
                 try:
                     # 현재 월의 일별 데이터 가져오기
                     current_month_start = datetime(current_dt.year, current_dt.month, 1)
-                    df_daily = stock.history(start=current_month_start, end=current_dt, interval='1d')
+                    df_daily = stock.history(start=current_month_start, end=current_dt, interval='1d', auto_adjust=adjust_for_dividends)
                     if not df_daily.empty:
                         # 가장 최근 데이터 추가
                         latest_index = df_daily.index[-1]
@@ -2149,11 +2591,110 @@ def _fetch_yfinance_history(ticker, start_year, end_year):
                 except Exception as e:
                     logger.warning('[%s] 최신 가격 가져오기 실패: %s', ticker, e)
 
-        logger.info('Yahoo Finance에서 %s 데이터 %d개 가져옴 (%d-%d)', ticker, len(rows), start_year, end_year)
+        log_suffix = ' (dividend-adjusted)' if adjust_for_dividends else ''
+        logger.info('Yahoo Finance에서 %s 데이터 %d개 가져옴%s (%d-%d)', ticker, len(rows), log_suffix, start_year, end_year)
         return rows
     except Exception as exc:
         logger.warning('Yahoo Finance fetch failed for %s: %s', ticker, exc)
         raise
+
+
+def _equity_like_asset(config):
+    ticker = (config.get('ticker') or '').strip()
+    if not ticker:
+        return False
+    upper = ticker.upper()
+    if upper.startswith('^'):
+        return False
+    if '-' in upper or '=' in upper:
+        return False
+    category = (config.get('category') or '').lower()
+    keywords = ['주식', 'etf', 'reit', '금융', '배당']
+    if any(keyword in category for keyword in keywords):
+        return True
+    # Allow common Yahoo tickers such as BRK.B or Korean stocks (.KS/.KQ)
+    normalized = upper.replace('.', '')
+    if normalized.isalpha():
+        return True
+    if upper.endswith(('.KS', '.KQ', '.KL', '.US')):
+        return True
+    return False
+
+
+def _cache_dividend_info(ticker, data):
+    DIVIDEND_INFO_CACHE[ticker] = {
+        'timestamp': time.time(),
+        'data': data
+    }
+
+
+def _get_cached_dividend_info(ticker):
+    record = DIVIDEND_INFO_CACHE.get(ticker)
+    if not record:
+        return False, None
+    if time.time() - record['timestamp'] > DIVIDEND_INFO_TTL:
+        return False, None
+    return True, record['data']
+
+
+def _fetch_dividend_profile(ticker):
+    if not ticker:
+        return None
+    normalized = ticker.upper().strip()
+    cached_hit, cached_data = _get_cached_dividend_info(normalized)
+    if cached_hit:
+        return cached_data
+
+    yield_ratio = None
+    try:
+        stock = yf.Ticker(normalized)
+        try:
+            fast_info = stock.fast_info or {}
+        except Exception:
+            fast_info = {}
+        if isinstance(fast_info, dict):
+            yield_ratio = fast_info.get('last_dividend_yield') or fast_info.get('dividend_yield')
+
+        if yield_ratio is None:
+            try:
+                info = stock.info or {}
+            except Exception:
+                info = {}
+            yield_ratio = info.get('trailingAnnualDividendYield') or info.get('dividendYield')
+
+        if yield_ratio is None:
+            _cache_dividend_info(normalized, None)
+            return None
+
+        if 0 < yield_ratio < 1:
+            yield_pct = round(yield_ratio * 100, 2)
+        else:
+            yield_pct = round(float(yield_ratio), 2)
+
+        profile = {
+            'dividend_yield_pct': yield_pct,
+            'dividend_yield_source': 'yfinance',
+            'dividend_yield_updated_at': datetime.utcnow().strftime('%Y-%m-%d'),
+            'is_dividend_stock': yield_pct > 0
+        }
+        _cache_dividend_info(normalized, profile)
+        return profile
+    except Exception as exc:
+        logger.warning('[%s] Dividend yield fetch failed: %s', normalized, exc)
+        _cache_dividend_info(normalized, None)
+        return None
+
+
+def _enrich_metadata_with_dividend_info(config, metadata):
+    if not _equity_like_asset(config):
+        return metadata
+    ticker = (config.get('ticker') or '').strip()
+    profile = _fetch_dividend_profile(ticker)
+    if not profile:
+        return metadata
+    merged = dict(metadata)
+    merged.update(profile)
+    return merged
 
 
 def _fetch_korean_stock_history(ticker, start_year, end_year):
@@ -2562,32 +3103,21 @@ def _fetch_yearly_closing_prices(cfg, start_year, end_year):
     if _is_bitcoin_config(cfg):
         return _build_bitcoin_price_payload(start_year, end_year)
 
-    ticker = (cfg.get('ticker') or '').strip()
-    stooq_symbol = (cfg.get('stooq_symbol') or '').strip()
-    category = cfg.get('category', '')
-    unit = (cfg.get('unit') or '').upper()
+    result = _fetch_asset_history(cfg, start_year, end_year)
+    if not result:
+        raise RuntimeError('데이터를 가져오지 못했습니다.')
 
-    is_korean_stock = (
-        category == '국내 주식' or
-        unit == 'KRW' or
-        (ticker and ticker.upper().endswith(('.KS', '.KQ', '.KL')))
-    )
-
-    if is_korean_stock:
-        if not ticker:
-            raise ValueError('국내 주식은 종목 코드가 필요합니다.')
-        history = _fetch_korean_stock_history(ticker, start_year, end_year)
-        source = 'pykrx'
-    else:
-        symbol = stooq_symbol or _guess_stooq_symbol(ticker)
-        if not symbol:
-            raise ValueError('Stooq 심볼을 찾을 수 없습니다.')
-        history = _fetch_stooq_history(symbol, start_year, end_year)
-        source = 'stooq'
-
+    history, source = result
     prices = _build_yearly_closing_points(history, start_year, end_year)
+
+    response_unit = (cfg.get('unit') or '').upper()
+    category = cfg.get('category') or ''
+    ticker_upper = (cfg.get('ticker') or cfg.get('id') or '').upper()
+    if category == '국내 주식' or ticker_upper.endswith(('.KS', '.KQ', '.KL', '.KR')):
+        response_unit = 'KRW'
+
     return {
-        'unit': cfg.get('unit') or '',
+        'unit': response_unit,
         'source': source,
         'prices': prices,
     }
@@ -2786,6 +3316,24 @@ def _fetch_asset_history(cfg, start_year, end_year):
     stooq_symbol = cfg.get('stooq_symbol') or _guess_stooq_symbol(ticker)
     category = cfg.get('category', '')
     prefer_krw = cfg.get('prefer_krw', False)  # 한국 원화 시세 우선 사용 여부
+    data_agent = cfg.get('data_agent')
+    base_asset_id = cfg.get('base_asset_id')
+
+    if data_agent == 'seoul_apartment':
+        return _fetch_seoul_apartment_history(start_year, end_year)
+
+    if base_asset_id:
+        if base_asset_id == cfg.get('id'):
+            raise RuntimeError('base_asset_id cannot reference itself')
+        base_cfg = _find_known_asset_config(base_asset_id, base_asset_id)
+        if not base_cfg:
+            raise RuntimeError(f'기준 자산({base_asset_id})을 찾을 수 없습니다.')
+        base_history, base_source = _fetch_asset_history(base_cfg, start_year, end_year)
+        ltv_ratio = cfg.get('ltv_ratio') or cfg.get('ltv') or 0.5
+        derived_history = _build_ltv_equity_history(base_history, ltv_ratio)
+        if not derived_history:
+            raise RuntimeError('기준 자산에서 유효한 데이터를 가져오지 못했습니다.')
+        return derived_history, base_source
 
     # 비트코인 여부 확인 (id가 'bitcoin'이거나 ticker가 'BTC'로 시작)
     is_bitcoin = (
@@ -3022,6 +3570,7 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculati
         points.append({
             'year': year,
             'value': round(return_pct, 3),
+            'raw_value': adjusted_value,
             'multiple': round(multiple, 6)
         })
 
@@ -3031,6 +3580,15 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculati
     start_val = points[0]['multiple'] or 1.0
     end_val = points[-1]['multiple'] or start_val
     years_total = points[-1]['year'] - points[0]['year']
+
+    # Always compute CAGR so it can be referenced in summaries regardless of the selected method
+    if years_total > 0 and start_val > 0:
+        try:
+            cagr_return_pct = ((end_val / start_val) ** (1 / years_total) - 1) * 100
+        except Exception:
+            cagr_return_pct = 0.0
+    else:
+        cagr_return_pct = 0.0
 
     # Calculate final return metric for legend/sorting
     if calculation_method == 'price':
@@ -3048,18 +3606,17 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculati
         final_return_pct = growth_sum / count if count > 0 else 0.0
     else:
         # CAGR
-        if years_total > 0 and start_val > 0:
-            final_return_pct = ((end_val / start_val) ** (1 / years_total) - 1) * 100
-        else:
-            final_return_pct = 0.0
+        final_return_pct = cagr_return_pct
 
     return {
         'id': cfg.get('id') or asset_key,
         'label': cfg['label'],
+        'ticker': cfg.get('ticker'),
         'category': cfg.get('category', '안전자산'),
         'unit': cfg.get('unit', ''),
         'points': points,
         'annualized_return_pct': round(final_return_pct, 2),  # Used for sorting
+        'annualized_cagr_pct': round(cagr_return_pct, 2),
         'multiple_from_start': round(end_val / start_val, 3) if start_val else 0.0,
         'calculation_method': calculation_method,
     }
@@ -3121,6 +3678,15 @@ def _extract_year_span_from_prompt(prompt):
     if not prompt:
         return None
     lowered = prompt.lower()
+    # Explicit "X년 전" references (e.g., "5년 전 대비")
+    match = re.search(r'(\d{1,3})\s*년\s*전(?:\s*대비)?', lowered)
+    if match:
+        try:
+            span = int(match.group(1))
+        except ValueError:
+            span = None
+        if span and 1 <= span <= 50:
+            return span
     match = re.search(r'지난\s*(\d{1,3})\s*년', lowered)
     if not match:
         match = re.search(r'(\d{1,3})\s*년\s*(?:간|동안)', lowered)
@@ -3132,7 +3698,7 @@ def _extract_year_span_from_prompt(prompt):
             span = int(match.group(1))
         except ValueError:
             span = None
-        if span and 2 <= span <= 50:
+        if span and 1 <= span <= 50:
             return span
     return None
 
@@ -3140,7 +3706,7 @@ def _extract_year_span_from_prompt(prompt):
 def _derive_finance_year_window(year_hint, span_hint=None):
     current_year = datetime.utcnow().year
     min_year = 2010
-    if span_hint and span_hint >= 2:
+    if span_hint and span_hint >= 1:
         end_year = current_year
         # Calculate start year: e.g., 2025 - 10 = 2015 (Range: 2015-2025)
         start_year = max(min_year, end_year - span_hint)
@@ -3336,12 +3902,309 @@ def _ensure_finance_cache_purged(context_key):
     _purged_finance_contexts[context_key] = version
 
 
+def _detect_historical_market_cap_assets(prompt_text):
+    """
+    Detect prompts asking for historical market-cap leaders (e.g., "10년 전 시가총액 상위 5개").
+    Returns {'groups': [...], 'assets': [...]} or None.
+    """
+    if not prompt_text:
+        return None
+
+    text = str(prompt_text).lower()
+    compact = text.replace(' ', '')
+
+    market_cap_keywords = ['시가총액', 'market cap', 'marketcap', 'market capitalization']
+    if not any(keyword in text for keyword in market_cap_keywords):
+        return None
+
+    has_rank_keyword = False
+    if '상위' in text and ('5' in text or '다섯' in text):
+        has_rank_keyword = True
+    rank_variants = ['top 5', 'top5', 'top-five', 'topfive']
+    if not has_rank_keyword:
+        for variant in rank_variants:
+            if variant.replace(' ', '') in compact or variant in text:
+                has_rank_keyword = True
+                break
+    if not has_rank_keyword:
+        return None
+
+    detected_groups = []
+    detected_assets = []
+    seen_ids = set()
+
+    for group in HISTORICAL_MARKET_CAP_GROUPS:
+        match_found = False
+        for phrase in group.get('match_phrases', []):
+            phrase_lower = phrase.lower()
+            if not phrase_lower:
+                continue
+            phrase_compact = phrase_lower.replace(' ', '')
+            if phrase_lower in text or phrase_compact in compact:
+                match_found = True
+                break
+
+        if not match_found:
+            continue
+
+        detected_groups.append(group.get('label', group.get('key', '시가총액 상위 그룹')))
+        for idx, asset in enumerate(group.get('assets', []), start=1):
+            asset_id = (asset.get('id') or '').strip()
+            if not asset_id:
+                continue
+            norm_id = asset_id.lower()
+            if norm_id in seen_ids:
+                continue
+            seen_ids.add(norm_id)
+            metadata = {
+                'market_cap_rank': idx,
+                'market_cap_group': group.get('label') or group.get('key'),
+                'market_cap_usd': asset.get('market_cap_usd'),
+            }
+            detected_assets.append({
+                'id': asset_id,
+                'label': asset.get('label') or asset_id,
+                'type': asset.get('type', 'us_stock'),
+                'metadata': metadata,
+            })
+
+    if not detected_assets:
+        return None
+
+    return {
+        'groups': detected_groups,
+        'assets': detected_assets,
+    }
+
+
+def _sanitize_custom_assets(raw_assets):
+    if not isinstance(raw_assets, list):
+        return []
+    sanitized = []
+    for item in raw_assets:
+        if isinstance(item, str):
+            name = item.strip()
+            if name:
+                sanitized.append(name)
+    return sanitized
+
+
+def _build_manual_assets(asset_names, calculation_method):
+    manual_assets = []
+    if not asset_names:
+        return manual_assets
+
+    for name in asset_names:
+        label = (name or '').strip()
+        if not label:
+            continue
+
+        known_config = _find_known_asset_config(label, label)
+        if known_config:
+            asset_id = known_config.get('id') or label
+            asset_label = known_config.get('label') or asset_id
+            asset_type = known_config.get('category', 'asset')
+        else:
+            asset_id = label
+            asset_label = label
+            asset_type = 'unknown'
+
+        manual_assets.append({
+            'id': asset_id,
+            'label': asset_label,
+            'type': asset_type,
+            'calculation_method': calculation_method
+        })
+
+    return manual_assets
+
+
+def _asset_identity_key(asset):
+    if not asset:
+        return ''
+    asset_id = (asset.get('id') or '').strip().lower()
+    if asset_id:
+        return asset_id
+    label_norm = _normalize_asset_label_text(asset.get('label'))
+    return label_norm or ''
+
+
+def _merge_asset_lists(original_assets, additional_assets):
+    merged = []
+    added = []
+    seen = set()
+
+    def _maybe_add(target_list, asset, track_added=False):
+        key = _asset_identity_key(asset)
+        if key and key in seen:
+            return False
+        if key:
+            seen.add(key)
+        target_list.append(asset)
+        if track_added:
+            added.append(asset)
+        return True
+
+    for asset in original_assets or []:
+        _maybe_add(merged, asset)
+
+    for asset in additional_assets or []:
+        _maybe_add(merged, asset, track_added=True)
+
+    return merged, added
+
+
+RELATED_ASSET_SUGGESTIONS = [
+    {
+        'keywords': ['반도체', 'semiconductor', 'semi'],
+        'asset_key': 'soxx'
+    },
+    {
+        'keywords': ['미국채', '10년물', '10y', 'treasury'],
+        'asset_key': 'ief'
+    },
+]
+
+
+def _suggest_related_asset(text):
+    """
+    Recommend a closely-related asset when the exact ticker cannot be resolved.
+    """
+    normalized = _normalize_asset_label_text(text)
+    if not normalized:
+        return None
+
+    for entry in RELATED_ASSET_SUGGESTIONS:
+        for keyword in entry['keywords']:
+            if keyword.lower() in normalized:
+                asset_key = entry.get('asset_key')
+                if asset_key and asset_key in SAFE_ASSETS:
+                    return _clone_asset_config(SAFE_ASSETS[asset_key], asset_key)
+    return None
+
+
+def _contains_korean(text):
+    if not text:
+        return False
+    return bool(re.search(r'[\uac00-\ud7a3]', str(text)))
+
+
+def _translate_to_english_if_needed(text):
+    """
+    Translate Korean asset/company names for better ticker lookup accuracy.
+    """
+    cleaned = (text or '').strip()
+    if not cleaned or not _contains_korean(cleaned):
+        return cleaned
+
+    api_key = getattr(settings, 'OPENAI_API_KEY', '')
+    if not api_key:
+        return cleaned
+
+    base_url = getattr(settings, 'OPENAI_API_BASE', 'https://api.openai.com/v1').rstrip('/')
+    model = getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini')
+    system_prompt = (
+        "You are a translator specializing in financial assets. "
+        "Translate Korean company or asset names into the most likely official English names. "
+        "Return concise English text only."
+    )
+    user_prompt = f"Korean name: {cleaned}"
+
+    try:
+        response = requests.post(
+            f"{base_url}/chat/completions",
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            },
+            json={
+                'model': model,
+                'messages': [
+                    {'role': 'system', 'content': system_prompt},
+                    {'role': 'user', 'content': user_prompt}
+                ],
+                'temperature': 0.0,
+            },
+            timeout=10
+        )
+        response.raise_for_status()
+        content = response.json()['choices'][0]['message']['content'].strip()
+        if content:
+            return content
+    except Exception as exc:
+        logger.warning("Korean→English translation failed for '%s': %s", cleaned, exc)
+
+    return cleaned
+
+
+def _lookup_ticker_with_llm(asset_id, label):
+    system_prompt = _get_agent_prompt('ticker_finder',
+        "You are a financial data assistant. Your goal is to find the correct Yahoo Finance ticker symbol for a given asset name.\n"
+        "Input: Asset Name / ID\n"
+        "Output JSON: { \"found\": true, \"ticker\": \"SYMBOL\", \"label\": \"Official Name\", \"category\": \"Category\" }\n"
+        "Rules:\n"
+        "- For US Stocks: Use standard ticker (e.g., AAPL, TSLA, NVDA).\n"
+        "- For Korean Stocks: Use 6-digit code with .KS (KOSPI) or .KQ (KOSDAQ) suffix (e.g., 005930.KS).\n"
+        "- For Indices: Use Yahoo Finance symbol (e.g., ^GSPC for S&P 500, ^DJI for Dow).\n"
+        "- For Crypto: Use BTC-USD, ETH-USD format.\n"
+        "- If uncertain or not found, return { \"found\": false }.\n"
+        "- BE PRECISE. Incorrect tickers cause errors."
+    )
+
+    resolved_name = (label or asset_id or '').strip()
+    english_hint = _translate_to_english_if_needed(resolved_name or asset_id)
+    user_content = f"Find ticker for: {resolved_name or asset_id} (ID: {asset_id})"
+    if english_hint and english_hint.lower() != (resolved_name or '').lower():
+        user_content += f"\nEnglish translation: {english_hint}"
+
+    try:
+        api_key = getattr(settings, 'OPENAI_API_KEY', '')
+        base_url = getattr(settings, 'OPENAI_API_BASE', 'https://api.openai.com/v1').rstrip('/')
+        model = getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini')
+
+        response = requests.post(
+            f"{base_url}/chat/completions",
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            },
+            json={
+                'model': model,
+                'messages': [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                'temperature': 0.0,
+                'response_format': {'type': 'json_object'},
+            },
+            timeout=10
+        )
+        response.raise_for_status()
+        content = response.json()['choices'][0]['message']['content']
+        result = json.loads(content)
+
+        if result.get('found') and result.get('ticker'):
+            ticker = result['ticker'].strip().upper()
+            found_label = (result.get('label') or label or ticker).strip()
+            return {
+                'id': ticker,
+                'label': found_label,
+                'ticker': ticker,
+                'category': result.get('category')
+            }
+
+    except Exception as exc:
+        logger.warning("LLM ticker lookup failed for %s (%s): %s", label, asset_id, exc)
+
+    return None
+
+
 # --- Agent Classes ---
 
 class IntentClassifierAgent:
     """
-    Responsible for understanding the user's request, checking guardrails,
-    and extracting a list of assets to analyze.
+    Responsible for extracting a list of assets to analyze.
+    (Intent classification for method is now simplified to keyword-only or defaults).
     """
     def run(self, prompt, quick_requests):
         logs = []
@@ -3371,73 +4234,43 @@ class IntentClassifierAgent:
         except Exception as e:
             logs.append(f"[의도 분석] 보안 검사 실패 ({e}). 계속 진행합니다.")
 
-        # 2. Hybrid Step 1: Keyword-based Pre-classification
+        # 2. Keyword-based Classification (Simplified)
         prompt_lower = combined_prompt.lower()
-        keyword_method = None
+        calculation_method = 'cagr' # Default
 
-        # Check for specific keywords
-        # PRIORITY 1: Explicit CAGR requests (highest priority for annualized returns)
-        if any(k in prompt_lower for k in ['연평균', 'cagr', 'annualized', '평균 수익률', '평균 상승률']):
-            keyword_method = 'cagr'
-            logs.append("[의도 분석] 키워드 감지: '연평균 상승률(CAGR)' 분석 요청")
+        # PRIORITY 1: Explicit Price Requests or Investment Questions
+        if any(k in prompt_lower for k in ['가격', '종가', 'price', 'value', 'year-end', '연말', '시세', '투자했다면', '투자', 'investment', '얼마', 'how much', '만원', '후']):
+            calculation_method = 'price'
+            logs.append("[의도 분석] 키워드 감지: '가격/투자(Price)' 분석 요청")
 
         # PRIORITY 2: Year-over-Year Growth
-        elif not keyword_method and any(k in prompt_lower for k in ['증감률', 'growth', 'change', 'yoy', '전년', '성장률', '변동률']):
-            keyword_method = 'yearly_growth'
+        elif any(k in prompt_lower for k in ['증감률', 'growth', 'change', 'yoy', '전년', '성장률', '변동률']):
+            calculation_method = 'yearly_growth'
             logs.append("[의도 분석] 키워드 감지: '증감률(YoY)' 분석 요청")
 
         # PRIORITY 3: Cumulative Returns
-        elif not keyword_method and any(k in prompt_lower for k in ['누적', 'cumulative', 'total return', '총 수익률']):
-            keyword_method = 'cumulative'
+        elif any(k in prompt_lower for k in ['누적', 'cumulative', 'total return', '총 수익률']):
+            calculation_method = 'cumulative'
             logs.append("[의도 분석] 키워드 감지: '누적 수익률' 분석 요청")
+        
+        else:
+            logs.append("[의도 분석] 키워드 미감지: 기본값 '연평균 상승률(CAGR)' 적용")
 
-        # PRIORITY 4: Investment/Return questions (need price data to calculate returns)
-        elif not keyword_method and any(k in prompt_lower for k in ['투자했다면', '투자', 'investment', '얼마', 'how much', '만원', '후']):
-            keyword_method = 'price'
-            logs.append("[의도 분석] 키워드 감지: '투자 수익 계산(Price 데이터 필요)' 분석 요청")
 
-        # PRIORITY 5: Explicit Price Requests
-        elif not keyword_method and any(k in prompt_lower for k in ['가격', '종가', 'price', 'value', 'year-end', '연말', '시세']):
-            keyword_method = 'price'
-            logs.append("[의도 분석] 키워드 감지: '가격(Price)' 분석 요청")
-
-        # 3. Call LLM (Asset Extraction + Fallback Method)
+        # 3. Call LLM (Asset Extraction ONLY)
         system_prompt = _get_agent_prompt('intent_classifier',
-            "You are a financial intent classifier. Your goal is to extract the user's intent and target assets.\n\n"
+            "You are a financial asset extractor. Your goal is to extract the target assets from the user's prompt.\n\n"
             "**IMPORTANT CONTEXT**: Unless otherwise specified, all analysis requests are for historical data from the past 10 years (지난 10년간의 데이터). "
             "This is the default time period for all financial comparisons and analysis.\n\n"
-            "**STEP 1: Determine Calculation Method**\n"
-            "Check for keywords in the user's request in this order:\n\n"
-            "**PRIORITY 1: Investment Return Questions (ALWAYS 'price')**\n"
-            "IF the prompt asks about investment returns or final values (e.g., '100만원을 투자했다면', 'if I invested X', '투자 수익', 'X년 후 얼마', 'how much would it be'):\n"
-            "  -> Set method = 'price'\n"
-            "  -> We need actual price data to calculate investment returns accurately\n"
-            "  -> Examples: '10년 전에 비트코인에 100만원을 투자했다면', '100만원을 넣었으면 10년 후에는 얼마일까'\n\n"
-            "**PRIORITY 2: Year-over-Year Growth**\n"
-            "IF prompt contains '증감률', 'growth', 'change', 'YoY', '전년 대비', '성장률', '변동률':\n"
-            "  -> Set method = 'yearly_growth'\n\n"
-            "**PRIORITY 3: Cumulative Returns**\n"
-            "IF prompt contains '누적', 'cumulative', 'total return', '총 수익률':\n"
-            "  -> Set method = 'cumulative'\n\n"
-            "**PRIORITY 4: Annualized Returns**\n"
-            "IF prompt contains '연평균', 'cagr', 'annualized', '평균 수익률', '평균 상승률':\n"
-            "  -> Set method = 'cagr'\n\n"
-            "**PRIORITY 5: Explicit Price Requests**\n"
-            "IF prompt explicitly asks for prices/values:\n"
-            "  - Contains: '가격', '종가', 'price', 'closing price', 'year-end price', '연말 가격', '시세'\n"
-            "  -> Set method = 'price'\n\n"
-            "**DEFAULT**: If none of the above match -> Set method = 'price'\n\n"
-            "**STEP 2: Extract Assets**\n"
+            "**STEP 1: Extract Assets**\n"
             "Identify all financial assets. Handle groups explicitly:\n"
             "- If '대표 자산' (Representative Assets) is found -> Expand to: Bitcoin, Gold, US 10Y Treasury, Silver, S&P 500.\n"
             "- If '미국 빅테크' or 'US Big Tech' or '미국 빅테크 10개 종목' -> Expand to ALL 10 companies: Apple, Microsoft, Alphabet, Amazon, Meta, Tesla, Nvidia, Netflix, Adobe, AMD.\n"
-
-            "- If '국내 주식' or 'KR Equity' or '한국 주식 10개 종목' -> Expand to ALL 10 companies: Samsung Electronics, SK Hynix, NAVER, Kakao, LG Energy Solution, Hyundai Motor, Kia, Samsung Biologics, Samsung SDI, POSCO Holdings.\n\n"
+            "- If '국내 주식' or 'KR Equity' or '한국 주식 10개 종목' -> Expand to ALL 10 companies: Samsung Electronics, SK Hynix, NAVER, Kakao, LG Energy Solution, Hyundai Motor, Kia, Samsung Biologics, Samsung SDI, POSCO Holdings.\n"
+            "- For Korean Stocks, MUST provide the Korean name in the 'label' field (e.g. '삼성전자' instead of 'Samsung Electronics').\n\n"
             "**CRITICAL**: When a group like '미국 빅테크 10개 종목' is mentioned, you MUST extract all 10 companies. Do not extract only a subset.\n\n"
             "**Output Format (JSON)**\n"
             "{\n"
-            "  \"reasoning\": \"Step-by-step logic used\",\n"
-            "  \"calculation_method\": \"cagr\" | \"cumulative\" | \"yearly_growth\" | \"price\",\n"
             "  \"assets\": [ { \"id\": \"...\", \"label\": \"...\", \"type\": \"...\" }, ... ]\n"
             "}"
         )
@@ -3473,31 +4306,54 @@ class IntentClassifierAgent:
 
             parsed = json.loads(content)
             assets = parsed.get('assets', [])
-            llm_method = parsed.get('calculation_method', 'cagr')
 
-            # 4. Hybrid Decision (Step 2)
-            if keyword_method:
-                calculation_method = keyword_method
-                if keyword_method != llm_method:
-                    logs.append(f"[의도 분석] AI 분류('{llm_method}')를 키워드 기반('{keyword_method}')으로 보정함.")
-            else:
-                calculation_method = llm_method
-                logs.append(f"[의도 분석] 키워드 매칭 실패, AI 분류 사용: {calculation_method}")
-
-            # 5. Strict Validation
-            valid_methods = ['cagr', 'cumulative', 'yearly_growth', 'price']
-            if calculation_method not in valid_methods:
-                logs.append(f"[의도 분석] 실패: 알 수 없는 계산 방식 '{calculation_method}'")
-                return {'allowed': False, 'error': f"계산 방식을 이해할 수 없습니다. ({calculation_method})"}, logs
+            detected_market_cap = _detect_historical_market_cap_assets(combined_prompt)
+            if detected_market_cap:
+                added_assets = detected_market_cap.get('assets', [])
+                asset_labels = ', '.join(a.get('label', a.get('id', '')) for a in added_assets if a.get('id'))
+                group_names = ', '.join(detected_market_cap.get('groups', []))
+                assets.extend(added_assets)
+                logs.append(f"[의도 분석] {group_names} 자동 감지 → {len(added_assets)}개 자산 추가: {asset_labels}")
 
             # Basic validation/cleanup
             clean_assets = []
+            # track duplicates using lowercase IDs
+            seen_ids = set()
+            
             for a in assets:
-                if a.get('id'):
-                    # Add calculation_method to each asset
-                    a['calculation_method'] = calculation_method
+                raw_id = (a.get('id') or '').strip()
+                raw_label = (a.get('label') or raw_id).strip()
+                
+                if not raw_id and not raw_label:
+                    continue
 
-                    clean_assets.append(a)
+                # Try to match with known assets for canonical info, but DO NOT filter out if unknown
+                known_config = _find_known_asset_config(raw_id, raw_label)
+                
+                if known_config:
+                    # Use canonical info from known_config
+                    final_id = known_config.get('id')
+                    final_label = known_config.get('label') or final_id
+                    asset_type = known_config.get('category', 'asset')
+                else:
+                    # Pass through unknown assets as requested
+                    # PriceRetriever will handle (or fail later)
+                    final_id = raw_id
+                    final_label = raw_label or raw_id
+                    asset_type = 'unknown'
+                
+                normalized_id = final_id.lower()
+                if normalized_id in seen_ids:
+                    continue
+                seen_ids.add(normalized_id)
+
+                asset_entry = {
+                    'id': final_id,
+                    'label': final_label,
+                    'type': asset_type,
+                    'calculation_method': calculation_method
+                }
+                clean_assets.append(asset_entry)
 
             # Logging for UI
             if calculation_method == 'cumulative':
@@ -3518,183 +4374,6 @@ class IntentClassifierAgent:
             return {'allowed': False, 'error': '자산 추출 중 오류가 발생했습니다.'}, logs
 
 
-class ValidationAgent:
-    """
-    Validates if the classified intent and extracted data match the user's original prompt.
-    """
-    def run(self, prompt, intent_result):
-        logs = []
-        logs.append("[검증] 분석 결과 유효성 검사 중...")
-
-        classified_method = intent_result.get('calculation_method', 'unknown')
-        assets = intent_result.get('assets', [])
-        asset_names = ", ".join([a.get('label', 'unknown') for a in assets])
-
-        # Validate classification method
-        system_prompt = _get_agent_prompt('validation_agent',
-            "You are a Quality Assurance auditor for a financial analysis AI. "
-            "Your job is to verify if the system's classification matches the user's request.\n\n"
-            "Input:\n"
-            "1. User Request\n"
-            "2. Classified Method (cagr, cumulative, yearly_growth, price)\n"
-            "3. Extracted Assets\n\n"
-            "Rules:\n"
-            "- If User asks for 'Price', 'Value', 'Level', 'Close', 'Year-end', the Method MUST be 'price'. "
-            "  (System deciding 'cagr' or 'cumulative' for a price request is a CRITICAL ERROR).\n"
-            "- If User asks for 'Growth', 'Change', 'YoY', the Method MUST be 'yearly_growth'.\n"
-            "- If User asks for 'Return', 'Profit', 'Performance', 'CAGR' is acceptable.\n"
-            "- If comparison is implied without specific metric, 'cagr' is acceptable.\n\n"
-            "Output JSON:\n"
-            "{\n"
-            "  \"valid\": true/false,\n"
-            "  \"reason\": \"Short explanation if invalid\"\n"
-            "}"
-        )
-
-        user_content = (
-            f"User Request: {prompt}\n"
-            f"Classified Method: {classified_method}\n"
-            f"Extracted Assets: {asset_names}"
-        )
-
-        try:
-            api_key = getattr(settings, 'OPENAI_API_KEY', '')
-            base_url = getattr(settings, 'OPENAI_API_BASE', 'https://api.openai.com/v1').rstrip('/')
-            model = getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini')
-
-            response = requests.post(
-                f"{base_url}/chat/completions",
-                headers={
-                    'Authorization': f'Bearer {api_key}',
-                    'Content-Type': 'application/json'
-                },
-                json={
-                    'model': model,
-                    'messages': [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_content}
-                    ],
-                    'temperature': 0.0,
-                    'response_format': {'type': 'json_object'},
-                },
-                timeout=15,
-            )
-            response.raise_for_status()
-            content = response.json()['choices'][0]['message']['content']
-            result = json.loads(content)
-
-            valid = result.get('valid', True)
-            reason = result.get('reason', '')
-
-            if not valid:
-                logs.append(f"[검증] 실패: {reason}")
-                return {'valid': False, 'error': reason}, logs
-
-            logs.append("[검증] 통과: 의도와 분석 방식이 일치합니다.")
-
-        except Exception as e:
-            logs.append(f"[검증] 오류 발생 (패스): {e}")
-
-        logs.append(f"[검증] 완료: {len(assets)}개 자산 검증됨")
-        return {'valid': True}, logs
-
-
-class TickerConversionAgent:
-    """
-    Converts asset names to proper ticker symbols/codes (e.g., "Tesla" -> "TSLA", "삼성전자" -> "005930").
-    """
-    def run(self, assets):
-        logs = []
-        logs.append(f"[티커 변환] {len(assets)}개 자산의 티커/코드 변환 중...")
-
-        converted_assets = []
-
-        for asset in assets:
-            original_id = asset.get('id', '')
-            original_label = asset.get('label', '')
-            asset_type = asset.get('type', '')
-
-            # Convert to proper ticker/code
-            converted, reason = self._convert_to_ticker(original_id, original_label, asset_type)
-
-            if converted:
-                converted_assets.append({
-                    **asset,
-                    'id': converted['id'],
-                    'label': converted['label'],
-                    'ticker': converted.get('ticker'),
-                    'original_id': original_id,
-                    'original_label': original_label
-                })
-                ticker_info = converted.get('ticker', converted['id'])
-                if converted['id'] != original_id:
-                    logs.append(f"[티커 변환] ✓ {original_label} → {converted['id']} (Ticker: {ticker_info})")
-                else:
-                    logs.append(f"[티커 변환] ✓ {original_label}: 이미 올바른 형식 (Ticker: {ticker_info})")
-            else:
-                # Keep original if conversion fails
-                converted_assets.append(asset)
-                logs.append(f"[티커 변환] ✗ {original_label}: {reason}")
-
-        logs.append(f"[티커 변환] 완료: {len(converted_assets)}개 자산 변환됨")
-        return {'assets': converted_assets}, logs
-
-    def _convert_to_ticker(self, asset_id, label, asset_type):
-        """
-        Convert asset name to proper ticker/code.
-        Returns (dict with id, label, ticker, reason string).
-        If conversion fails, returns (None, reason).
-        """
-        # Normalize inputs (replace underscores with spaces for better matching)
-        normalized_id = (asset_id or '').strip().lower().replace('_', ' ')
-        normalized_label = _normalize_asset_label_text(label)
-
-        if not normalized_id and not normalized_label:
-            return None, "자산 ID와 라벨이 모두 비어있음"
-
-        # Bitcoin - keep as is
-        if normalized_id in ['bitcoin', 'btc'] or normalized_label in ['비트코인', 'bitcoin', 'btc']:
-            return {'id': 'bitcoin', 'label': '비트코인', 'ticker': 'BTC-USD'}, None
-
-        # Check SAFE_ASSETS first
-        for key, cfg in SAFE_ASSETS.items():
-            ticker = (cfg.get('ticker') or '').strip().lower()
-            stooq_symbol = (cfg.get('stooq_symbol') or '').strip().lower()
-            cfg_label_norm = _normalize_asset_label_text(cfg.get('label'))
-            cfg_aliases = [a.lower() for a in cfg.get('aliases', [])]
-
-            if normalized_id in {key.lower(), ticker, stooq_symbol} or normalized_id in cfg_aliases:
-                return {'id': key, 'label': cfg.get('label'), 'ticker': cfg.get('ticker')}, None
-            if normalized_label and normalized_label in {cfg_label_norm} | set(cfg_aliases):
-                return {'id': key, 'label': cfg.get('label'), 'ticker': cfg.get('ticker')}, None
-
-        # Check PRESET_STOCK_GROUPS
-        for configs in PRESET_STOCK_GROUPS.values():
-            for cfg in configs:
-                cfg_id = (cfg.get('id') or '').strip()
-                ticker = (cfg.get('ticker') or '').strip().lower()
-                stooq_symbol = (cfg.get('stooq_symbol') or '').strip().lower()
-                cfg_label_norm = _normalize_asset_label_text(cfg.get('label'))
-                cfg_aliases = [a.lower() for a in cfg.get('aliases', [])]
-
-                if normalized_id in {cfg_id.lower(), ticker, stooq_symbol} or normalized_id in cfg_aliases:
-                    return {'id': cfg_id, 'label': cfg.get('label'), 'ticker': cfg.get('ticker')}, None
-                if normalized_label and (normalized_label == cfg_label_norm or normalized_label in cfg_aliases):
-                    return {'id': cfg_id, 'label': cfg.get('label'), 'ticker': cfg.get('ticker')}, None
-
-        # Korean stock pattern (6-digit code)
-        for cand in [asset_id, label]:
-            if not cand:
-                continue
-            cand_upper = cand.strip().upper()
-            if re.match(r'^\d{6}(\.(KS|KQ|KL|KR))?$', cand_upper):
-                final_ticker = cand_upper if '.' in cand_upper else f"{cand_upper}.KS"
-                return {'id': final_ticker, 'label': label or final_ticker, 'ticker': final_ticker}, None
-
-        # Not found - return None with reason
-        return None, f"매칭되는 티커를 찾을 수 없음 (ID: {asset_id}, Label: {label}, Type: {asset_type})"
-
-
 class PriceRetrieverAgent:
     """
     Responsible for fetching historical price data for the requested assets.
@@ -3703,38 +4382,6 @@ class PriceRetrieverAgent:
     def run(self, assets, start_year, end_year):
         logs = []
         logs.append(f"[데이터 수집] {len(assets)}개 자산의 {start_year}-{end_year} 데이터 가져오는 중...")
-
-        # 한국 주식이 포함되어 있는지 확인
-        def is_korean_stock_asset(asset):
-            asset_id = asset.get('id', '')
-            asset_type = asset.get('type', '')
-            label = asset.get('label', '')
-
-            # Type이 kr_stock인 경우
-            if asset_type == 'kr_stock':
-                return True
-
-            # ID가 .KS, .KQ, .KL로 끝나는 경우
-            if asset_id.endswith('.KS') or asset_id.endswith('.KQ') or asset_id.endswith('.KL'):
-                return True
-
-            # 라벨이나 ID에 한국 기업명이 포함된 경우 (대표적인 예시)
-            korean_companies = [
-                '삼성전자', 'SK하이닉스', 'NAVER', '네이버', '카카오',
-                'LG에너지솔루션', '현대차', '기아', '삼성바이오로직스',
-                '삼성SDI', '포스코홀딩스', 'Samsung Electronics', 'SK Hynix',
-                'Hyundai', 'Kia'
-            ]
-            for company in korean_companies:
-                if company.lower() in label.lower() or company.lower() in asset_id.lower():
-                    return True
-
-            return False
-
-        has_korean_stock = any(is_korean_stock_asset(asset) for asset in assets)
-
-        if has_korean_stock:
-            logs.append(f"[데이터 수집] 한국 주식 감지 → 비트코인 원화(KRW) 시세 사용")
 
         price_data_map = {}
 
@@ -3748,13 +4395,6 @@ class PriceRetrieverAgent:
             # 1. Map to internal config structure
             # We try to find an existing config or create a dynamic one
             config = _find_known_asset_config(asset_id, label)
-
-            # 비트코인이고 한국 주식이 포함되어 있으면 prefer_krw 플래그 설정
-            is_bitcoin = (asset_id == 'bitcoin' or label in ['비트코인', 'Bitcoin', 'BTC'])
-            if config and is_bitcoin and has_korean_stock:
-                config = config.copy()  # 기존 config를 수정하지 않도록 복사
-                config['prefer_krw'] = True
-                config['unit'] = 'KRW'  # 원화 단위로 변경
 
             if not config:
                 # If not found in presets, construct a config based on the Agent 1 output
@@ -3790,11 +4430,14 @@ class PriceRetrieverAgent:
                 result = _fetch_asset_history(config, start_year, end_year)
                 if result:
                     history, source = result
+                    base_metadata = dict(asset.get('metadata') or {})
+                    enriched_metadata = _enrich_metadata_with_dividend_info(config, base_metadata)
                     price_data_map[asset_id] = {
                         'history': history,
                         'config': config,
                         'source': source,
-                        'calculation_method': asset.get('calculation_method', 'cagr')
+                        'calculation_method': asset.get('calculation_method', 'cagr'),
+                        'metadata': enriched_metadata
                     }
                     # Show detailed info including ticker and category
                     ticker_info = config.get('ticker', asset_id)
@@ -3816,7 +4459,8 @@ class PriceRetrieverAgent:
             'commodity': '원자재',
             'bond': '채권',
             'forex': '통화',
-            'economic_indicator': '경제 지표'
+            'economic_indicator': '경제 지표',
+            'real_estate': '부동산'
         }
         return mapping.get(asset_type, '기타')
 
@@ -3827,7 +4471,7 @@ class CalculatorAgent:
     required by the frontend (calculating CAGR or cumulative returns, normalizing to 1.0, etc.).
     Also prepares the yearly closing prices for the table.
     """
-    def run(self, price_data_map, start_year, end_year, calculation_method='cagr'):
+    def run(self, price_data_map, start_year, end_year, calculation_method='cagr', include_dividends=False):
         logs = []
 
         # Determine method label based on calculation_method
@@ -3841,6 +4485,13 @@ class CalculatorAgent:
             method_label = '연평균 상승률(CAGR)'
 
         logs.append(f"[수익률 계산] {method_label} 계산 및 데이터 포맷팅 중...")
+
+        if include_dividends:
+            adjusted = self._apply_dividend_reinvestment(price_data_map, start_year, end_year)
+            if adjusted:
+                logs.append(f"[수익률 계산] 배당 재투자 적용: {len(adjusted)}개 자산")
+            else:
+                logs.append("[수익률 계산] 배당 재투자 적용 대상이 없습니다.")
 
         series_list = []
 
@@ -3859,6 +4510,12 @@ class CalculatorAgent:
                     series_obj['id'] = config['id']
                     series_obj['calculation_method'] = asset_calc_method
                     series_obj['source'] = source  # Add data source to series
+                    metadata = data.get('metadata') or {}
+                    if metadata:
+                        series_obj['metadata'] = metadata
+                        for meta_key, meta_value in metadata.items():
+                            if meta_key not in series_obj:
+                                series_obj[meta_key] = meta_value
                     series_list.append(series_obj)
                 else:
                      logs.append(f"[수익률 계산] {config['label']}: 데이터 부족으로 시리즈 생성 불가")
@@ -3876,6 +4533,36 @@ class CalculatorAgent:
         summary = self._generate_summary(series_list, start_year, end_year)
 
         return series_list, chart_data_table, summary, logs
+
+    def _apply_dividend_reinvestment(self, price_data_map, start_year, end_year):
+        """
+        For Yahoo Finance assets, refetch dividend-adjusted history to simulate reinvestment.
+        """
+        adjusted_assets = []
+        if not price_data_map:
+            return adjusted_assets
+
+        for asset_id, data in price_data_map.items():
+            if not isinstance(data, dict):
+                continue
+            source = data.get('source')
+            config = data.get('config') or {}
+            ticker = (config.get('ticker') or '').strip()
+            if source != 'Yahoo Finance' or not ticker:
+                continue
+
+            try:
+                history = _fetch_yfinance_history(ticker, start_year, end_year, adjust_for_dividends=True)
+                if history:
+                    data['history'] = history
+                    metadata = data.setdefault('metadata', {})
+                    metadata['dividends_reinvested'] = True
+                    adjusted_assets.append(config.get('label') or ticker)
+                    logger.info('[%s] Dividend reinvestment 적용 (Adjusted Close 사용)', config.get('label', ticker))
+            except Exception as exc:
+                logger.warning('[%s] 배당 재투자 데이터 가져오기 실패: %s', config.get('label', ticker), exc)
+
+        return adjusted_assets
 
     def _build_chart_data_table(self, series_list, calculation_method):
         """
@@ -3911,11 +4598,13 @@ class CalculatorAgent:
             yearly_values = []
             for point in points:
                 year = point.get('year')
-                value = point.get('value')
-                if year is not None and value is not None:
+                # Use raw_value if available (especially for price mode), otherwise value
+                val = point.get('raw_value') if point.get('raw_value') is not None else point.get('value')
+                
+                if year is not None and val is not None:
                     yearly_values.append({
                         'year': year,
-                        'value': round(value, 2)
+                        'value': val  # Use raw value for table display
                     })
 
             table_data.append({
@@ -3940,10 +4629,13 @@ class CalculatorAgent:
         method = best.get('calculation_method', 'cagr')
 
         if method == 'price':
-            # 가격 비교 모드: 가격 상승률로 표현
+            best_multiple = best.get('multiple_from_start')
+            worst_multiple = worst.get('multiple_from_start')
+            best_text = f"원금 대비 {best_multiple:.1f}배" if best_multiple is not None else "가장 크게 증가"
+            worst_text = f"{worst_multiple:.1f}배" if worst_multiple is not None else "가장 낮은 수준"
             return (f"{start_year}년부터 {end_year}년까지 가격 비교 결과, "
-                    f"{best['label']}의 가격 상승률이 {best['annualized_return_pct']}%로 가장 높았으며, "
-                    f"{worst['label']}은(는) {worst['annualized_return_pct']}%를 기록했습니다.")
+                    f"{best['label']}이(가) {best_text}였으며, "
+                    f"{worst['label']}은(는) {worst_text}에 그쳤습니다.")
         elif method == 'cumulative':
             unit = "누적 수익률"
         elif method == 'yearly_growth':
@@ -3991,7 +4683,19 @@ class AnalysisAgent:
             return analysis_text, logs
         except Exception as e:
             logs.append(f"[분석 생성] AI 분석 실패: {e}, 기본 분석으로 대체")
-            return self._generate_fallback_analysis(bitcoin, other_assets, start_year, end_year, calculation_method), logs
+            return self._generate_fallback_analysis(bitcoin, other_assets, start_year, end_year, calculation_method, prompt), logs
+
+    def _get_asset_cagr_pct(self, asset):
+        """Return CAGR (연평균 상승률) for the asset if available."""
+        if not asset:
+            return None
+        cagr_value = asset.get('annualized_cagr_pct')
+        if isinstance(cagr_value, (int, float)):
+            return cagr_value
+        fallback = asset.get('annualized_return_pct')
+        if isinstance(fallback, (int, float)):
+            return fallback
+        return None
 
     def _generate_ai_analysis(self, bitcoin, other_assets, start_year, end_year, calculation_method, prompt):
         """Generate narrative analysis using LLM"""
@@ -4002,6 +4706,7 @@ class AnalysisAgent:
         # Prepare data for LLM
         bitcoin_return = bitcoin.get('annualized_return_pct', 0)
         bitcoin_multiple = bitcoin.get('multiple_from_start', 1)
+        investment_info = self._extract_investment_amount(prompt)
 
         # Get method-specific terminology
         if calculation_method == 'price':
@@ -4033,33 +4738,20 @@ class AnalysisAgent:
         system_prompt = _get_agent_prompt('analysis_generator',
             "당신은 금융 데이터 분석 전문가입니다. 비트코인을 중심으로 자산 성과를 분석하고 서술형 리포트를 작성합니다.\n\n"
             "**작성 원칙:**\n"
-            "1. 비트코인의 성과를 먼저 강조하고, **제공된 모든 자산들**과 비교합니다\n"
-            "2. 구체적인 수치를 포함하되, 자연스러운 문장으로 작성합니다\n"
-            "3. 주요 수치(연도, 퍼센트, 배수)는 하이라이트 태그로 감쌉니다\n"
-            "4. 비트코인 대비 성과가 좋은 자산과 낮은 자산을 구분하여 언급합니다\n"
-            "5. **중요: 제공된 모든 자산을 리스트 형태로 나열하여 누락 없이 표시합니다**\n\n"
-            "**색상 코딩 규칙 (매우 중요!):**\n"
-            "- '비트코인 대비' 값은 (자산의 원금 대비 / 비트코인의 원금 대비 × 100)으로 계산됩니다\n"
-            "- **이 값이 100보다 크면** → 비트코인보다 성과가 좋음 → **빨간색 (bg-red-200 text-red-900)**\n"
-            "- **이 값이 100보다 작거나 같으면** → 비트코인보다 성과가 나쁨 → **파란색 (bg-blue-200 text-blue-900)**\n\n"
-            "**구체적인 예시:**\n"
-            "1. 엔비디아의 비트코인 대비 값이 220.6% (> 100) → 빨간색\n"
-            "   <li><span class='bg-red-200 text-red-900 px-2 py-0.5 rounded font-bold'>엔비디아(NVDA)</span>: 연평균 상승률 <span class='bg-red-200 text-red-900 px-2 py-0.5 rounded font-bold'>129.7%</span>, 원금 대비 <span class='bg-red-200 text-red-900 px-2 py-0.5 rounded font-bold'>12.1배</span> (비트코인 대비 <span class='bg-red-200 text-red-900 px-2 py-0.5 rounded font-bold'>220.6%</span>)</li>\n\n"
-            "2. 금의 비트코인 대비 값이 12.5% (< 100) → 파란색\n"
-            "   <li><span class='bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold'>금</span>: 연평균 상승률 <span class='bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold'>8.2%</span>, 원금 대비 <span class='bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold'>2.1배</span> (비트코인 대비 <span class='bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold'>12.5%</span>)</li>\n\n"
-            "3. 은의 비트코인 대비 값이 43.0% (< 100) → 파란색\n"
-            "   <li><span class='bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold'>은</span>: 연평균 상승률 <span class='bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold'>33.2%</span>, 원금 대비 <span class='bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold'>2.4배</span> (비트코인 대비 <span class='bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold'>43.0%</span>)</li>\n\n"
+            "1. 비트코인의 핵심 수치를 먼저 강조하고, **3문장 이내**의 간결한 문단으로 설명합니다\n"
+            "2. 비트코인 이외의 개별 자산명은 절대로 언급하지 않습니다 (엔비디아, 금 등 금지)\n"
+            "3. 다른 자산을 언급해야 한다면 '다른 자산들의 성과는 아래에서 확인하세요'와 같이 일반 표현만 사용합니다\n"
+            "4. 주요 수치(연도, 퍼센트, 배수)는 하이라이트 태그로 감싸고, 불필요한 수식어는 제거합니다\n"
+            "5. 답변은 담백한 어조를 유지하며, 문장은 최대 20단어 내외로 유지합니다\n"
+            "6. 다른 자산들의 세부 리스트는 시스템이 자동으로 생성하므로, HTML 리스트(<ul>, <ol>, <li>)는 출력하지 않습니다\n"
+            "7. 리스트를 언급해야 할 경우, '다른 자산들의 성과는 시스템에서 이어서 제공합니다' 정도로 짧게 안내만 해주세요\n\n"
             "**하이라이트 규칙:**\n"
             "- 비트코인 관련 텍스트: <span class='bg-yellow-300 text-yellow-900 px-2 py-1 rounded font-bold text-lg'>비트코인</span>\n"
             "- 연도: <span class='bg-yellow-200 text-yellow-900 px-2 py-1 rounded font-bold'>2015년</span>\n"
             "- 비트코인의 숫자(퍼센트, 배수): <span class='bg-yellow-200 text-yellow-900 px-2 py-1 rounded font-bold'>81.5%</span>\n\n"
             "**출력 형식:**\n"
             "1. 첫 문단: 비트코인의 성과 요약 (비트코인 단어를 크고 노란색으로 강조)\n"
-            "2. 두 번째 문단: '다른 자산들의 성과는 다음과 같습니다:'\n"
-            "3. 불릿 리스트(<ul><li>): 제공된 모든 자산을 성과 순으로 나열하되, 각 자산의 '비트코인 대비' 값을 확인하여:\n"
-            "   - 값이 100보다 크면 (>100): bg-red-200 text-red-900 (빨간색)\n"
-            "   - 값이 100보다 작거나 같으면 (≤100): bg-blue-200 text-blue-900 (파란색)\n"
-            "   자산명과 모든 수치에 동일한 색상을 적용하세요."
+            "2. HTML 리스트는 생성하지 말고 문단 단위의 설명만 작성하세요."
         )
 
         user_content = (
@@ -4100,10 +4792,152 @@ class AnalysisAgent:
         )
         response.raise_for_status()
         content = response.json()['choices'][0]['message']['content']
+        cleaned_content = re.sub(r'<ul[\s\S]*?</ul>', '', content, flags=re.IGNORECASE).strip()
+        bitcoin_focus_block = self._build_bitcoin_focus_block(bitcoin, start_year, end_year, metric_name, investment_info)
+        final_sections = []
+        if bitcoin_focus_block:
+            final_sections.append(bitcoin_focus_block)
+        return ''.join(final_sections)
 
-        return content.strip()
 
-    def _generate_fallback_analysis(self, bitcoin, other_assets, start_year, end_year, calculation_method):
+    def _extract_investment_amount(self, prompt):
+        if not prompt:
+            return None
+        text = str(prompt)
+        patterns = [
+            (r'(\d{1,3}(?:,\d{3})*)(?:\s*)(만원)', '만원', 10000),
+            (r'(\d{1,3}(?:,\d{3})*)(?:\s*)(원)', '원', 1),
+        ]
+        for pattern, unit, unit_factor in patterns:
+            match = re.search(pattern, text)
+            if not match:
+                continue
+            try:
+                amount_value = float(match.group(1).replace(',', ''))
+            except ValueError:
+                continue
+            if amount_value <= 0:
+                continue
+            return {
+                'unit': unit,
+                'unit_factor': unit_factor,
+                'amount': amount_value,
+                'display_text': f"{match.group(1)}{unit}"
+            }
+        return None
+
+    def _format_investment_result(self, value, unit, unit_factor=None):
+        if value is None:
+            return ''
+        factor = unit_factor if unit_factor else (10000 if unit == '만원' else 1)
+        amount_won = value * factor
+        return self._format_korean_won(amount_won)
+
+    def _format_korean_won(self, amount_won):
+        try:
+            amount_int = int(round(amount_won))
+        except Exception:
+            return "0 원"
+
+        units = [
+            (10 ** 12, '조'),
+            (10 ** 8, '억'),
+            (10 ** 4, '만'),
+        ]
+
+        parts = []
+        remainder = amount_int
+
+        for value, label in units:
+            if remainder >= value:
+                unit_amount = remainder // value
+                parts.append(f"{unit_amount:,}{label}")
+                remainder %= value
+
+        if remainder >= 1000:
+            parts.append(f"{remainder // 1000:,}천")
+            remainder %= 1000
+
+        if remainder > 0 or not parts:
+            parts.append(f"{remainder:,}")
+
+        return ' '.join(parts) + ' 원'
+
+    def _format_market_cap_usd(self, amount_usd):
+        if amount_usd is None:
+            return ""
+        try:
+            amount = float(amount_usd)
+        except (TypeError, ValueError):
+            return ""
+        if amount <= 0:
+            return ""
+
+        trillions = amount / 1_000_000_000_000
+        if trillions >= 0.1:
+            decimals = 1 if trillions >= 1 else 2
+            formatted_value = format(trillions, f'.{decimals}f')
+            return f"약 ${formatted_value}조 (USD)"
+
+        return f"${amount:,.0f} (USD)"
+
+    def _build_bitcoin_focus_block(self, bitcoin, start_year, end_year, metric_name, investment_info=None):
+        """Return a large, simple paragraph highlighting Bitcoin performance."""
+        if not bitcoin:
+            return ""
+
+        bitcoin_return = bitcoin.get('annualized_return_pct', 0) or 0
+        bitcoin_multiple = bitcoin.get('multiple_from_start', 1) or 1
+        period_years = max(1, end_year - start_year)
+
+        base_text_class = "text-3xl font-black text-slate-900"
+        block = (
+            "<div class='mb-4 space-y-3'>"
+            f"<p class='{base_text_class} leading-tight'>"
+            f"<span class='{base_text_class}'>{start_year}년</span>부터 "
+            f"<span class='{base_text_class}'>{end_year}년</span>까지 "
+            f"<span class='{base_text_class}'>비트코인</span>은 "
+            f"{period_years}년 동안 원금의 "
+            f"<span class='bg-yellow-200 text-yellow-900 px-4 py-1 rounded font-black text-4xl'>{bitcoin_multiple:.1f}배</span>"
+            "가 되었습니다."
+            "</p>"
+        )
+
+        bitcoin_cagr = self._get_asset_cagr_pct(bitcoin)
+        if isinstance(bitcoin_cagr, (int, float)):
+            if metric_name == '연평균 상승률':
+                prefix = "연평균 상승률은 "
+            else:
+                prefix = "같은 기간 연평균 상승률은 "
+            highlight_span = (
+                f"<span class='bg-yellow-200 text-yellow-900 px-4 py-1 rounded font-black text-3xl'>{bitcoin_cagr:.1f}%</span>"
+            )
+            block += (
+                "<p class='text-3xl font-semibold text-slate-800 leading-snug'>"
+                f"{prefix}{highlight_span}"
+                "였습니다."
+                "</p>"
+            )
+
+        if investment_info and bitcoin_multiple > 0:
+            final_amount = investment_info['amount'] * bitcoin_multiple
+            formatted_final = self._format_investment_result(
+                final_amount,
+                investment_info['unit'],
+                investment_info.get('unit_factor')
+            )
+            block += (
+                "<p class='text-3xl font-semibold text-slate-900 leading-snug'>"
+                f"<span class='font-extrabold text-slate-900'>{investment_info['display_text']}</span>을 "
+                f"<span class='{base_text_class}'>비트코인</span>에 투자했다면 "
+                f"지금은 <span class='bg-green-100 text-green-900 px-3 py-1 rounded font-black text-3xl'>{formatted_final}</span> 정도입니다."
+                "</p>"
+            )
+
+        block += "</div>"
+        return block
+
+    def _generate_fallback_analysis(self, bitcoin, other_assets, start_year, end_year, calculation_method, prompt=None):
         """Generate basic narrative analysis without LLM - shows all assets"""
         bitcoin_return = bitcoin.get('annualized_return_pct', 0)
         bitcoin_multiple = bitcoin.get('multiple_from_start', 1)
@@ -4117,47 +4951,9 @@ class AnalysisAgent:
         else:
             metric_name = "연평균 상승률"
 
-        period_years = end_year - start_year
-
-        analysis = (
-            f"<p><span class='bg-yellow-200 text-yellow-900 px-2 py-1 rounded font-bold'>{start_year}년</span>부터 "
-            f"<span class='bg-yellow-200 text-yellow-900 px-2 py-1 rounded font-bold'>{end_year}년</span>까지 "
-            f"<span class='bg-yellow-200 text-yellow-900 px-2 py-1 rounded font-bold'>{period_years}년</span> 동안, "
-            f"<span class='bg-yellow-300 text-yellow-900 px-2 py-1 rounded font-bold text-lg'>비트코인</span>은 {metric_name} <span class='bg-yellow-200 text-yellow-900 px-2 py-1 rounded font-bold'>{bitcoin_return:.1f}%</span>를 기록하며 "
-            f"원금의 <span class='bg-yellow-200 text-yellow-900 px-2 py-1 rounded font-bold'>{bitcoin_multiple:.1f}배</span>로 성장했습니다.</p>"
-        )
-
-        # Compare with ALL other assets
-        if other_assets:
-            # Sort other assets by performance
-            sorted_others = sorted(other_assets, key=lambda x: x.get('annualized_return_pct', 0), reverse=True)
-
-            analysis += "<p class='mt-4'>다른 자산들의 성과는 다음과 같습니다:</p>"
-            analysis += "<ul class='list-disc pl-6 space-y-2 mt-2'>"
-
-            for asset in sorted_others:
-                asset_return = asset.get('annualized_return_pct', 0)
-                asset_multiple = asset.get('multiple_from_start', 1)
-                perf = (asset_multiple / bitcoin_multiple * 100) if bitcoin_multiple > 0 else 0
-
-                # Apply color based on performance vs Bitcoin
-                if perf > 100:
-                    asset_style = "bg-red-200 text-red-900 px-2 py-0.5 rounded font-bold"
-                    number_style = "bg-red-200 text-red-900 px-2 py-0.5 rounded font-bold"
-                else:
-                    asset_style = "bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold"
-                    number_style = "bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-semibold"
-
-                analysis += (
-                    f"<li><span class='{asset_style}'>{asset.get('label')}</span>: "
-                    f"{metric_name} <span class='{number_style}'>{asset_return:.1f}%</span>, "
-                    f"원금 대비 <span class='{number_style}'>{asset_multiple:.1f}배</span> "
-                    f"(비트코인 대비 <span class='{number_style}'>{perf:.1f}%</span>)</li>"
-                )
-
-            analysis += "</ul>"
-
-        return analysis
+        investment_info = self._extract_investment_amount(prompt)
+        bitcoin_focus_block = self._build_bitcoin_focus_block(bitcoin, start_year, end_year, metric_name, investment_info)
+        return bitcoin_focus_block or ""
 
     def _generate_generic_analysis(self, series_list, start_year, end_year, calculation_method):
         """Fallback when Bitcoin is not in the data - shows all assets"""
@@ -4243,13 +5039,18 @@ def finance_historical_returns_view(request):
     quick_requests = payload.get('quick_requests') or []
     if isinstance(quick_requests, str):
         quick_requests = [quick_requests]
+    custom_assets = _sanitize_custom_assets(payload.get('custom_assets'))
 
     backend_logger.info("Prompt: %s", prompt)
     backend_logger.info("Quick Requests: %s", quick_requests)
+    if custom_assets:
+        backend_logger.info("Custom Assets: %s", custom_assets)
 
     context_key = (payload.get('context_key') or '').strip()
     backend_logger.info("Context Key: %s", context_key)
     _ensure_finance_cache_purged(context_key)
+    include_dividends = bool(payload.get('include_dividends'))
+    backend_logger.info("Include Dividends: %s", include_dividends)
 
     # Derive years (reusing existing logic helpers)
     start_hint = payload.get('start_year')
@@ -4267,7 +5068,7 @@ def finance_historical_returns_view(request):
     if use_streaming:
         # Return a streaming response (logging handled in stream generator)
         return StreamingHttpResponse(
-            _finance_analysis_stream(prompt, quick_requests, context_key, start_year, end_year, user_identifier, start_time),
+            _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key, start_year, end_year, user_identifier, start_time, include_dividends),
             content_type='text/event-stream'
         )
     else:
@@ -4312,35 +5113,15 @@ def finance_historical_returns_view(request):
                 'logs': all_logs
             }, status=400)
 
-        # Agent 1.5: Validation Agent
-        backend_logger.info("STEP 1.5: Running ValidationAgent")
-        validation_agent = ValidationAgent()
-        # Use original prompts for validation context
-        combined_prompt_text = ' '.join(([prompt] if prompt else []) + quick_requests)
-        val_res, val_logs = validation_agent.run(combined_prompt_text, intent_result)
-        all_logs.extend(val_logs)
-
-        if not val_res.get('valid'):
-            backend_logger.warning("Validation failed: %s", val_res.get('error'))
-            processing_time_ms = int((time.time() - start_time) * 1000)
-            error_msg = f"요청 분석 오류: {val_res.get('error')}"
-            _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                             error_msg, len(assets), processing_time_ms)
-            return JsonResponse({
-                'ok': False,
-                'error': error_msg,
-                'logs': all_logs
-            }, status=400)
-
-        # Agent 1.6: Ticker Conversion Agent
-        backend_logger.info("STEP 1.6: Running TickerConversionAgent")
-        ticker_agent = TickerConversionAgent()
-        ticker_res, ticker_logs = ticker_agent.run(assets)
-        all_logs.extend(ticker_logs)
-
-        # Use converted assets with proper tickers/codes
-        validated_assets = ticker_res.get('assets', assets)
-        backend_logger.info("Converted Assets: %s", validated_assets)
+        manual_assets = _build_manual_assets(custom_assets, calculation_method)
+        if manual_assets:
+            merged_assets, added_assets = _merge_asset_lists(assets, manual_assets)
+            if added_assets:
+                assets = merged_assets
+                intent_result['assets'] = assets
+                added_labels = ', '.join(a.get('label', a.get('id', '')) for a in added_assets)
+                all_logs.append(f"[의도 분석] 사용자 지정 자산 추가: {added_labels}")
+        validated_assets = assets
 
         # Agent 2: Price Retriever
         backend_logger.info("STEP 2: Running PriceRetrieverAgent")
@@ -4364,7 +5145,7 @@ def finance_historical_returns_view(request):
         # Agent 3: Calculator
         backend_logger.info("STEP 3: Running CalculatorAgent with method: %s", calculation_method)
         calculator_agent = CalculatorAgent()
-        series_data, chart_data_table, summary, calculator_logs = calculator_agent.run(price_data_map, start_year, end_year, calculation_method)
+        series_data, chart_data_table, summary, calculator_logs = calculator_agent.run(price_data_map, start_year, end_year, calculation_method, include_dividends=include_dividends)
         all_logs.extend(calculator_logs)
 
         if not series_data:
@@ -4409,12 +5190,13 @@ def finance_historical_returns_view(request):
             'prompt': prompt,
             'quick_requests': quick_requests,
             'calculation_method': calculation_method,
+            'include_dividends': include_dividends,
         }
 
         return JsonResponse(response_payload)
 
 
-def _finance_analysis_stream(prompt, quick_requests, context_key, start_year, end_year, user_identifier, start_time):
+def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key, start_year, end_year, user_identifier, start_time, include_dividends=False):
     """Generator function for streaming finance analysis logs."""
     import logging
     import time
@@ -4458,31 +5240,16 @@ def _finance_analysis_stream(prompt, quick_requests, context_key, start_year, en
             yield send_error('분석할 자산을 찾을 수 없습니다.')
             return
 
-        # Agent 1.5: Validation Agent
-        validation_agent = ValidationAgent()
-        combined_prompt_text = ' '.join(([prompt] if prompt else []) + quick_requests)
-        val_res, val_logs = validation_agent.run(combined_prompt_text, intent_result)
+        manual_assets = _build_manual_assets(custom_assets, calculation_method)
+        if manual_assets:
+            merged_assets, added_assets = _merge_asset_lists(assets, manual_assets)
+            if added_assets:
+                assets = merged_assets
+                intent_result['assets'] = assets
+                added_labels = ', '.join(a.get('label', a.get('id', '')) for a in added_assets)
+                yield send_log(f"[의도 분석] 사용자 지정 자산 추가: {added_labels}")
 
-        for log in val_logs:
-            yield send_log(log)
-
-        if not val_res.get('valid'):
-            processing_time_ms = int((time.time() - start_time) * 1000)
-            error_msg = f"요청 분석 오류: {val_res.get('error')}"
-            _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                             error_msg, len(assets), processing_time_ms)
-            yield send_error(error_msg)
-            return
-
-        # Agent 1.6: Ticker Conversion Agent
-        ticker_agent = TickerConversionAgent()
-        ticker_res, ticker_logs = ticker_agent.run(assets)
-
-        for log in ticker_logs:
-            yield send_log(log)
-
-        # Use converted assets with proper tickers/codes
-        validated_assets = ticker_res.get('assets', assets)
+        validated_assets = assets
 
         # Agent 2: Price Retriever
         retriever_agent = PriceRetrieverAgent()
@@ -4500,7 +5267,7 @@ def _finance_analysis_stream(prompt, quick_requests, context_key, start_year, en
 
         # Agent 3: Calculator
         calculator_agent = CalculatorAgent()
-        series_data, chart_data_table, summary, calculator_logs = calculator_agent.run(price_data_map, start_year, end_year, calculation_method)
+        series_data, chart_data_table, summary, calculator_logs = calculator_agent.run(price_data_map, start_year, end_year, calculation_method, include_dividends=include_dividends)
 
         for log in calculator_logs:
             yield send_log(log)
@@ -4539,6 +5306,7 @@ def _finance_analysis_stream(prompt, quick_requests, context_key, start_year, en
             'end_year': end_year,
             'summary': summary,
             'notes': "본 분석은 AI 에이전트가 실시간 데이터를 수집하여 계산했습니다.",
+            'include_dividends': include_dividends,
             'fx_rate': usd_krw_rate,
             'prompt': prompt,
             'quick_requests': quick_requests,
@@ -4553,6 +5321,58 @@ def _finance_analysis_stream(prompt, quick_requests, context_key, start_year, en
         _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
                          f"분석 중 오류: {str(e)}", 0, processing_time_ms)
         yield send_error(f"분석 중 오류가 발생했습니다: {str(e)}")
+
+
+@csrf_exempt
+def finance_resolve_custom_asset_view(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+
+    payload = _load_json_body(request)
+    if payload is None:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    name = (payload.get('name') or '').strip()
+    if not name:
+        return JsonResponse({'ok': False, 'error': '자산명을 입력해주세요.'}, status=400)
+
+    config = _find_known_asset_config(name, name)
+    if config:
+        asset = {
+            'id': config.get('id') or name,
+            'label': config.get('label') or name,
+            'ticker': config.get('ticker') or config.get('id') or name,
+            'category': config.get('category'),
+            'unit': config.get('unit')
+        }
+        return JsonResponse({'ok': True, 'asset': asset})
+
+    candidate = _lookup_ticker_with_llm(name, name)
+    if candidate:
+        asset = {
+            'id': candidate.get('id') or name,
+            'label': candidate.get('label') or name,
+            'ticker': candidate.get('ticker') or candidate.get('id') or name,
+            'category': candidate.get('category'),
+            'unit': candidate.get('unit')
+        }
+        return JsonResponse({'ok': True, 'asset': asset})
+
+    suggestion = _suggest_related_asset(name)
+    if suggestion:
+        asset = {
+            'id': suggestion.get('id') or name,
+            'label': suggestion.get('label') or name,
+            'ticker': suggestion.get('ticker') or suggestion.get('id') or name,
+            'category': suggestion.get('category'),
+            'unit': suggestion.get('unit')
+        }
+        return JsonResponse({'ok': True, 'asset': asset})
+
+    return JsonResponse({
+        'ok': False,
+        'error': f"'{name}'과(와) 관련된 티커나 대체 종목을 찾지 못했습니다."
+    }, status=404)
 
 
 @csrf_exempt
@@ -4624,8 +5444,13 @@ def finance_yearly_closing_prices_view(request):
         # Override with canonical config info (e.g. if '삼성전자' maps to '005930.KS')
         current_result_entry['id'] = config.get('id') or asset_id
         current_result_entry['label'] = config.get('label') or label or current_result_entry['id']
-        current_result_entry['unit'] = config.get('unit') or entry.get('unit') or ''
-        current_result_entry['category'] = config.get('category') or entry.get('category') or ''
+        current_category = config.get('category') or entry.get('category') or ''
+        current_unit = (config.get('unit') or entry.get('unit') or '').upper()
+        ticker_upper = (config.get('ticker') or current_result_entry['id'] or '').upper()
+        if current_category == '국내 주식' or ticker_upper.endswith(('.KS', '.KQ', '.KL', '.KR')):
+            current_unit = 'KRW'
+        current_result_entry['unit'] = current_unit
+        current_result_entry['category'] = current_category
         current_result_entry['aliases'] = _collect_asset_aliases(config, asset_id)
 
         try:
@@ -4927,33 +5752,27 @@ def admin_get_wallet_password_view(request):
 # Agent Prompt Management
 # ============================================================
 
+EXCLUDED_AGENT_PROMPT_TYPES = {
+    # Intent classifier (asset extraction) prompt is no longer managed via admin UI.
+    'intent_classifier',
+}
+
+
+def _cleanup_excluded_agent_prompts():
+    """Remove agent prompts that should not be edited via the admin page."""
+    if not EXCLUDED_AGENT_PROMPT_TYPES:
+        return
+    from .models import AgentPrompt
+    AgentPrompt.objects.filter(agent_type__in=EXCLUDED_AGENT_PROMPT_TYPES).delete()
+
+
 def _get_or_create_default_agent_prompts():
     """Initialize default agent prompts if they don't exist"""
     from .models import AgentPrompt
 
+    _cleanup_excluded_agent_prompts()
+
     defaults = {
-        'intent_classifier': {
-            'name': '의도 분석 Agent',
-            'description': '사용자 요청을 분석하여 자산 목록을 추출하고 계산 방식을 결정합니다.',
-            'system_prompt': (
-                "You are a financial intent classifier. "
-                "Extract a list of financial assets or economic indicators mentioned in the user's request. "
-                "For each asset/indicator, provide the following fields: "
-                "- 'id': The ticker symbol (e.g., 'AAPL', 'BTC-USD'), Korean stock code (e.g., '005930.KS'), or indicator code (e.g., 'M2-US', 'M2-KR'). "
-                "  **CRITICAL**: For Korean stocks, you MUST provide the 6-digit code followed by '.KS' or '.KQ'. "
-                "  (e.g., Samsung Electronics -> '005930.KS', Kakao -> '035720.KS'). "
-                "  For economic indicators like M2 money supply, use 'M2-US' for US M2, 'M2-KR' for Korean M2. "
-                "- 'label': The display name (e.g., 'Samsung Electronics', 'Bitcoin', 'US M2 Money Supply'). "
-                "- 'type': One of 'crypto', 'kr_stock', 'us_stock', 'index', 'commodity', 'forex', 'bond', 'economic_indicator'. "
-                "- 'calculation_method': REQUIRED. Determine from user's request:\n"
-                "  * 'cagr' (default): If user asks for '연평균', 'CAGR', 'annualized', '평균 수익률'\n"
-                "  * 'cumulative': If user asks for '누적', 'total return', '총 상승률', '전체 상승률'\n"
-                "  * If unclear, use 'cagr' as default.\n"
-                "If the user asks for a group (e.g., 'US Big Tech'), expand it into individual representative stocks (max 10). "
-                "IMPORTANT: The 'calculation_method' should be the SAME for all assets unless the user specifically requests different methods for different assets. "
-                "Return ONLY a JSON object with keys 'assets' (list) and 'calculation_method' (string: 'cagr' or 'cumulative')."
-            ),
-        },
         'guardrail': {
             'name': '가드레일 Agent',
             'description': '부적절한 요청을 필터링하고 안전성을 검사합니다.',
@@ -4993,12 +5812,14 @@ def admin_agent_prompts_view(request):
     """
     from .models import AgentPrompt
 
+    _cleanup_excluded_agent_prompts()
+
     if request.method == 'GET':
         # Initialize defaults if empty
         if AgentPrompt.objects.count() == 0:
             _get_or_create_default_agent_prompts()
 
-        prompts = AgentPrompt.objects.all()
+        prompts = AgentPrompt.objects.exclude(agent_type__in=EXCLUDED_AGENT_PROMPT_TYPES)
         return JsonResponse({
             'ok': True,
             'prompts': [p.as_dict() for p in prompts]
@@ -5007,7 +5828,7 @@ def admin_agent_prompts_view(request):
     elif request.method == 'POST':
         # Initialize defaults
         created = _get_or_create_default_agent_prompts()
-        prompts = AgentPrompt.objects.all()
+        prompts = AgentPrompt.objects.exclude(agent_type__in=EXCLUDED_AGENT_PROMPT_TYPES)
         return JsonResponse({
             'ok': True,
             'created': created,
@@ -5023,6 +5844,12 @@ def admin_agent_prompt_detail_view(request, agent_type):
     GET: Get specific agent prompt
     PUT/PATCH: Update agent prompt
     """
+    if agent_type in EXCLUDED_AGENT_PROMPT_TYPES:
+        return JsonResponse({
+            'ok': False,
+            'error': f'Agent prompt not supported: {agent_type}'
+        }, status=404)
+
     from .models import AgentPrompt
 
     if request.method == 'GET':
@@ -5074,5 +5901,219 @@ def admin_agent_prompt_detail_view(request, agent_type):
                 'ok': False,
                 'error': str(e)
             }, status=500)
+
+    elif request.method == 'DELETE':
+        try:
+            prompt = AgentPrompt.objects.get(agent_type=agent_type)
+            prompt.delete()
+            return JsonResponse({'ok': True})
+        except AgentPrompt.DoesNotExist:
+            return JsonResponse({
+                'ok': False,
+                'error': f'Agent prompt not found: {agent_type}'
+            }, status=404)
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def finance_quick_requests_view(request):
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+
+    _ensure_default_finance_quick_requests()
+    requests_qs = FinanceQuickRequest.objects.filter(is_active=True).order_by('sort_order', 'id')
+    return JsonResponse({
+        'ok': True,
+        'requests': [qr.as_dict() for qr in requests_qs]
+    })
+
+
+@csrf_exempt
+def admin_finance_quick_requests_view(request):
+    if request.method == 'GET':
+        _ensure_default_finance_quick_requests()
+        requests_qs = FinanceQuickRequest.objects.all().order_by('sort_order', 'id')
+        return JsonResponse({
+            'ok': True,
+            'requests': [qr.as_dict() for qr in requests_qs]
+        })
+
+    if request.method == 'POST':
+        payload = _load_json_body(request)
+        if payload is None:
+            return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+        label = (payload.get('label') or '').strip()
+        quick_request_text = (payload.get('quick_request') or '').strip()
+        if not label or not quick_request_text:
+            return JsonResponse({'ok': False, 'error': 'label과 quick_request는 필수입니다.'}, status=400)
+
+        sort_order = payload.get('sort_order')
+        if sort_order is None:
+            max_order = FinanceQuickRequest.objects.aggregate(max_order=Max('sort_order'))['max_order'] or 0
+            sort_order = max_order + 1
+
+        quick_request = FinanceQuickRequest.objects.create(
+            label=label,
+            example=payload.get('example', ''),
+            quick_request=quick_request_text,
+            context_key=(payload.get('context_key') or '').strip(),
+            sort_order=sort_order,
+            is_active=bool(payload.get('is_active', True))
+        )
+
+        return JsonResponse({'ok': True, 'request': quick_request.as_dict()}, status=201)
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def admin_finance_quick_request_detail_view(request, pk):
+    try:
+        quick_request = FinanceQuickRequest.objects.get(pk=pk)
+    except FinanceQuickRequest.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'Quick request not found'}, status=404)
+
+    if request.method == 'GET':
+        return JsonResponse({'ok': True, 'request': quick_request.as_dict()})
+
+    if request.method in ['PUT', 'PATCH']:
+        payload = _load_json_body(request)
+        if payload is None:
+            return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+        if 'label' in payload and payload['label'] is not None:
+            quick_request.label = payload['label']
+        if 'example' in payload and payload['example'] is not None:
+            quick_request.example = payload['example']
+        if 'quick_request' in payload and payload['quick_request'] is not None:
+            quick_request.quick_request = payload['quick_request']
+        if 'context_key' in payload and payload['context_key'] is not None:
+            quick_request.context_key = payload['context_key']
+
+        if 'sort_order' in payload and payload['sort_order'] is not None:
+            quick_request.sort_order = int(payload['sort_order'])
+        if 'is_active' in payload:
+            quick_request.is_active = bool(payload['is_active'])
+
+        quick_request.save()
+        return JsonResponse({'ok': True, 'request': quick_request.as_dict()})
+
+    if request.method == 'DELETE':
+        quick_request.delete()
+        return JsonResponse({'ok': True})
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+def _sanitize_asset_names(asset_values):
+    assets = []
+    if isinstance(asset_values, (list, tuple)):
+        for raw in asset_values:
+            if isinstance(raw, str):
+                name = raw.strip()
+                if name:
+                    assets.append(name)
+    return assets
+
+
+@csrf_exempt
+def finance_quick_compare_groups_view(request):
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+
+    _ensure_default_finance_quick_compare_groups()
+    groups_qs = FinanceQuickCompareGroup.objects.filter(is_active=True).order_by('sort_order', 'id')
+    return JsonResponse({'ok': True, 'groups': [group.as_dict() for group in groups_qs]})
+
+
+@csrf_exempt
+def admin_finance_quick_compare_groups_view(request):
+    if request.method == 'GET':
+        _ensure_default_finance_quick_compare_groups()
+        groups_qs = FinanceQuickCompareGroup.objects.all().order_by('sort_order', 'id')
+        return JsonResponse({'ok': True, 'groups': [group.as_dict() for group in groups_qs]})
+
+    if request.method == 'POST':
+        payload = _load_json_body(request)
+        if payload is None:
+            return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+        key = (payload.get('key') or '').strip()
+        label = (payload.get('label') or '').strip()
+        assets = _sanitize_asset_names(payload.get('assets'))
+
+        if not key or not label:
+            return JsonResponse({'ok': False, 'error': 'key와 label은 필수입니다.'}, status=400)
+        if not assets:
+            return JsonResponse({'ok': False, 'error': '최소 1개 이상의 비교 종목이 필요합니다.'}, status=400)
+
+        sort_order = payload.get('sort_order')
+        if sort_order is None:
+            max_order = FinanceQuickCompareGroup.objects.aggregate(max_order=Max('sort_order'))['max_order'] or 0
+            sort_order = max_order + 1
+
+        try:
+            group = FinanceQuickCompareGroup.objects.create(
+                key=key,
+                label=label,
+                assets=assets,
+                sort_order=int(sort_order),
+                is_active=bool(payload.get('is_active', True)),
+            )
+        except Exception as exc:
+            return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+        return JsonResponse({'ok': True, 'group': group.as_dict()}, status=201)
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def admin_finance_quick_compare_group_detail_view(request, pk):
+    try:
+        group = FinanceQuickCompareGroup.objects.get(pk=pk)
+    except FinanceQuickCompareGroup.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'Quick compare group not found'}, status=404)
+
+    if request.method == 'GET':
+        return JsonResponse({'ok': True, 'group': group.as_dict()})
+
+    if request.method in ['PUT', 'PATCH']:
+        payload = _load_json_body(request)
+        if payload is None:
+            return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+        if 'key' in payload and payload['key'] is not None:
+            key = str(payload['key']).strip()
+            if not key:
+                return JsonResponse({'ok': False, 'error': 'key는 비워둘 수 없습니다.'}, status=400)
+            group.key = key
+        if 'label' in payload and payload['label'] is not None:
+            label = str(payload['label']).strip()
+            if not label:
+                return JsonResponse({'ok': False, 'error': 'label은 비워둘 수 없습니다.'}, status=400)
+            group.label = label
+        if 'assets' in payload:
+            assets = _sanitize_asset_names(payload.get('assets'))
+            if not assets:
+                return JsonResponse({'ok': False, 'error': '최소 1개 이상의 비교 종목이 필요합니다.'}, status=400)
+            group.assets = assets
+        if 'sort_order' in payload and payload['sort_order'] is not None:
+            group.sort_order = int(payload['sort_order'])
+        if 'is_active' in payload:
+            group.is_active = bool(payload['is_active'])
+
+        try:
+            group.save()
+        except Exception as exc:
+            return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+        return JsonResponse({'ok': True, 'group': group.as_dict()})
+
+    if request.method == 'DELETE':
+        group.delete()
+        return JsonResponse({'ok': True})
 
     return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)

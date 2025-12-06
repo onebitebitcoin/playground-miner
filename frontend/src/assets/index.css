@@ -226,3 +226,57 @@ html {
 .mining-loading {
   animation: mining-pulse 1s infinite;
 }
+
+/* Hero typewriter intro animation */
+.typewriter-text {
+  transition: opacity 0.3s ease;
+}
+
+.hero-typewriter-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+}
+
+.hero-typewriter-cursor {
+  display: inline-block;
+  width: 3px;
+  height: 1em;
+  background-color: rgba(255, 212, 0, 0.9);
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  animation: heroCaret 0.9s steps(1) infinite;
+}
+
+@media (max-width: 480px) {
+  .hero-typewriter-cursor {
+    width: 2px;
+  }
+}
+
+@keyframes heroCaret {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Search button attention animation */
+@keyframes attention-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 212, 0, 0.7);
+    transform: scale(1);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(255, 212, 0, 0);
+    transform: scale(1.1);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 212, 0, 0);
+    transform: scale(1);
+  }
+}
+
+.animate-attention {
+  animation: attention-pulse 2s infinite;
+}

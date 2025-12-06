@@ -1093,34 +1093,43 @@
               </div>
             </div>
 
-            <!-- Filters -->
-            <div class="bg-white rounded-lg shadow p-4">
-              <div class="flex flex-wrap items-center gap-3">
-                <select v-model="financeFilter" @change="loadFinanceLogs"
-                        class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                  <option value="">전체</option>
-                  <option value="true">성공</option>
-                  <option value="false">실패</option>
-                </select>
-                <button @click="loadFinanceLogs"
-                        class="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                        title="새로고침">
-                  <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                </button>
+            <!-- Finance Prompt Template -->
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+              <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">재무 프롬프트 템플릿</h3>
+                <p class="text-sm text-gray-500 mt-1">
+                  Finance 페이지에서 사용하는 단일 프롬프트와 변수 구성을 확인할 수 있습니다.
+                </p>
+              </div>
+              <div class="p-6 space-y-5">
+                <div>
+                  <p class="text-sm font-medium text-gray-700 mb-2">실제 요청</p>
+                  <div class="bg-slate-900/5 border border-slate-200 rounded-xl p-4 font-mono text-sm text-slate-800">
+                    {{ investmentPromptTemplate }}
+                  </div>
+                </div>
+                <div>
+                  <p class="text-sm font-medium text-gray-700 mb-2">변수 설명</p>
+                  <ul class="space-y-2">
+                    <li
+                      v-for="variable in investmentPromptVariables"
+                      :key="variable.key"
+                      class="flex items-start gap-2 text-sm text-gray-700"
+                    >
+                      <span class="px-2 py-0.5 bg-slate-100 text-slate-700 rounded font-mono text-xs">
+                        {{ variable.key }}
+                      </span>
+                      <span>{{ variable.description }}</span>
+                    </li>
+                  </ul>
+                </div>
               </div>
             </div>
 
             <!-- Agent Prompts Management -->
             <div class="bg-white rounded-lg shadow overflow-hidden">
-              <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div class="px-6 py-4 border-b border-gray-200">
                 <h3 class="text-lg font-semibold text-gray-900">Agent 프롬프트 관리</h3>
-                <button @click="loadAgentPrompts"
-                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                  새로고침
-                </button>
               </div>
 
               <div v-if="agentPromptsLoading" class="text-center py-12 text-gray-500">
@@ -1136,7 +1145,7 @@
 
               <div v-else class="divide-y divide-gray-200">
                 <div v-for="agent in agentPrompts" :key="agent.id" class="p-6">
-                  <div class="flex items-start justify-between mb-4">
+                  <div class="flex items-start justify-between mb-4 gap-3 flex-wrap">
                     <div>
                       <h4 class="text-lg font-semibold text-gray-900">{{ agent.name }}</h4>
                       <p class="text-sm text-gray-600 mt-1">{{ agent.description }}</p>
@@ -1148,10 +1157,20 @@
                         </span>
                       </div>
                     </div>
-                    <button @click="toggleAgentPromptEdit(agent.agent_type)"
-                            class="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                      {{ editingAgentType === agent.agent_type ? '취소' : '수정' }}
-                    </button>
+                    <div class="flex gap-2">
+                      <button @click="toggleAgentPromptEdit(agent.agent_type)"
+                              class="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                              :disabled="!isAdmin">
+                        {{ editingAgentType === agent.agent_type ? '취소' : '수정' }}
+                      </button>
+                      <button
+                        @click="deleteAgentPromptEntry(agent.agent_type)"
+                        class="px-3 py-1 text-sm border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                        :disabled="agentPromptDeleting === agent.agent_type || !isAdmin"
+                      >
+                        {{ agentPromptDeleting === agent.agent_type ? '삭제 중...' : '삭제' }}
+                      </button>
+                    </div>
                   </div>
 
                   <div v-if="editingAgentType === agent.agent_type" class="space-y-4 mt-4 border-t pt-4">
@@ -1197,6 +1216,102 @@
               </div>
             </div>
 
+            <!-- Quick Compare Group Management -->
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+              <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">비교 종목 그룹 관리</h3>
+                <p class="text-sm text-gray-500 mt-1">Finance 페이지의 빠른 비교 버튼 구성을 수정합니다.</p>
+              </div>
+
+              <div class="px-6 py-5 space-y-4">
+                <div v-if="quickCompareGroupsLoading" class="text-center py-6 text-gray-500">
+                  로딩 중...
+                </div>
+                <div v-else-if="!quickCompareGroups.length" class="text-center py-6 text-gray-500">
+                  등록된 비교 종목 그룹이 없습니다. 아래에서 추가하세요.
+                </div>
+                <div v-else class="space-y-4">
+                  <div
+                    v-for="group in quickCompareGroups"
+                    :key="group.id || group.key"
+                    class="border border-gray-200 rounded-lg p-4 space-y-3"
+                  >
+                    <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ group.key }}</p>
+                        <p class="text-base font-semibold text-gray-900">{{ group.label }}</p>
+                        <div class="flex flex-wrap gap-3 text-xs text-gray-500">
+                          <span :class="group.isActive ? 'text-green-600' : 'text-red-600'">
+                            {{ group.isActive ? '사용 중' : '비활성' }}
+                          </span>
+                        </div>
+                      </div>
+                      <div class="flex gap-2">
+                        <button
+                          @click="editQuickCompareGroup(group)"
+                          class="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                          :disabled="!isAdmin"
+                        >
+                          수정
+                        </button>
+                        <button
+                          @click="deleteFinanceQuickCompareGroup(group)"
+                          class="px-3 py-1 text-sm border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                          :disabled="deletingQuickCompareGroupId === group.id || !isAdmin"
+                        >
+                          {{ deletingQuickCompareGroupId === group.id ? '삭제 중...' : '삭제' }}
+                        </button>
+                      </div>
+                    </div>
+                    <div class="text-xs text-gray-600 bg-gray-50 rounded-lg p-3 border border-gray-200 break-words">
+                      {{ group.assets.join(', ') }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="border-t border-gray-100 bg-gray-50 px-6 py-5 space-y-4">
+                <h4 class="text-base font-semibold text-gray-900">
+                  {{ editingQuickCompareGroupId ? '비교 종목 그룹 수정' : '새 비교 종목 그룹 추가' }}
+                </h4>
+                <div class="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Key</label>
+                    <input v-model="quickCompareGroupForm.key" type="text"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="예: us_bigtech" />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">라벨</label>
+                    <input v-model="quickCompareGroupForm.label" type="text"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="예: 미국 빅테크" />
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">종목 목록</label>
+                  <textarea v-model="quickCompareGroupForm.assetsText" rows="4"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="줄바꿈 또는 쉼표로 종목을 구분하세요"></textarea>
+                  <p class="text-xs text-gray-500 mt-1">예: 애플, 엔비디아, 아마존...</p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <input v-model="quickCompareGroupForm.isActive" type="checkbox" id="quick-compare-active"
+                         class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" />
+                  <label for="quick-compare-active" class="text-sm text-gray-700">사용</label>
+                </div>
+                <div class="flex justify-end">
+                  <button
+                    @click="saveFinanceQuickCompareGroup"
+                    class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    :disabled="quickCompareGroupSaving || !isAdmin"
+                  >
+                    {{ quickCompareGroupSaving ? '저장 중...' : (editingQuickCompareGroupId ? '그룹 업데이트' : '그룹 추가') }}
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <!-- Logs Table -->
             <div class="bg-white rounded-lg shadow overflow-hidden">
               <div class="px-6 py-4 border-b border-gray-200">
@@ -1232,8 +1347,43 @@
                       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         {{ log.user_identifier }}
                       </td>
-                      <td class="px-6 py-4 text-sm text-gray-900 max-w-xs truncate" :title="log.prompt">
-                        {{ log.prompt || '-' }}
+                      <td class="px-6 py-4 text-sm text-gray-900 max-w-xs">
+                        <div class="space-y-2">
+                          <div class="flex items-start gap-2">
+                            <span class="truncate block" :title="log.prompt">
+                              {{ log.prompt || '-' }}
+                            </span>
+                            <button
+                              v-if="log.prompt"
+                              class="text-gray-400 hover:text-gray-600 flex-shrink-0"
+                              @click="toggleLogPrompt(log.id)"
+                              :aria-expanded="expandedLogPromptId === log.id"
+                              title="전체 프롬프트 보기"
+                            >
+                              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                      d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" />
+                              </svg>
+                            </button>
+                          </div>
+                          <div
+                            v-if="expandedLogPromptId === log.id"
+                            class="text-xs text-gray-700 bg-slate-50 border border-slate-200 rounded p-3 whitespace-pre-wrap"
+                          >
+                            <p class="font-medium text-gray-900 mb-2">Full Prompt</p>
+                            <p>{{ log.prompt }}</p>
+                            <div v-if="Array.isArray(log.quick_requests) && log.quick_requests.length" class="mt-2">
+                              <p class="font-medium text-gray-900 mb-1">Quick 요청</p>
+                              <ul class="list-disc list-inside space-y-0.5">
+                                <li v-for="(item, idx) in log.quick_requests" :key="idx">{{ item }}</li>
+                              </ul>
+                            </div>
+                            <div v-if="log.error_message" class="mt-2 text-red-600">
+                              <p class="font-medium mb-1">오류</p>
+                              <p>{{ log.error_message }}</p>
+                            </div>
+                          </div>
+                        </div>
                       </td>
                       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         {{ log.context_key || '-' }}
@@ -1482,6 +1632,21 @@ const { successMessage, errorMessage, showSuccess, showError } = useNotification
 const loading = ref(false)
 const activeTab = ref('mining')
 const activeRoutingTab = ref('nodes')
+const investmentPromptTemplate = '{{투자기간}}년 전에 비트코인에 {{투자금}}만원을 투자했다면 지금 얼마인지 알려주고, 비트코인과 비교 종목({{비교자산}})을 비교해줘.'
+const investmentPromptVariables = [
+  {
+    key: '{{투자기간}}',
+    description: '사용자가 Finance 화면에서 입력한 투자 시점 (1~30년 사이에서 선택)'
+  },
+  {
+    key: '{{투자금}}',
+    description: '입력한 투자 금액(만원 단위, 1~100,000 범위에서 제한)'
+  },
+  {
+    key: '{{비교자산}}',
+    description: '사용자가 선택하거나 추가한 비교 종목 목록 (없으면 대표 자산군으로 대체)'
+  }
+]
 
 // Admin mining reset state
 const adminResetPassword = ref('')
@@ -1531,7 +1696,7 @@ const financeLogsLoading = ref(false)
 const financeLogsOffset = ref(0)
 const financeLogsLimit = ref(50)
 const financeLogsTotal = ref(0)
-const financeFilter = ref('')
+const expandedLogPromptId = ref(null)
 const financeStats = ref({
   total_queries: 0,
   successful_queries: 0,
@@ -1553,6 +1718,20 @@ const editingAgentData = ref({
   system_prompt: '',
   is_active: true
 })
+const agentPromptDeleting = ref('')
+
+const quickCompareGroups = ref([])
+const quickCompareGroupsLoading = ref(false)
+const editingQuickCompareGroupId = ref(null)
+const quickCompareGroupSaving = ref(false)
+const deletingQuickCompareGroupId = ref(null)
+const createEmptyQuickCompareGroupForm = () => ({
+  key: '',
+  label: '',
+  assetsText: '',
+  isActive: true
+})
+const quickCompareGroupForm = ref(createEmptyQuickCompareGroupForm())
 
 // Modal state for mnemonic display
 const showMnemonicModal = ref(false)
@@ -2467,17 +2646,27 @@ const saveWalletPassword = async () => {
 
 // Finance management functions
 const loadFinanceLogs = async () => {
+  if (!isAdmin.value) {
+    financeLogs.value = []
+    financeLogsTotal.value = 0
+    return
+  }
+
   financeLogsLoading.value = true
   try {
-    const params = new URLSearchParams({
-      limit: financeLogsLimit.value.toString(),
-      offset: financeLogsOffset.value.toString()
-    })
-    if (financeFilter.value) {
-      params.append('success', financeFilter.value)
+    const username = getAdminUsername()
+    if (!username) {
+      throw new Error('관리자 인증 정보가 유효하지 않습니다')
     }
 
-    const response = await fetch(`${import.meta.env.VITE_API_BASE || ''}/api/finance/admin/logs?${params}`)
+    const params = new URLSearchParams({
+      limit: financeLogsLimit.value.toString(),
+      offset: financeLogsOffset.value.toString(),
+      username
+    })
+    const response = await fetch(`${import.meta.env.VITE_API_BASE || ''}/api/finance/admin/logs?${params}`, {
+      credentials: 'include'
+    })
     const data = await response.json()
 
     if (data.ok) {
@@ -2487,19 +2676,31 @@ const loadFinanceLogs = async () => {
       showError(data.error || '로그를 불러올 수 없습니다')
     }
   } catch (error) {
-    showError('로그 로딩 중 오류가 발생했습니다')
+    showError(error?.message || '로그 로딩 중 오류가 발생했습니다')
   } finally {
     financeLogsLoading.value = false
   }
 }
 
 const loadFinanceStats = async () => {
+  if (!isAdmin.value) return
+
   try {
-    const response = await fetch(`${import.meta.env.VITE_API_BASE || ''}/api/finance/admin/stats`)
+    const username = getAdminUsername()
+    if (!username) {
+      throw new Error('관리자 인증 정보가 유효하지 않습니다')
+    }
+
+    const params = new URLSearchParams({ username })
+    const response = await fetch(`${import.meta.env.VITE_API_BASE || ''}/api/finance/admin/stats?${params}`, {
+      credentials: 'include'
+    })
     const data = await response.json()
 
     if (data.ok) {
       financeStats.value = data.stats || financeStats.value
+    } else if (data.error) {
+      showError(data.error)
     }
   } catch (error) {
     console.error('Failed to load finance stats:', error)
@@ -2518,6 +2719,10 @@ const formatDateTime = (isoString) => {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 }
 
+const toggleLogPrompt = (logId) => {
+  expandedLogPromptId.value = expandedLogPromptId.value === logId ? null : logId
+}
+
 const prevFinanceLogsPage = () => {
   if (financeLogsOffset.value > 0) {
     financeLogsOffset.value = Math.max(0, financeLogsOffset.value - financeLogsLimit.value)
@@ -2534,6 +2739,7 @@ const nextFinanceLogsPage = () => {
 
 // Agent prompts management functions
 const loadAgentPrompts = async () => {
+  if (!isAdmin.value) return
   agentPromptsLoading.value = true
   try {
     const { fetchAgentPrompts } = await import('../services/financeService')
@@ -2595,6 +2801,150 @@ const initializeAgentPrompts = async () => {
     await loadAgentPrompts()
   } catch (error) {
     showError(error.message || 'Agent 프롬프트 초기화에 실패했습니다')
+  }
+}
+
+const deleteAgentPromptEntry = async (agentType) => {
+  if (!isAdmin.value) return
+  if (!confirm('선택한 Agent 프롬프트를 삭제하시겠습니까?')) return
+  agentPromptDeleting.value = agentType
+  try {
+    const { deleteAgentPrompt } = await import('../services/financeService')
+    await deleteAgentPrompt({ agentType })
+    showSuccess('Agent 프롬프트가 삭제되었습니다')
+    if (editingAgentType.value === agentType) {
+      editingAgentType.value = null
+    }
+    await loadAgentPrompts()
+  } catch (error) {
+    showError(error.message || 'Agent 프롬프트 삭제에 실패했습니다')
+  } finally {
+    agentPromptDeleting.value = ''
+  }
+}
+
+const normalizeQuickCompareGroup = (entry, index) => {
+  const rawAssets = Array.isArray(entry?.assets)
+    ? entry.assets
+    : Array.isArray(entry?.asset_list)
+      ? entry.asset_list
+      : []
+  const assets = rawAssets
+    .map((asset) => (typeof asset === 'string' ? asset.trim() : ''))
+    .filter(Boolean)
+  return {
+    id: entry?.id ?? index,
+    key: entry?.key || `group-${index + 1}`,
+    label: entry?.label || `그룹 ${index + 1}`,
+    assets,
+    sortOrder: Number.isFinite(entry?.sort_order)
+      ? Number(entry.sort_order)
+      : Number.isFinite(entry?.sortOrder)
+        ? Number(entry.sortOrder)
+        : index,
+    isActive: entry?.is_active !== false
+  }
+}
+
+const parseAssetsInput = (text = '') =>
+  (text || '')
+    .split(/[\n,]/)
+    .map((value) => value.trim())
+    .filter(Boolean)
+
+const loadFinanceQuickCompareGroups = async () => {
+  if (!isAdmin.value) return
+  quickCompareGroupsLoading.value = true
+  try {
+    const { fetchAdminFinanceQuickCompareGroups } = await import('../services/financeService')
+    const data = await fetchAdminFinanceQuickCompareGroups({})
+    const mapped = (data || [])
+      .map((entry, index) => normalizeQuickCompareGroup(entry, index))
+      .sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+        return (a.id ?? 0) - (b.id ?? 0)
+      })
+    quickCompareGroups.value = mapped
+    const editingExists = mapped.some((group) => group.id === editingQuickCompareGroupId.value)
+    if (!editingExists) {
+      resetQuickCompareGroupForm()
+    }
+  } catch (error) {
+    showError(error.message || '비교 종목 그룹을 불러올 수 없습니다')
+  } finally {
+    quickCompareGroupsLoading.value = false
+  }
+}
+
+const editQuickCompareGroup = (group) => {
+  if (!group) return
+  editingQuickCompareGroupId.value = group.id ?? null
+  quickCompareGroupForm.value = {
+    key: group.key || '',
+    label: group.label || '',
+    assetsText: (group.assets || []).join('\n'),
+    isActive: group.isActive !== false
+  }
+}
+
+const resetQuickCompareGroupForm = () => {
+  editingQuickCompareGroupId.value = null
+  quickCompareGroupForm.value = createEmptyQuickCompareGroupForm()
+}
+
+const saveFinanceQuickCompareGroup = async () => {
+  if (!isAdmin.value) return
+  const payload = {
+    key: (quickCompareGroupForm.value.key || '').trim(),
+    label: (quickCompareGroupForm.value.label || '').trim(),
+    assets: parseAssetsInput(quickCompareGroupForm.value.assetsText),
+    is_active: Boolean(quickCompareGroupForm.value.isActive)
+  }
+
+  if (!payload.key || !payload.label) {
+    showError('Key와 라벨을 모두 입력하세요')
+    return
+  }
+  if (!payload.assets.length) {
+    showError('최소 1개 이상의 비교 종목을 입력하세요')
+    return
+  }
+
+  quickCompareGroupSaving.value = true
+  try {
+    const services = await import('../services/financeService')
+    if (editingQuickCompareGroupId.value) {
+      await services.updateAdminFinanceQuickCompareGroup(editingQuickCompareGroupId.value, payload)
+      showSuccess('비교 종목 그룹이 업데이트되었습니다')
+    } else {
+      await services.createAdminFinanceQuickCompareGroup(payload)
+      showSuccess('비교 종목 그룹이 추가되었습니다')
+    }
+    resetQuickCompareGroupForm()
+    await loadFinanceQuickCompareGroups()
+  } catch (error) {
+    showError(error.message || '비교 종목 그룹을 저장하지 못했습니다')
+  } finally {
+    quickCompareGroupSaving.value = false
+  }
+}
+
+const deleteFinanceQuickCompareGroup = async (group) => {
+  if (!isAdmin.value || !group?.id) return
+  if (!confirm('선택한 비교 종목 그룹을 삭제하시겠습니까?')) return
+  deletingQuickCompareGroupId.value = group.id
+  try {
+    const { deleteAdminFinanceQuickCompareGroup } = await import('../services/financeService')
+    await deleteAdminFinanceQuickCompareGroup(group.id)
+    showSuccess('비교 종목 그룹이 삭제되었습니다')
+    if (editingQuickCompareGroupId.value === group.id) {
+      resetQuickCompareGroupForm()
+    }
+    await loadFinanceQuickCompareGroups()
+  } catch (error) {
+    showError(error.message || '비교 종목 그룹 삭제에 실패했습니다')
+  } finally {
+    deletingQuickCompareGroupId.value = null
   }
 }
 
@@ -3145,6 +3495,8 @@ onMounted(async () => {
   if (activeTab.value === 'finance') {
     await loadFinanceLogs()
     await loadFinanceStats()
+    await loadAgentPrompts()
+    await loadFinanceQuickCompareGroups()
   }
 })
 
@@ -3154,6 +3506,7 @@ watch(activeTab, async (newTab) => {
     await loadFinanceLogs()
     await loadFinanceStats()
     await loadAgentPrompts()
+    await loadFinanceQuickCompareGroups()
   }
 })
 

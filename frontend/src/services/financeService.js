@@ -5,21 +5,29 @@ const defaultHeaders = {
   'Content-Type': 'application/json'
 }
 
-function handleResponse(response) {
-  if (!response.ok) {
-    throw new Error(`요청 실패(${response.status})`)
-  }
+async function handleResponse(response) {
   const contentType = response.headers.get('content-type') || ''
-  if (!contentType.includes('application/json')) {
+  const isJson = contentType.includes('application/json')
+  const payload = isJson ? await response.json() : null
+
+  if (!response.ok) {
+    const message = (payload && payload.error) || `요청 실패(${response.status})`
+    throw new Error(message)
+  }
+
+  if (!isJson) {
     throw new Error('JSON 응답이 필요합니다.')
   }
-  return response.json()
+
+  return payload
 }
 
-export async function fetchHistoricalReturns({ prompt, quickRequests, contextKey, signal }) {
+export async function fetchHistoricalReturns({ prompt, quickRequests, contextKey, customAssets, includeDividends, signal }) {
   const body = {
     prompt: prompt || '',
     quick_requests: Array.isArray(quickRequests) ? quickRequests : [],
+    custom_assets: Array.isArray(customAssets) ? customAssets : [],
+    include_dividends: Boolean(includeDividends)
   }
   if (contextKey) {
     body.context_key = contextKey
@@ -39,7 +47,7 @@ export async function fetchHistoricalReturns({ prompt, quickRequests, contextKey
   return data
 }
 
-export async function fetchHistoricalReturnsStream({ prompt, quickRequests, contextKey, signal, onLog }) {
+export async function fetchHistoricalReturnsStream({ prompt, quickRequests, contextKey, customAssets, includeDividends, signal, onLog }) {
   /**
    * Streaming version of fetchHistoricalReturns
    * @param {Function} onLog - Callback for each log message: onLog(message)
@@ -48,6 +56,8 @@ export async function fetchHistoricalReturnsStream({ prompt, quickRequests, cont
   const body = {
     prompt: prompt || '',
     quick_requests: Array.isArray(quickRequests) ? quickRequests : [],
+    custom_assets: Array.isArray(customAssets) ? customAssets : [],
+    include_dividends: Boolean(includeDividends)
   }
   if (contextKey) {
     body.context_key = contextKey
@@ -149,6 +159,22 @@ export async function fetchAgentPrompts({ signal }) {
   return data
 }
 
+export async function resolveCustomAsset(name, { signal } = {}) {
+  const body = { name: name || '' }
+  const response = await fetch(`${BASE_URL}/api/finance/custom-asset/resolve`, {
+    method: 'POST',
+    headers: defaultHeaders,
+    body: JSON.stringify(body),
+    signal
+  })
+
+  const data = await handleResponse(response)
+  if (!data.ok) {
+    throw new Error(data.error || '종목 정보를 가져오지 못했습니다.')
+  }
+  return data.asset
+}
+
 export async function updateAgentPrompt({ agentType, name, description, systemPrompt, isActive, signal }) {
   const body = {}
   if (name !== undefined) body.name = name
@@ -170,6 +196,23 @@ export async function updateAgentPrompt({ agentType, name, description, systemPr
   return data
 }
 
+export async function deleteAgentPrompt({ agentType, signal }) {
+  if (!agentType) {
+    throw new Error('Agent 타입이 필요합니다.')
+  }
+  const response = await fetch(`${BASE_URL}/api/finance/admin/agent-prompts/${agentType}`, {
+    method: 'DELETE',
+    headers: defaultHeaders,
+    signal
+  })
+
+  const data = await handleResponse(response)
+  if (!data.ok) {
+    throw new Error(data.error || 'Agent 프롬프트 삭제에 실패했습니다.')
+  }
+  return data
+}
+
 export async function initializeAgentPrompts({ signal }) {
   const response = await fetch(`${BASE_URL}/api/finance/admin/agent-prompts`, {
     method: 'POST',
@@ -182,4 +225,73 @@ export async function initializeAgentPrompts({ signal }) {
     throw new Error(data.error || 'Agent 프롬프트 초기화에 실패했습니다.')
   }
   return data
+}
+
+export async function fetchFinanceQuickCompareGroups({ signal } = {}) {
+  const response = await fetch(`${BASE_URL}/api/finance/quick-compare-groups`, {
+    method: 'GET',
+    headers: defaultHeaders,
+    signal
+  })
+  const data = await handleResponse(response)
+  if (!data.ok) {
+    throw new Error(data.error || '비교 종목 그룹을 불러오지 못했습니다.')
+  }
+  return data.groups || []
+}
+
+export async function fetchAdminFinanceQuickCompareGroups({ signal } = {}) {
+  const response = await fetch(`${BASE_URL}/api/finance/admin/quick-compare-groups`, {
+    method: 'GET',
+    headers: defaultHeaders,
+    signal
+  })
+  const data = await handleResponse(response)
+  if (!data.ok) {
+    throw new Error(data.error || '비교 종목 그룹을 불러오지 못했습니다.')
+  }
+  return data.groups || []
+}
+
+export async function createAdminFinanceQuickCompareGroup(payload, { signal } = {}) {
+  const response = await fetch(`${BASE_URL}/api/finance/admin/quick-compare-groups`, {
+    method: 'POST',
+    headers: defaultHeaders,
+    body: JSON.stringify(payload || {}),
+    signal
+  })
+  const data = await handleResponse(response)
+  if (!data.ok) {
+    throw new Error(data.error || '비교 종목 그룹을 추가하지 못했습니다.')
+  }
+  return data.group
+}
+
+export async function updateAdminFinanceQuickCompareGroup(id, payload, { signal } = {}) {
+  if (!id) throw new Error('그룹 ID가 필요합니다.')
+  const response = await fetch(`${BASE_URL}/api/finance/admin/quick-compare-groups/${id}`, {
+    method: 'PATCH',
+    headers: defaultHeaders,
+    body: JSON.stringify(payload || {}),
+    signal
+  })
+  const data = await handleResponse(response)
+  if (!data.ok) {
+    throw new Error(data.error || '비교 종목 그룹을 업데이트하지 못했습니다.')
+  }
+  return data.group
+}
+
+export async function deleteAdminFinanceQuickCompareGroup(id, { signal } = {}) {
+  if (!id) throw new Error('그룹 ID가 필요합니다.')
+  const response = await fetch(`${BASE_URL}/api/finance/admin/quick-compare-groups/${id}`, {
+    method: 'DELETE',
+    headers: defaultHeaders,
+    signal
+  })
+  const data = await handleResponse(response)
+  if (!data.ok) {
+    throw new Error(data.error || '비교 종목 그룹을 삭제하지 못했습니다.')
+  }
+  return true
 }

@@ -8,6 +8,9 @@ urlpatterns = [
     path('stream', views.stream_view, name='stream'),
     path('finance/historical-returns', views.finance_historical_returns_view, name='finance_historical_returns'),
     path('finance/yearly-closing-prices', views.finance_yearly_closing_prices_view, name='finance_yearly_closing_prices'),
+    path('finance/custom-asset/resolve', views.finance_resolve_custom_asset_view, name='finance_resolve_custom_asset'),
+    path('finance/quick-requests', views.finance_quick_requests_view, name='finance_quick_requests'),
+    path('finance/quick-compare-groups', views.finance_quick_compare_groups_view, name='finance_quick_compare_groups'),
     # Accept both with/without trailing slash
     re_path(r'^register_nick/?$', views.register_nick_view, name='register_nick'),
     re_path(r'^check_nick/?$', views.check_nick_view, name='check_nick'),
@@ -59,4 +62,8 @@ urlpatterns = [
     # Agent prompt management endpoints
     path('finance/admin/agent-prompts', views.admin_agent_prompts_view, name='admin_agent_prompts'),
     path('finance/admin/agent-prompts/<str:agent_type>', views.admin_agent_prompt_detail_view, name='admin_agent_prompt_detail'),
+    path('finance/admin/quick-requests', views.admin_finance_quick_requests_view, name='admin_finance_quick_requests'),
+    path('finance/admin/quick-requests/<int:pk>', views.admin_finance_quick_request_detail_view, name='admin_finance_quick_request_detail'),
+    path('finance/admin/quick-compare-groups', views.admin_finance_quick_compare_groups_view, name='admin_finance_quick_compare_groups'),
+    path('finance/admin/quick-compare-groups/<int:pk>', views.admin_finance_quick_compare_group_detail_view, name='admin_finance_quick_compare_group_detail'),
 ]

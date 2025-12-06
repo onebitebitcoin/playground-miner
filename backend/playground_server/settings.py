@@ -13,6 +13,23 @@ SECRET_KEY = config('SECRET_KEY', default='dev-secret-key-change-in-production')
 DEBUG = config('DEBUG', default=False, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 
+# Comma-separated list of origins allowed to call APIs from the browser.
+CORS_ALLOWED_ORIGINS = [
+    origin.strip() for origin in config(
+        'CORS_ALLOWED_ORIGINS',
+        default=(
+            'http://localhost:3000,'
+            'http://localhost:5173,'
+            'http://localhost:6173,'
+            'http://127.0.0.1:3000,'
+            'http://127.0.0.1:5173,'
+            'http://127.0.0.1:6173'
+        )
+    ).split(',')
+    if origin.strip()
+]
+CORS_ALLOW_CREDENTIALS = config('CORS_ALLOW_CREDENTIALS', default=True, cast=bool)
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
