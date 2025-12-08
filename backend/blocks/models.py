@@ -576,6 +576,7 @@ class FinanceQuickCompareGroup(models.Model):
     key = models.CharField(max_length=50, unique=True, db_index=True)
     label = models.CharField(max_length=150)
     assets = models.JSONField(default=list, blank=True)
+    resolved_assets = models.JSONField(default=list, blank=True, help_text='Pre-resolved asset information with label, ticker, id, category')
     sort_order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -592,13 +593,70 @@ class FinanceQuickCompareGroup(models.Model):
         return f"QuickCompare<{self.label}>"
 
     def as_dict(self):
+        # Enrich resolved_assets with cache status
+        resolved_assets_with_cache = []
+        for asset in (self.resolved_assets or []):
+            asset_copy = dict(asset)
+            # Check if this asset has cached price data
+            asset_id = asset.get('ticker') or asset.get('id')
+            if asset_id:
+                has_cache = AssetPriceCache.objects.filter(asset_id=asset_id).exists()
+                asset_copy['has_cache'] = has_cache
+            else:
+                asset_copy['has_cache'] = False
+            resolved_assets_with_cache.append(asset_copy)
+
         return {
             'id': self.id,
             'key': self.key,
             'label': self.label,
             'assets': list(self.assets or []),
+            'resolved_assets': resolved_assets_with_cache,
             'sort_order': self.sort_order,
             'is_active': self.is_active,
+        }
+
+
+class AssetPriceCache(models.Model):
+    """Cache for asset historical price data (2009-present)"""
+    asset_id = models.CharField(max_length=100, db_index=True, help_text='Asset ticker or identifier')
+    label = models.CharField(max_length=200, help_text='Human-readable asset name')
+    category = models.CharField(max_length=100, blank=True, help_text='Asset category')
+    unit = models.CharField(max_length=10, default='USD', help_text='Price unit (USD, KRW, etc)')
+    source = models.CharField(max_length=100, blank=True, help_text='Data source')
+
+    # Store yearly price data as JSON: {year: price}
+    yearly_prices = models.JSONField(default=dict, help_text='Yearly closing prices from 2009 onwards')
+
+    # Metadata
+    start_year = models.IntegerField(default=2009, help_text='First year of data')
+    end_year = models.IntegerField(help_text='Last year of data')
+    last_updated = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-last_updated']
+        indexes = [
+            models.Index(fields=['asset_id']),
+            models.Index(fields=['last_updated']),
+        ]
+        unique_together = [['asset_id']]
+
+    def __str__(self):
+        return f"PriceCache<{self.asset_id}: {self.label}>"
+
+    def as_dict(self):
+        return {
+            'id': self.id,
+            'asset_id': self.asset_id,
+            'label': self.label,
+            'category': self.category,
+            'unit': self.unit,
+            'source': self.source,
+            'yearly_prices': self.yearly_prices,
+            'start_year': self.start_year,
+            'end_year': self.end_year,
+            'last_updated': self.last_updated.isoformat() if self.last_updated else None,
         }
 
 

@@ -295,3 +295,37 @@ export async function deleteAdminFinanceQuickCompareGroup(id, { signal } = {}) {
   }
   return true
 }
+
+export async function fetchAdminPriceCache({ offset = 0, limit = 10, search = '', signal } = {}) {
+  const params = new URLSearchParams({
+    offset: offset.toString(),
+    limit: limit.toString()
+  })
+  if (search) {
+    params.append('search', search)
+  }
+  const response = await fetch(`${BASE_URL}/api/finance/admin/price-cache?${params.toString()}`, {
+    method: 'GET',
+    headers: defaultHeaders,
+    signal
+  })
+  const data = await handleResponse(response)
+  if (!data.ok) {
+    throw new Error(data.error || '캐시된 종목 목록을 불러오지 못했습니다.')
+  }
+  return data
+}
+
+export async function deleteAdminPriceCache(id, { signal } = {}) {
+  if (!id) throw new Error('캐시 ID가 필요합니다.')
+  const response = await fetch(`${BASE_URL}/api/finance/admin/price-cache/${id}`, {
+    method: 'DELETE',
+    headers: defaultHeaders,
+    signal
+  })
+  const data = await handleResponse(response)
+  if (!data.ok) {
+    throw new Error(data.error || '캐시를 삭제하지 못했습니다.')
+  }
+  return true
+}

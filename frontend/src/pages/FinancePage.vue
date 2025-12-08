@@ -369,7 +369,11 @@
       <!-- Loading / Empty States -->
       <template v-if="loading">
         <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-8">
-          <div class="flex flex-col items-center gap-6">
+          <div class="flex flex-col items-center gap-4 text-center">
+            <div class="space-y-1">
+              <p class="text-sm font-semibold text-slate-900">{{ currentLoadingStageLabel }}</p>
+              <p class="text-xs text-slate-500">{{ getLoadingMessage() }}</p>
+            </div>
             <div class="w-full max-w-md">
               <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
                 <div
@@ -378,9 +382,7 @@
                 ></div>
               </div>
             </div>
-            <p class="text-xs text-slate-500">
-              {{ getLoadingMessage() }} {{ loadingProgress }}%
-            </p>
+            <p class="text-xs text-slate-500">진행률 {{ loadingProgress }}%</p>
             <button
               class="flex items-center gap-2 px-3 py-1.5 border border-rose-200 text-rose-500 text-xs rounded-full hover:bg-rose-50 transition-colors"
               @click="cancelRequest"
@@ -471,6 +473,59 @@ import { defaultFinanceQuickCompareGroups } from '@/config/financeQuickCompareGr
 const TAX_RATE = 0.22
 const HERO_ANIMATION_DURATION = 2800
 const MIN_DIVIDEND_YIELD_DISPLAY = 0.1
+const LOADING_STAGES = [
+  {
+    key: 'init',
+    label: '요청 준비 중',
+    description: '멀티 에이전트 구성을 시작하고 있어요.',
+    minProgress: 5,
+    maxProgress: 12,
+    fallbackDelayMs: 0,
+    autoIncrement: 1,
+    matchers: ['시스템:', '분석 시작', '분석 요청']
+  },
+  {
+    key: 'intent',
+    label: '프롬프트 해석 중',
+    description: '요청에서 비교할 자산을 해석하고 있어요.',
+    minProgress: 15,
+    maxProgress: 30,
+    fallbackDelayMs: 1500,
+    autoIncrement: 2,
+    matchers: ['[의도 분석]', 'intent']
+  },
+  {
+    key: 'data',
+    label: '자산 데이터 수집 중',
+    description: '각 자산의 연도별 가격 데이터를 불러오고 있어요.',
+    minProgress: 30,
+    maxProgress: 70,
+    fallbackDelayMs: 3500,
+    autoIncrement: 2,
+    matchers: ['[데이터 수집]', 'price retriever', '데이터 가져오는 중']
+  },
+  {
+    key: 'calc',
+    label: '수익률 계산 중',
+    description: '불러온 데이터를 바탕으로 수익률을 계산하고 있어요.',
+    minProgress: 70,
+    maxProgress: 90,
+    fallbackDelayMs: 7000,
+    autoIncrement: 1,
+    matchers: ['[수익률 계산]', 'calculator']
+  },
+  {
+    key: 'summary',
+    label: '결과 정리 중',
+    description: '분석 내용을 정리하고 보고서를 구성하고 있어요.',
+    minProgress: 90,
+    maxProgress: 99,
+    fallbackDelayMs: 9500,
+    autoIncrement: 1,
+    matchers: ['[분석 생성]', 'analysis', '요약']
+  }
+]
+const DATA_STAGE_KEY = 'data'
 
 const tabs = [
   { key: 'historical', label: '과거 수익률' },
@@ -565,8 +620,13 @@ const displayStartYear = ref(null)
 const sliderMinYear = ref(null)
 let abortController = null
 const progressLogs = ref([])
-const progressTimers = []
 const loadingProgress = ref(0)
+const loadingStageIndex = ref(0)
+const currentLoadingStage = computed(() => LOADING_STAGES[loadingStageIndex.value] || LOADING_STAGES[0])
+const currentLoadingStageLabel = computed(() => currentLoadingStage.value?.label || '데이터를 준비하고 있어요.')
+const stageFallbackTimers = new Map()
+let loadingProgressInterval = null
+let priceDataProgressBumps = 0
 // showDetails ref removed
 const analysisSummary = ref('')
 const backendAnalysisSummary = ref('') // Store backend AI analysis separately
@@ -591,6 +651,12 @@ watch(loading, (isLoading) => {
   if (!isLoading && pendingAgentCall.value) {
     pendingAgentCall.value = false
     requestAgentAnalysis()
+  }
+})
+
+watch(loading, (isLoading) => {
+  if (!isLoading) {
+    stopLoadingStageTracking()
   }
 })
 
@@ -704,6 +770,7 @@ onBeforeUnmount(() => {
   if (heroAnimationTimer) clearTimeout(heroAnimationTimer)
   if (typingInterval) clearInterval(typingInterval)
   cancelDividendPrefetch()
+  stopLoadingStageTracking()
 })
 
 onMounted(() => {
@@ -1123,6 +1190,35 @@ async function appendResolvedAsset(rawName, { silent = false, targetList = null 
   return true
 }
 
+async function loadResolvedAssets(resolvedAssets = []) {
+  console.log('[DEBUG] loadResolvedAssets called with:', resolvedAssets)
+  const requestId = ++customAssetLoadId
+  customAssetResolving.value = true
+  customAssetError.value = ''
+  customAssets.value = []
+
+  try {
+    const assets = resolvedAssets.map(asset => {
+      const baseLabel = asset.label || asset.id || ''
+      const ticker = asset.ticker || asset.id || ''
+      return {
+        label: baseLabel,
+        ticker: ticker,
+        display: buildDisplayLabel(baseLabel, ticker)
+      }
+    }).filter(asset => asset.label)
+
+    if (requestId === customAssetLoadId) {
+      console.log('[DEBUG] Setting customAssets.value to resolved assets:', assets)
+      customAssets.value = assets
+    }
+  } finally {
+    if (requestId === customAssetLoadId) {
+      customAssetResolving.value = false
+    }
+  }
+}
+
 async function loadCustomAssetsFromList(assetNames = []) {
   console.log('[DEBUG] loadCustomAssetsFromList called with:', assetNames)
   const requestId = ++customAssetLoadId
@@ -1168,7 +1264,7 @@ async function applyQuickCompare(key, options = {}) {
   const { autoRun = true } = options
   const group = quickCompareGroups.value.find((item) => item.key === key)
   console.log('[DEBUG] Found group:', group)
-  
+
   if (!group) {
     console.error('Quick compare group not found for key:', key)
     errorMessage.value = '선택한 그룹 정보를 찾을 수 없습니다.'
@@ -1178,12 +1274,19 @@ async function applyQuickCompare(key, options = {}) {
   selectedQuickCompareGroup.value = key
   selectedContextKey.value = resolveContextKeyForGroup(group)
   quickCompareLoadingKey.value = key
-  
-  console.log('[DEBUG] About to load assets:', group.assets)
+
+  console.log('[DEBUG] About to load assets:', group.assets, 'resolved_assets:', group.resolved_assets)
   try {
-    await loadCustomAssetsFromList(group.assets || [])
+    // Use resolved_assets if available for faster loading
+    if (group.resolved_assets && group.resolved_assets.length > 0) {
+      console.log('[DEBUG] Using pre-resolved assets')
+      await loadResolvedAssets(group.resolved_assets)
+    } else {
+      console.log('[DEBUG] Resolving assets dynamically')
+      await loadCustomAssetsFromList(group.assets || [])
+    }
     console.log('[DEBUG] Assets loaded, customAssets.value:', customAssets.value)
-    
+
     if (autoRun) {
       // Ensure loading state is clear before starting new request if needed
       // But respect existing loading state if it's just a queue
@@ -1217,11 +1320,18 @@ function mapQuickCompareGroups(entries = []) {
       const label = (item?.label || '').trim() || `그룹 ${index + 1}`
       const contextKey =
         (item?.context_key || item?.contextKey || QUICK_COMPARE_CONTEXT_MAP[key] || '').trim()
+
+      // Include resolved_assets if available
+      const resolvedAssets = Array.isArray(item?.resolved_assets)
+        ? item.resolved_assets
+        : []
+
       return {
         id: item?.id ?? index,
         key,
         label,
         assets,
+        resolved_assets: resolvedAssets,
         contextKey,
         sortOrder: Number.isFinite(item?.sort_order)
           ? Number(item.sort_order)
@@ -1351,31 +1461,15 @@ function handlePromptInput() {
   promptManuallyEdited.value = true
 }
 
-watch(() => progressLogs.value, (logs) => {
-  const lastLog = logs[logs.length - 1] || ''
-
-  if (lastLog.includes('Starting Multi-Agent') || lastLog.includes('분석 요청')) {
-    loadingProgress.value = 5
-  } else if (lastLog.includes('[IntentClassifier]') && lastLog.includes('Analyzing')) {
-    loadingProgress.value = 10
-  } else if (lastLog.includes('[IntentClassifier]') && lastLog.includes('Calling LLM')) {
-    loadingProgress.value = 15
-  } else if (lastLog.includes('[IntentClassifier]') && lastLog.includes('Extracted')) {
-    loadingProgress.value = 25
-  } else if (lastLog.includes('[PriceRetriever]') && lastLog.includes('Fetching')) {
-    loadingProgress.value = 30
-  } else if (lastLog.includes('[PriceRetriever]') && lastLog.includes('Processing')) {
-    const assetMatches = logs.filter(l => l.includes('[PriceRetriever]') && l.includes('Fetched'))
-    const progress = 30 + Math.min(assetMatches.length * 5, 40)
-    loadingProgress.value = progress
-  } else if (lastLog.includes('[Calculator]') && !lastLog.includes('Generated')) {
-    loadingProgress.value = 75
-  } else if (lastLog.includes('[Calculator]') && lastLog.includes('Generated')) {
-    loadingProgress.value = 90
-  } else if (lastLog.includes('✓') || lastLog.includes('완료')) {
-    loadingProgress.value = 100
+watch(
+  () => progressLogs.value.length,
+  () => {
+    const lastLog = progressLogs.value[progressLogs.value.length - 1]
+    if (lastLog) {
+      handleProgressLog(lastLog)
+    }
   }
-}, { deep: true })
+)
 
 function formatMultiple(value) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '0.0'
@@ -1765,12 +1859,123 @@ function shouldApplyTax(series) {
   return isUsEquity && unit === 'usd'
 }
 
+function startLoadingStageTracking() {
+  stopLoadingStageTracking()
+  priceDataProgressBumps = 0
+  if (!LOADING_STAGES.length) return
+  loadingStageIndex.value = 0
+  loadingProgress.value = LOADING_STAGES[0].minProgress
+
+  LOADING_STAGES.slice(1).forEach((stage) => {
+    if (!Number.isFinite(stage.fallbackDelayMs)) return
+    const timer = setTimeout(() => {
+      setLoadingStage(stage.key)
+    }, stage.fallbackDelayMs)
+    stageFallbackTimers.set(stage.key, timer)
+  })
+
+  loadingProgressInterval = setInterval(() => {
+    const stage = currentLoadingStage.value
+    if (!stage) return
+    if (loadingProgress.value >= stage.maxProgress) return
+    const increment = stage.autoIncrement ?? 1
+    loadingProgress.value = Math.min(stage.maxProgress, loadingProgress.value + increment)
+  }, 1000)
+}
+
+function stopLoadingStageTracking() {
+  stageFallbackTimers.forEach((timer) => clearTimeout(timer))
+  stageFallbackTimers.clear()
+  if (loadingProgressInterval) {
+    clearInterval(loadingProgressInterval)
+    loadingProgressInterval = null
+  }
+}
+
+function setLoadingStage(stageKey, { immediate = false } = {}) {
+  const targetIndex = LOADING_STAGES.findIndex((stage) => stage.key === stageKey)
+  if (targetIndex === -1) return
+  if (targetIndex < loadingStageIndex.value) return
+  loadingStageIndex.value = targetIndex
+  const stage = LOADING_STAGES[targetIndex]
+  const targetProgress = immediate ? stage.maxProgress : stage.minProgress
+  if (loadingProgress.value < targetProgress) {
+    loadingProgress.value = targetProgress
+  }
+  if (stageFallbackTimers.has(stageKey)) {
+    clearTimeout(stageFallbackTimers.get(stageKey))
+    stageFallbackTimers.delete(stageKey)
+  }
+}
+
+function bumpPriceStageProgress() {
+  const stage = LOADING_STAGES.find((entry) => entry.key === DATA_STAGE_KEY)
+  if (!stage) return
+  priceDataProgressBumps += 1
+  const range = Math.max(0, stage.maxProgress - stage.minProgress)
+  const offset = Math.min(range, priceDataProgressBumps * 4)
+  const nextValue = stage.minProgress + offset
+  if (nextValue > loadingProgress.value) {
+    loadingProgress.value = nextValue
+  }
+}
+
+function isDataFetchCompletionLog(message) {
+  const normalized = message.toLowerCase()
+  if (message.includes('✓')) return true
+  if (normalized.includes('cache hit') || normalized.includes('캐시됨')) return true
+  if (normalized.includes('수집 완료') || normalized.includes('데이터 포인트')) return true
+  return false
+}
+
+function handleProgressLog(message) {
+  if (!message) return
+  const normalized = message.toLowerCase()
+
+  const matchedStage = LOADING_STAGES.find((stage) => {
+    if (!Array.isArray(stage.matchers) || !stage.matchers.length) return false
+    return stage.matchers.some((token) => token && normalized.includes(token.toLowerCase()))
+  })
+
+  if (matchedStage) {
+    setLoadingStage(matchedStage.key)
+  }
+
+  if (normalized.includes('[데이터 수집]')) {
+    setLoadingStage(DATA_STAGE_KEY)
+    if (isDataFetchCompletionLog(message)) {
+      bumpPriceStageProgress()
+    }
+  }
+
+  if (normalized.includes('[수익률 계산]')) {
+    setLoadingStage('calc')
+  }
+
+  if (normalized.includes('[분석 생성]')) {
+    setLoadingStage('summary')
+  }
+
+  if (message.includes('✓ 분석 완료')) {
+    completeLoadingStageTracking()
+  } else if (normalized.includes('요청이 취소되었습니다')) {
+    stopLoadingStageTracking()
+  } else if (normalized.includes('오류')) {
+    stopLoadingStageTracking()
+  }
+}
+
+function completeLoadingStageTracking() {
+  const summaryStage = LOADING_STAGES[LOADING_STAGES.length - 1]
+  if (summaryStage) {
+    setLoadingStage(summaryStage.key, { immediate: true })
+  }
+  loadingProgress.value = 100
+  stopLoadingStageTracking()
+}
+
 function getLoadingMessage() {
-  if (loadingProgress.value < 20) return '데이터를 가져오는 중입니다.'
-  if (loadingProgress.value < 50) return '자산 데이터를 불러오는 중입니다.'
-  if (loadingProgress.value < 80) return '수익률을 계산하고 있어요.'
-  if (loadingProgress.value < 100) return '결과를 정리하는 중입니다.'
-  return '곧 결과가 표시됩니다.'
+  return currentLoadingStage.value?.description || '데이터를 가져오는 중입니다.'
 }
 
 function resetPrompt() {
@@ -1793,6 +1998,7 @@ function cancelRequest() {
     abortController.abort()
     abortController = null
     loading.value = false
+    stopLoadingStageTracking()
     progressLogs.value.push('요청이 취소되었습니다.')
   }
   priceRequestId += 1
@@ -1962,6 +2168,7 @@ async function runAnalysis(options = {}) {
   loading.value = true
   errorMessage.value = ''
   loadingProgress.value = 0
+  startLoadingStageTracking()
 
   if (progressLogs.value.length > 0) {
     progressLogs.value.push('')
@@ -1983,10 +2190,12 @@ async function runAnalysis(options = {}) {
     const result = await fetchHistoricalReturnsStream(payload)
     applyAnalysisResult(result, { shouldCache: true })
     prefetchDividendVariant(!includeDividends.value)
+    completeLoadingStageTracking()
 
     progressLogs.value.push('')
     progressLogs.value.push('✓ 분석 완료')
   } catch (error) {
+    stopLoadingStageTracking()
     if (error.name === 'AbortError') {
       errorMessage.value = '요청이 취소되었습니다.'
       progressLogs.value.push('요청이 취소되었습니다.')

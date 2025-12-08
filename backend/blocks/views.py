@@ -14,7 +14,7 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     pykrx_stock = None
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from .models import (
@@ -4378,6 +4378,7 @@ class PriceRetrieverAgent:
     """
     Responsible for fetching historical price data for the requested assets.
     It uses the existing helper functions (_fetch_asset_history, etc.).
+    Now includes cache-first lookup from internal DB.
     """
     def run(self, assets, start_year, end_year):
         logs = []
@@ -4392,8 +4393,39 @@ class PriceRetrieverAgent:
 
             logs.append(f"[데이터 수집] {label} 처리 중...")
 
-            # 1. Map to internal config structure
-            # We try to find an existing config or create a dynamic one
+            # 1. Check cache first (Cache Hit)
+            cached_data = self._check_price_cache(asset_id, start_year, end_year)
+            if cached_data:
+                logs.append(f"[데이터 수집] ✓ {label}: 캐시됨 (cache hit) - {len(cached_data['yearly_prices'])}개 데이터 포인트")
+                # Convert cached yearly prices to history format (list of tuples with datetime objects)
+                history = []
+                for year_str, price in sorted(cached_data['yearly_prices'].items()):
+                    year_int = int(year_str)
+                    # Create datetime object for December 31st of each year (year-end closing price)
+                    dt = datetime(year_int, 12, 31)
+                    history.append((dt, float(price)))
+
+                config = {
+                    'id': asset_id,
+                    'label': cached_data['label'],
+                    'ticker': asset_id,
+                    'category': cached_data['category'],
+                    'unit': cached_data['unit']
+                }
+
+                base_metadata = dict(asset.get('metadata') or {})
+                enriched_metadata = _enrich_metadata_with_dividend_info(config, base_metadata)
+                price_data_map[asset_id] = {
+                    'history': history,
+                    'config': config,
+                    'source': f"{cached_data['source']} (캐시됨)",
+                    'calculation_method': asset.get('calculation_method', 'cagr'),
+                    'metadata': enriched_metadata
+                }
+                continue
+
+            # 2. Cache Miss - Map to internal config structure
+            logs.append(f"[데이터 수집] {label}: 외부 API에서 조회 중...")
             config = _find_known_asset_config(asset_id, label)
 
             if not config:
@@ -4425,7 +4457,7 @@ class PriceRetrieverAgent:
 
                 logs.append(f"[데이터 수집] {label}: 동적 config 생성 완료 (Category: {category}, Ticker: {asset_id})")
 
-            # 2. Fetch History
+            # 3. Fetch History from external API
             try:
                 result = _fetch_asset_history(config, start_year, end_year)
                 if result:
@@ -4447,8 +4479,42 @@ class PriceRetrieverAgent:
                     logs.append(f"[데이터 수집] ✗ {label}: 데이터 없음")
             except Exception as e:
                 logs.append(f"[데이터 수집] ✗ {label} 실패: {e}")
-        
+
         return price_data_map, logs
+
+    def _check_price_cache(self, asset_id, start_year, end_year):
+        """
+        Check internal DB cache for price data.
+        Returns cached data dict or None if not found.
+        """
+        from blocks.models import AssetPriceCache
+        try:
+            cache_entry = AssetPriceCache.objects.get(asset_id=asset_id)
+
+            # Filter by year range
+            yearly_prices = {}
+            for year_str, price in cache_entry.yearly_prices.items():
+                year = int(year_str)
+                if year < start_year or year > end_year:
+                    continue
+                yearly_prices[year_str] = price
+
+            if not yearly_prices:
+                return None
+
+            return {
+                'asset_id': cache_entry.asset_id,
+                'label': cache_entry.label,
+                'category': cache_entry.category,
+                'unit': cache_entry.unit,
+                'source': cache_entry.source,
+                'yearly_prices': yearly_prices,
+            }
+        except AssetPriceCache.DoesNotExist:
+            return None
+        except Exception as e:
+            logger.warning(f"Error checking cache for {asset_id}: {e}")
+            return None
 
     def _map_category(self, asset_type):
         mapping = {
@@ -6018,6 +6084,196 @@ def _sanitize_asset_names(asset_values):
     return assets
 
 
+def _resolve_assets(asset_names):
+    """
+    Resolve asset names to {label, ticker, id, category} objects.
+    Returns list of resolved asset dicts.
+    """
+    resolved = []
+    for name in asset_names:
+        name = (name or '').strip()
+        if not name:
+            continue
+
+        # Try to find in known assets first
+        config = _find_known_asset_config(name, name)
+        if config:
+            resolved.append({
+                'id': config.get('id') or name,
+                'label': config.get('label') or name,
+                'ticker': config.get('ticker') or config.get('id') or name,
+                'category': config.get('category'),
+            })
+            continue
+
+        # Try LLM lookup
+        candidate = _lookup_ticker_with_llm(name, name)
+        if candidate:
+            resolved.append({
+                'id': candidate.get('id') or name,
+                'label': candidate.get('label') or name,
+                'ticker': candidate.get('ticker') or candidate.get('id') or name,
+                'category': candidate.get('category'),
+            })
+            continue
+
+        # Fallback: use name as-is
+        resolved.append({
+            'id': name,
+            'label': name,
+            'ticker': name,
+            'category': None,
+        })
+
+    return resolved
+
+
+def _cache_asset_prices(asset_id, label, category=None):
+    """
+    Fetch and cache historical price data for an asset from 2009 to present.
+    Returns True if successful, False otherwise.
+    """
+    from blocks.models import AssetPriceCache
+    from datetime import datetime
+
+    try:
+        current_year = datetime.now().year
+        start_year = 2009
+
+        # Find or create asset config
+        config = _find_known_asset_config(asset_id, label)
+        if not config:
+            # Create dynamic config
+            config = {
+                'id': asset_id,
+                'label': label,
+                'ticker': asset_id,
+                'category': category or '기타',
+                'unit': 'USD'
+            }
+
+        # Fetch historical data
+        result = _fetch_asset_history(config, start_year, current_year)
+        if not result:
+            logger.warning(f"Failed to fetch price data for {asset_id}")
+            return False
+
+        history, source = result
+        logger.info(f"Fetched {len(history)} data points for {asset_id}, type: {type(history)}")
+
+        # Convert history to yearly prices dict
+        yearly_prices = {}
+        for i, entry in enumerate(history):
+            # entry might be a dict or tuple depending on data source
+            if isinstance(entry, dict):
+                year = entry.get('year')
+                price = entry.get('close')
+            elif isinstance(entry, (tuple, list)) and len(entry) >= 2:
+                year = entry[0]
+                price = entry[1]
+            else:
+                logger.warning(f"Unknown entry format for {asset_id}: {type(entry)}")
+                continue
+
+            # Extract year from various formats
+            if year is not None:
+                try:
+                    # If year is already an integer
+                    if isinstance(year, int):
+                        year_int = year
+                    # If year is a string, try to extract the year part
+                    elif isinstance(year, str):
+                        # Try to parse as datetime or extract year
+                        year_int = int(year.split('-')[0])
+                    # If year is a datetime object
+                    elif hasattr(year, 'year'):
+                        year_int = year.year
+                    else:
+                        logger.warning(f"Cannot parse year for {asset_id}: {year} (type: {type(year)})")
+                        continue
+
+                    if price is not None:
+                        yearly_prices[str(year_int)] = float(price)
+                except (ValueError, AttributeError, IndexError) as e:
+                    logger.warning(f"Error parsing year/price for {asset_id}: {year}, {price} - {e}")
+                    continue
+
+        if not yearly_prices:
+            logger.warning(f"No price data found for {asset_id}")
+            return False
+
+        # Get or create cache entry
+        cache_entry, created = AssetPriceCache.objects.update_or_create(
+            asset_id=asset_id,
+            defaults={
+                'label': label,
+                'category': config.get('category', '기타'),
+                'unit': config.get('unit', 'USD'),
+                'source': source,
+                'yearly_prices': yearly_prices,
+                'start_year': min(int(y) for y in yearly_prices.keys()),
+                'end_year': max(int(y) for y in yearly_prices.keys()),
+            }
+        )
+
+        logger.info(f"{'Created' if created else 'Updated'} price cache for {asset_id}: {len(yearly_prices)} years")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error caching prices for {asset_id}: {e}")
+        return False
+
+
+@csrf_exempt
+def finance_price_cache_view(request):
+    """
+    Internal API endpoint for PriceRetriever Agent to check cached prices.
+    GET /api/finance/price-cache?asset_id=AAPL&start_year=2009&end_year=2024
+    """
+    from blocks.models import AssetPriceCache
+
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+
+    asset_id = request.GET.get('asset_id', '').strip()
+    if not asset_id:
+        return JsonResponse({'ok': False, 'error': 'asset_id is required'}, status=400)
+
+    try:
+        cache_entry = AssetPriceCache.objects.get(asset_id=asset_id)
+    except AssetPriceCache.DoesNotExist:
+        return JsonResponse({'ok': False, 'cache_hit': False, 'error': 'No cache found'}, status=404)
+
+    # Filter by year range if provided
+    start_year = request.GET.get('start_year')
+    end_year = request.GET.get('end_year')
+
+    yearly_prices = cache_entry.yearly_prices
+    if start_year or end_year:
+        filtered_prices = {}
+        for year_str, price in yearly_prices.items():
+            year = int(year_str)
+            if start_year and year < int(start_year):
+                continue
+            if end_year and year > int(end_year):
+                continue
+            filtered_prices[year_str] = price
+        yearly_prices = filtered_prices
+
+    return JsonResponse({
+        'ok': True,
+        'cache_hit': True,
+        'asset_id': cache_entry.asset_id,
+        'label': cache_entry.label,
+        'category': cache_entry.category,
+        'unit': cache_entry.unit,
+        'source': cache_entry.source,
+        'yearly_prices': yearly_prices,
+        'start_year': cache_entry.start_year,
+        'end_year': cache_entry.end_year,
+    })
+
+
 @csrf_exempt
 def finance_quick_compare_groups_view(request):
     if request.method != 'GET':
@@ -6049,6 +6305,21 @@ def admin_finance_quick_compare_groups_view(request):
         if not assets:
             return JsonResponse({'ok': False, 'error': '최소 1개 이상의 비교 종목이 필요합니다.'}, status=400)
 
+        # Resolve assets to get ticker and label
+        resolved_assets = _resolve_assets(assets)
+
+        # Cache price data for each resolved asset
+        for asset in resolved_assets:
+            asset_id = asset.get('ticker') or asset.get('id')
+            asset_label = asset.get('label')
+            asset_category = asset.get('category')
+            if asset_id and asset_label:
+                # Run in background to avoid blocking the request
+                try:
+                    _cache_asset_prices(asset_id, asset_label, asset_category)
+                except Exception as e:
+                    logger.warning(f"Failed to cache prices for {asset_id}: {e}")
+
         sort_order = payload.get('sort_order')
         if sort_order is None:
             max_order = FinanceQuickCompareGroup.objects.aggregate(max_order=Max('sort_order'))['max_order'] or 0
@@ -6059,6 +6330,7 @@ def admin_finance_quick_compare_groups_view(request):
                 key=key,
                 label=label,
                 assets=assets,
+                resolved_assets=resolved_assets,
                 sort_order=int(sort_order),
                 is_active=bool(payload.get('is_active', True)),
             )
@@ -6100,6 +6372,20 @@ def admin_finance_quick_compare_group_detail_view(request, pk):
             if not assets:
                 return JsonResponse({'ok': False, 'error': '최소 1개 이상의 비교 종목이 필요합니다.'}, status=400)
             group.assets = assets
+            # Resolve assets to get ticker and label
+            resolved_assets = _resolve_assets(assets)
+            group.resolved_assets = resolved_assets
+
+            # Cache price data for each resolved asset
+            for asset in resolved_assets:
+                asset_id = asset.get('ticker') or asset.get('id')
+                asset_label = asset.get('label')
+                asset_category = asset.get('category')
+                if asset_id and asset_label:
+                    try:
+                        _cache_asset_prices(asset_id, asset_label, asset_category)
+                    except Exception as e:
+                        logger.warning(f"Failed to cache prices for {asset_id}: {e}")
         if 'sort_order' in payload and payload['sort_order'] is not None:
             group.sort_order = int(payload['sort_order'])
         if 'is_active' in payload:
@@ -6115,5 +6401,64 @@ def admin_finance_quick_compare_group_detail_view(request, pk):
     if request.method == 'DELETE':
         group.delete()
         return JsonResponse({'ok': True})
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def admin_price_cache_view(request):
+    """
+    Admin endpoint to manage price cache entries.
+    GET: List all cached assets with pagination
+    """
+    from blocks.models import AssetPriceCache
+
+    if request.method == 'GET':
+        offset = max(0, int(request.GET.get('offset', 0)))
+        limit = int(request.GET.get('limit', 10)) or 10
+        limit = max(1, min(limit, 100))
+        search_query = (request.GET.get('search') or '').strip()
+
+        cache_qs = AssetPriceCache.objects.all()
+        if search_query:
+            cache_qs = cache_qs.filter(
+                Q(label__icontains=search_query) | Q(asset_id__icontains=search_query)
+            )
+
+        total_count = cache_qs.count()
+        cache_entries = cache_qs[offset:offset + limit]
+
+        return JsonResponse({
+            'ok': True,
+            'cached_assets': [entry.as_dict() for entry in cache_entries],
+            'total': total_count,
+            'offset': offset,
+            'limit': limit
+        })
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def admin_price_cache_detail_view(request, pk):
+    """
+    Admin endpoint to manage individual price cache entry.
+    GET: Retrieve cache entry
+    DELETE: Remove cache entry
+    """
+    from blocks.models import AssetPriceCache
+
+    try:
+        cache_entry = AssetPriceCache.objects.get(pk=pk)
+    except AssetPriceCache.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'Cache entry not found'}, status=404)
+
+    if request.method == 'GET':
+        return JsonResponse({'ok': True, 'cache_entry': cache_entry.as_dict()})
+
+    if request.method == 'DELETE':
+        asset_id = cache_entry.asset_id
+        cache_entry.delete()
+        return JsonResponse({'ok': True, 'message': f'Cache for {asset_id} deleted'})
 
     return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)

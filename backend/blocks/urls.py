@@ -11,6 +11,7 @@ urlpatterns = [
     path('finance/custom-asset/resolve', views.finance_resolve_custom_asset_view, name='finance_resolve_custom_asset'),
     path('finance/quick-requests', views.finance_quick_requests_view, name='finance_quick_requests'),
     path('finance/quick-compare-groups', views.finance_quick_compare_groups_view, name='finance_quick_compare_groups'),
+    path('finance/price-cache', views.finance_price_cache_view, name='finance_price_cache'),
     # Accept both with/without trailing slash
     re_path(r'^register_nick/?$', views.register_nick_view, name='register_nick'),
     re_path(r'^check_nick/?$', views.check_nick_view, name='check_nick'),
@@ -66,4 +67,6 @@ urlpatterns = [
     path('finance/admin/quick-requests/<int:pk>', views.admin_finance_quick_request_detail_view, name='admin_finance_quick_request_detail'),
     path('finance/admin/quick-compare-groups', views.admin_finance_quick_compare_groups_view, name='admin_finance_quick_compare_groups'),
     path('finance/admin/quick-compare-groups/<int:pk>', views.admin_finance_quick_compare_group_detail_view, name='admin_finance_quick_compare_group_detail'),
+    path('finance/admin/price-cache', views.admin_price_cache_view, name='admin_price_cache'),
+    path('finance/admin/price-cache/<int:pk>', views.admin_price_cache_detail_view, name='admin_price_cache_detail'),
 ]
