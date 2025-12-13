@@ -113,14 +113,17 @@
 
       </div>
 
-      <!-- Success Message -->
-      <div v-if="successMessage" class="fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg">
-        {{ successMessage }}
-      </div>
-
-      <!-- Error Message -->
-      <div v-if="errorMessage" class="fixed bottom-4 right-4 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg">
-        {{ errorMessage }}
+      <!-- Notifications -->
+      <div
+        v-if="successMessage || errorMessage"
+        class="fixed top-4 left-1/2 -translate-x-1/2 transform z-50 flex flex-col items-center space-y-2 w-full max-w-md px-4"
+      >
+        <div v-if="successMessage" class="bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg text-center w-full">
+          {{ successMessage }}
+        </div>
+        <div v-if="errorMessage" class="bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg text-center w-full">
+          {{ errorMessage }}
+        </div>
       </div>
 
 
@@ -146,4 +149,3 @@ const isAdmin = computed(() => {
   return nickname === 'admin' && adminStatus === 'true'
 })
 </script>
-

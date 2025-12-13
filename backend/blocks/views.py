@@ -32,6 +32,7 @@ from .models import (
     FinanceQueryLog,
     FinanceQuickRequest,
     FinanceQuickCompareGroup,
+    AssetPriceCache,
 )
 from django.db import connection
 from django.conf import settings
@@ -327,18 +328,81 @@ def _ensure_default_finance_quick_compare_groups():
         key = entry.get('key') or f'group_{idx + 1}'
         if key in existing_keys:
             continue
-        FinanceQuickCompareGroup.objects.create(
+
+        assets = list(entry.get('assets') or [])
+        resolved_assets = _resolve_assets(assets) if assets else []
+
+        group = FinanceQuickCompareGroup.objects.create(
             key=key,
             label=entry.get('label', f'그룹 #{idx + 1}'),
-            assets=list(entry.get('assets') or []),
+            assets=assets,
+            resolved_assets=resolved_assets,
             sort_order=entry.get('sort_order', idx),
             is_active=entry.get('is_active', True),
         )
         existing_keys.add(key)
         created = True
 
+        # Warm cache entries for the default group immediately
+        if resolved_assets:
+            _ensure_assets_cached(resolved_assets, group_key=group.key)
+
     return created
 
+
+def _ensure_assets_cached(resolved_assets, group_key=None):
+    """
+    Ensure a list of resolved asset dictionaries are persisted to the price cache.
+    """
+    for asset in resolved_assets or []:
+        _ensure_asset_prices_cached(asset, group_key=group_key)
+
+
+def _ensure_asset_prices_cached(asset, group_key=None):
+    """
+    Make sure a single asset has an entry inside AssetPriceCache.
+    """
+    try:
+        asset_id = (asset.get('ticker') or asset.get('id') or '').strip()
+        label = (asset.get('label') or asset_id).strip()
+        category = asset.get('category')
+        if not asset_id or not label:
+            return False
+
+        if AssetPriceCache.objects.filter(asset_id=asset_id).exists():
+            return True
+
+        return _cache_asset_prices(asset_id, label, category)
+    except Exception as exc:
+        logger.warning(
+            "Failed to ensure cache for asset %s (group=%s): %s",
+            asset.get('ticker') or asset.get('id'),
+            group_key or 'n/a',
+            exc
+        )
+        return False
+
+
+def _ensure_quick_compare_groups_cached():
+    """
+    Ensure all quick compare groups have resolved assets and corresponding cache entries.
+    """
+    groups = FinanceQuickCompareGroup.objects.all()
+    for group in groups:
+        try:
+            resolved_assets = list(group.resolved_assets or [])
+            if not resolved_assets:
+                asset_names = list(group.assets or [])
+                if not asset_names:
+                    continue
+                resolved_assets = _resolve_assets(asset_names)
+                group.resolved_assets = resolved_assets
+                group.save(update_fields=['resolved_assets'])
+
+            if resolved_assets:
+                _ensure_assets_cached(resolved_assets, group_key=group.key)
+        except Exception as exc:
+            logger.warning("Failed to warm cache for quick compare group %s: %s", group.key, exc)
 PRESET_STOCK_GROUPS = {
     'us_bigtech': [
         {'id': 'AAPL', 'label': '애플(AAPL)', 'ticker': 'AAPL', 'stooq_symbol': 'aapl.us', 'category': '미국 빅테크', 'unit': 'USD', 'aliases': ['apple', 'aapl']},
@@ -5390,6 +5454,7 @@ def finance_resolve_custom_asset_view(request):
             'category': config.get('category'),
             'unit': config.get('unit')
         }
+        _ensure_asset_prices_cached(asset)
         return JsonResponse({'ok': True, 'asset': asset})
 
     candidate = _lookup_ticker_with_llm(name, name)
@@ -5401,6 +5466,7 @@ def finance_resolve_custom_asset_view(request):
             'category': candidate.get('category'),
             'unit': candidate.get('unit')
         }
+        _ensure_asset_prices_cached(asset)
         return JsonResponse({'ok': True, 'asset': asset})
 
     suggestion = _suggest_related_asset(name)
@@ -5412,6 +5478,7 @@ def finance_resolve_custom_asset_view(request):
             'category': suggestion.get('category'),
             'unit': suggestion.get('unit')
         }
+        _ensure_asset_prices_cached(asset)
         return JsonResponse({'ok': True, 'asset': asset})
 
     return JsonResponse({
@@ -6259,6 +6326,7 @@ def finance_quick_compare_groups_view(request):
         return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
 
     _ensure_default_finance_quick_compare_groups()
+    _ensure_quick_compare_groups_cached()
     groups_qs = FinanceQuickCompareGroup.objects.filter(is_active=True).order_by('sort_order', 'id')
     return JsonResponse({'ok': True, 'groups': [group.as_dict() for group in groups_qs]})
 
@@ -6267,6 +6335,7 @@ def finance_quick_compare_groups_view(request):
 def admin_finance_quick_compare_groups_view(request):
     if request.method == 'GET':
         _ensure_default_finance_quick_compare_groups()
+        _ensure_quick_compare_groups_cached()
         groups_qs = FinanceQuickCompareGroup.objects.all().order_by('sort_order', 'id')
         return JsonResponse({'ok': True, 'groups': [group.as_dict() for group in groups_qs]})
 
