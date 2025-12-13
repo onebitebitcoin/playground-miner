@@ -1,5 +1,8 @@
 import os
+import tempfile
+import warnings
 from pathlib import Path
+
 from decouple import Config, RepositoryEnv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -94,6 +97,42 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 # Persistent DB connections to reduce cold-connection latency
 CONN_MAX_AGE = 60
 
+LOG_FALLBACK_DIR = Path(tempfile.gettempdir()) / 'playground-logs'
+
+
+def _resolve_log_file(env_name: str, default_filename: str) -> Path:
+    """
+    Determine a writable log file path, falling back to a tmp dir if necessary.
+    """
+    configured_value = config(env_name, default='').strip()
+    if configured_value:
+        candidate = Path(os.path.expanduser(configured_value))
+    else:
+        candidate = BASE_DIR / default_filename
+
+    if not candidate.is_absolute():
+        candidate = (BASE_DIR / candidate).resolve()
+
+    try:
+        candidate.parent.mkdir(parents=True, exist_ok=True)
+        candidate.touch(exist_ok=True)
+        return candidate
+    except OSError as exc:
+        fallback_dir = LOG_FALLBACK_DIR
+        fallback_dir.mkdir(parents=True, exist_ok=True)
+        fallback_path = fallback_dir / default_filename
+        fallback_path.touch(exist_ok=True)
+        warnings.warn(
+            f"Unable to access log file at {candidate} ({exc}). "
+            f"Falling back to {fallback_path}.",
+            RuntimeWarning,
+        )
+        return fallback_path
+
+
+BACKEND_LOG_FILE = _resolve_log_file('BACKEND_LOG_FILE', 'backend.log')
+SECURITY_LOG_FILE = _resolve_log_file('SECURITY_LOG_FILE', 'security.log')
+
 # OpenAI configuration for finance insights
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 OPENAI_API_BASE = config('OPENAI_API_BASE', default='https://api.openai.com/v1')
@@ -113,12 +152,12 @@ LOGGING = {
         'file': {
             'level': 'INFO',
             'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'security.log',
+            'filename': str(SECURITY_LOG_FILE),
         },
         'backend_file': {
             'level': 'INFO',
             'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'backend.log',
+            'filename': str(BACKEND_LOG_FILE),
         },
         'console': {
             'level': 'INFO',

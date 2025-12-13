@@ -46,6 +46,12 @@ python manage.py runserver 0.0.0.0:8002
 
 CORS는 간단한 미들웨어(`playground_server/simplecors.py`)로 허용되어, 프론트 개발 서버(5173)에서 접근 가능합니다.
 
+### 로그 위치
+
+- 기본적으로 Django 애플리케이션 로그는 `backend/backend.log`, 보안 관련 로그는 `backend/security.log`에 저장됩니다.
+- 해당 경로를 쓸 수 없으면 `/tmp/playground-logs/` 아래로 자동 폴백합니다.
+- `BACKEND_LOG_FILE`, `SECURITY_LOG_FILE` 환경 변수를 설정하면 원하는 절대 경로나 `backend/` 기준 상대 경로로 로그 위치를 지정할 수 있습니다.
+
 ## 프론트엔드 실행(Vue 3 + Vite)
 
 사전 준비: Node.js 18+
