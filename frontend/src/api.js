@@ -722,29 +722,34 @@ export async function apiGetRoutes(username) {
   }
 }
 
-export async function apiCreateRoute(username, sourceId, destinationId, routeType, feeRate, feeFixed, feeFixedCurrency, isEnabled, description, isEvent = false, eventTitle = '', eventDescription = '', eventUrl = '') {
+export async function apiCreateRoute(id, username, sourceId, destinationId, routeType, feeRate, feeFixed, feeFixedCurrency, isEnabled, description, isEvent = false, eventTitle = '', eventDescription = '', eventUrl = '') {
   try {
+    const payload = {
+      username,
+      source_id: sourceId,
+      destination_id: destinationId,
+      route_type: routeType,
+      fee_rate: feeRate,
+      fee_fixed: feeFixed,
+      fee_fixed_currency: feeFixedCurrency,
+      is_enabled: isEnabled,
+      description,
+      is_event: isEvent,
+      event_title: eventTitle,
+      event_description: eventDescription,
+      event_url: eventUrl
+    }
+    if (id) {
+      payload.id = id
+    }
+
     const res = await fetch(`${BASE_URL}/api/routes/admin`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: JSON.stringify({
-        username,
-        source_id: sourceId,
-        destination_id: destinationId,
-        route_type: routeType,
-        fee_rate: feeRate,
-        fee_fixed: feeFixed,
-        fee_fixed_currency: feeFixedCurrency,
-        is_enabled: isEnabled,
-        description,
-        is_event: isEvent,
-        event_title: eventTitle,
-        event_description: eventDescription,
-        event_url: eventUrl
-      })
+      body: JSON.stringify(payload)
     })
     if (!res.ok) return { success: false, error: `서버 오류(${res.status})` }
     const data = await res.json()

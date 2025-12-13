@@ -1648,6 +1648,16 @@ def admin_routes_view(request):
             personal_wallet = ServiceNode.objects.filter(service='personal_wallet').first()
 
             if user:
+                def ensure_route(source_node, destination_node, route_type, defaults):
+                    if not source_node or not destination_node:
+                        return
+                    Route.objects.get_or_create(
+                        source=source_node,
+                        destination=destination_node,
+                        route_type=route_type,
+                        defaults=defaults,
+                    )
+
                 # Trading edges (deposits and exchange to exchange)
                 trading_pairs = []
                 # 사용자 → 업비트/빗썸 원화
@@ -1670,16 +1680,18 @@ def admin_routes_view(request):
                 # 업비트/빗썸에서 USDT → BTC 직접 전환은 유효하지 않음 (삭제/차단)
                 if bi_krw and bi_usdt: trading_pairs.append((bi_krw, bi_usdt, '빗썸 원화 → 빗썸 USDT'))
                 # 거래소 내부 USDT → BTC (바이낸스/OKX) - 수수료 0.1%
-                if bz_usdt and bz_btc:
-                    Route.objects.update_or_create(
-                        source=bz_usdt, destination=bz_btc, route_type='trading',
-                        defaults={'fee_rate': 0.1, 'description': '바이낸스 USDT → 바이낸스 BTC', 'is_enabled': True},
-                    )
-                if ok_usdt and ok_btc:
-                    Route.objects.update_or_create(
-                        source=ok_usdt, destination=ok_btc, route_type='trading',
-                        defaults={'fee_rate': 0.1, 'description': 'OKX USDT → OKX BTC', 'is_enabled': True},
-                    )
+                ensure_route(
+                    bz_usdt,
+                    bz_btc,
+                    'trading',
+                    {'fee_rate': 0.1, 'description': '바이낸스 USDT → 바이낸스 BTC', 'is_enabled': True},
+                )
+                ensure_route(
+                    ok_usdt,
+                    ok_btc,
+                    'trading',
+                    {'fee_rate': 0.1, 'description': 'OKX USDT → OKX BTC', 'is_enabled': True},
+                )
                 # Direct user -> exchange (splits) with trading fees
                 special_user_pairs = []
                 if up_usdt: special_user_pairs.append((user, up_usdt, 0.01, '사용자 → 업비트 USDT'))
@@ -1687,9 +1699,11 @@ def admin_routes_view(request):
                 if bi_usdt: special_user_pairs.append((user, bi_usdt, 0.04, '사용자 → 빗썸 USDT'))
                 if bi_btc:  special_user_pairs.append((user, bi_btc,  0.04, '사용자 → 빗썸 BTC'))
                 for (src, dst, fee_rate, desc) in special_user_pairs:
-                    Route.objects.update_or_create(
-                        source=src, destination=dst, route_type='trading',
-                        defaults={'fee_rate': fee_rate, 'description': desc, 'is_enabled': True},
+                    ensure_route(
+                        src,
+                        dst,
+                        'trading',
+                        {'fee_rate': fee_rate, 'description': desc, 'is_enabled': True},
                     )
                 # Cross-exchange USDT 온체인 경로는 생성하지 않음 (업비트 USDT 포함)
 
@@ -1704,9 +1718,11 @@ def admin_routes_view(request):
                 if bi_btc and ok_btc:
                     btc_onchain_pairs.append((bi_btc, ok_btc, '빗썸 BTC → OKX BTC 온체인'))
                 for (src, dst, desc) in btc_onchain_pairs:
-                    Route.objects.update_or_create(
-                        source=src, destination=dst, route_type='withdrawal_onchain',
-                        defaults={'fee_rate': None, 'fee_fixed': 0.0002, 'description': desc, 'is_enabled': True},
+                    ensure_route(
+                        src,
+                        dst,
+                        'withdrawal_onchain',
+                        {'fee_rate': None, 'fee_fixed': 0.0002, 'description': desc, 'is_enabled': True},
                     )
                 for (src, dst, desc) in trading_pairs:
                     Route.objects.get_or_create(
@@ -1843,6 +1859,7 @@ def admin_routes_view(request):
         except json.JSONDecodeError:
             return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
 
+        # Fields for both create and update
         source_id = data.get('source_id')
         destination_id = data.get('destination_id')
         route_type = data.get('route_type')
@@ -1868,6 +1885,9 @@ def admin_routes_view(request):
             destination = ServiceNode.objects.get(id=destination_id)
         except ServiceNode.DoesNotExist:
             return JsonResponse({'ok': False, 'error': 'Invalid source or destination'}, status=400)
+        
+        # Extract route_id for updates
+        route_id = data.get('id')
 
         # Reject invalid user -> (binance|okx) paths
         if source.service == 'user' and destination.service in ['binance', 'okx']:
@@ -1878,22 +1898,41 @@ def admin_routes_view(request):
             return JsonResponse({'ok': False, 'error': 'USDT에서 동일 거래소 BTC로의 직접 전환 경로는 유효하지 않습니다'}, status=400)
 
         try:
-            route, created = Route.objects.update_or_create(
-                source=source,
-                destination=destination,
-                route_type=route_type,
-                defaults={
-                    'fee_rate': fee_rate if fee_rate is not None else None,
-                    'fee_fixed': fee_fixed if fee_fixed is not None else None,
-                    'fee_fixed_currency': fee_fixed_currency,
-                    'is_enabled': bool(is_enabled),
-                    'description': description,
-                    'is_event': bool(is_event),
-                    'event_title': event_title,
-                    'event_description': event_description,
-                    'event_url': event_url,
-                }
-            )
+            if route_id:
+                # Update existing route by ID
+                route = Route.objects.get(id=route_id)
+                route.source = source
+                route.destination = destination
+                route.route_type = route_type
+                route.fee_rate = fee_rate if fee_rate is not None else None
+                route.fee_fixed = fee_fixed if fee_fixed is not None else None
+                route.fee_fixed_currency = fee_fixed_currency
+                route.is_enabled = bool(is_enabled)
+                route.description = description
+                route.is_event = bool(is_event)
+                route.event_title = event_title
+                route.event_description = event_description
+                route.event_url = event_url
+                route.save()
+                created = False
+            else:
+                # Create new route using update_or_create (for cases where source, dest, route_type define uniqueness)
+                route, created = Route.objects.update_or_create(
+                    source=source,
+                    destination=destination,
+                    route_type=route_type,
+                    defaults={
+                        'fee_rate': fee_rate if fee_rate is not None else None,
+                        'fee_fixed': fee_fixed if fee_fixed is not None else None,
+                        'fee_fixed_currency': fee_fixed_currency,
+                        'is_enabled': bool(is_enabled),
+                        'description': description,
+                        'is_event': bool(is_event),
+                        'event_title': event_title,
+                        'event_description': event_description,
+                        'event_url': event_url,
+                    }
+                )
 
             return JsonResponse({
                 'ok': True,
@@ -1901,11 +1940,13 @@ def admin_routes_view(request):
                 'created': created
             })
 
+        except Route.DoesNotExist:
+            return JsonResponse({'ok': False, 'error': f'라우트를 찾을 수 없습니다 (ID: {route_id})'}, status=404)
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)
-            logger.error(f"Error updating route {source.service} -> {destination.service}: {e}")
-            return JsonResponse({'ok': False, 'error': '라우트 업데이트 중 오류가 발생했습니다'}, status=500)
+            logger.error(f"Error saving route (ID: {route_id}, source: {source.service}, dest: {destination.service}): {e}")
+            return JsonResponse({'ok': False, 'error': '라우트 저장 중 오류가 발생했습니다'}, status=500)
 
     elif request.method == 'DELETE':
         if not is_admin(request):

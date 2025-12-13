@@ -1030,6 +1030,7 @@ const updateExistingRoute = async (route) => {
   try {
     const username = requireAdminUsername()
     const response = await apiCreateRoute(
+      route.id, // Pass the route ID for update
       username,
       route.source.id,
       route.destination.id,
