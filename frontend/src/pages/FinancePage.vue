@@ -54,7 +54,6 @@
                   role="textbox"
                   aria-label="투자 시점(년 전)"
                   @focus="handleEditableFocus"
-                  @input="handleEditableInput('year', $event)"
                   @keydown="handleEditableKeydown"
                   @paste="handleEditablePaste"
                   @blur="handleEditableBlur('year', $event)"
@@ -68,7 +67,6 @@
                   role="textbox"
                   aria-label="투자 금액"
                   @focus="handleEditableFocus"
-                  @input="handleEditableInput('amount', $event)"
                   @keydown="handleEditableKeydown"
                   @paste="handleEditablePaste"
                   @blur="handleEditableBlur('amount', $event)"
@@ -397,44 +395,21 @@
             </button>
           </div>
         </div>
-
-        <AdminPromptPanel
-          v-if="isAdmin"
-          class="mt-6"
-          :show-debug="showDebug"
-          :prompt="prompt"
-          :loading="loading"
-          :display-logs="displayLogs"
-          :has-logs="progressLogs.length > 0"
-          @update:show-debug="showDebug = $event"
-          @update:prompt="prompt = $event"
-          @clear-logs="progressLogs = []"
-          @submit="runAnalysis"
-          @input-change="handlePromptInput"
-        />
       </template>
       <template v-else>
         <div
           class="bg-slate-50 border border-dashed border-slate-200 rounded-2xl p-6 text-sm text-slate-600"
         >
-          아직 분석된 데이터가 없습니다. 프롬프트를 작성하거나 상단 태그를 눌러 예시 요청을 실행해 보세요.
+          아직 분석된 데이터가 없습니다. 상단 텍스트를 조정하거나 빠른 비교 태그를 눌러 예시 요청을 실행해 보세요.
         </div>
-
-        <AdminPromptPanel
-          v-if="isAdmin"
-          class="mt-6"
-          :show-debug="showDebug"
-          :prompt="prompt"
-          :loading="loading"
-          :display-logs="displayLogs"
-          :has-logs="progressLogs.length > 0"
-          @update:show-debug="showDebug = $event"
-          @update:prompt="prompt = $event"
-          @clear-logs="progressLogs = []"
-          @submit="runAnalysis"
-          @input-change="handlePromptInput"
-        />
       </template>
+
+      <AdminPromptPanel
+        class="mt-6"
+        :show-debug="showLogs"
+        :display-logs="displayLogs"
+        @update:show-debug="showLogs = $event"
+      />
     </section>
 
     <section v-else class="space-y-4">
@@ -570,7 +545,6 @@ const futureScenarios = [
 
 const investmentYearsAgo = ref(10)
 const investmentAmount = ref(100)
-const promptManuallyEdited = ref(false)
 const heroAnimationKey = ref(0)
 const heroAnimationActive = ref(false)
 const searchButtonAttention = ref(false)
@@ -638,21 +612,7 @@ let priceDataProgressBumps = 0
 const analysisSummary = ref('')
 const backendAnalysisSummary = ref('') // Store backend AI analysis separately
 
-// Admin 사용자 확인 (localStorage에서 nickname 확인)
-const isAdmin = computed(() => {
-  const nickname = localStorage.getItem('nickname')
-  return nickname === 'admin'
-})
-
-// Admin이면 항상 로그 표시, 아니면 숨김
-const showDebug = ref(false)
-
-// Admin이면 로그 자동으로 펼침 - User requested default closed
-// watch(isAdmin, (admin) => {
-//   if (admin) {
-//     showDebug.value = true
-//   }
-// }, { immediate: true })
+const showLogs = ref(false)
 
 watch(loading, (isLoading) => {
   if (!isLoading && pendingAgentCall.value) {
@@ -709,10 +669,6 @@ function formatPercent(value) {
 
 function handleEditableFocus(event) {
   selectEditableContents(event.target)
-}
-
-function handleEditableInput(field, event) {
-  promptManuallyEdited.value = true
 }
 
 function handleEditableKeydown(event) {
@@ -790,7 +746,6 @@ function handleSearchClick() {
   if (loading.value || customAssetResolving.value) return
   searchButtonAttention.value = false
   prompt.value = buildPromptFromInputs()
-  promptManuallyEdited.value = false
   heroAnimationKey.value += 1
   displayStartYear.value = null
   // Trigger analysis
@@ -1298,7 +1253,6 @@ async function applyQuickCompare(key, options = {}) {
       // Ensure loading state is clear before starting new request if needed
       // But respect existing loading state if it's just a queue
       prompt.value = buildPromptFromInputs()
-      promptManuallyEdited.value = false
       requestAgentAnalysis()
     }
   } catch (err) {
@@ -1462,10 +1416,6 @@ function removeAsset(index) {
   customAssetError.value = ''
   selectedQuickCompareGroup.value = ''
   selectedContextKey.value = 'safe_assets'
-}
-
-function handlePromptInput() {
-  promptManuallyEdited.value = true
 }
 
 watch(

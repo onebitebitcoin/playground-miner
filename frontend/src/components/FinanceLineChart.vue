@@ -59,7 +59,19 @@
           class="flex items-center gap-4 pl-3 border-l border-slate-200 flex-wrap"
         >
           <div v-if="showTaxToggle" class="flex items-center gap-2">
-            <span class="text-xs font-medium text-slate-600 whitespace-nowrap">세금 포함</span>
+            <div class="flex items-center gap-1 text-xs font-medium text-slate-600 whitespace-nowrap">
+              <span>세금 포함</span>
+              <button
+                type="button"
+                class="text-slate-400 hover:text-slate-700 transition"
+                aria-label="해외 주식 양도소득세 계산식 안내"
+                @click.stop="showTaxInfo = true"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 12v4m0-8h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </button>
+            </div>
             <button
               type="button"
               class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
@@ -73,7 +85,19 @@
             </button>
           </div>
           <div v-if="showDividendToggle" class="flex items-center gap-2">
-            <span class="text-xs font-medium text-slate-600 whitespace-nowrap">배당 포함</span>
+            <div class="flex items-center gap-1 text-xs font-medium text-slate-600 whitespace-nowrap">
+              <span>배당 포함</span>
+              <button
+                type="button"
+                class="text-slate-400 hover:text-slate-700 transition"
+                aria-label="배당 재투자 계산식 안내"
+                @click.stop="showDividendInfo = true"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 12v4m0-8h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </button>
+            </div>
             <button
               type="button"
               class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
@@ -316,6 +340,95 @@
       </div>
     </div>
   </teleport>
+
+  <teleport to="body">
+    <div
+      v-if="showTaxInfo"
+      class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 px-4 py-6 sm:py-10"
+      @click.self="showTaxInfo = false"
+    >
+      <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[calc(100vh-3rem)] overflow-y-auto p-6 space-y-4">
+        <div class="flex items-center justify-between">
+          <h4 class="text-base font-semibold text-slate-900">해외 주식 양도소득세 계산식</h4>
+          <button
+            type="button"
+            class="text-slate-400 hover:text-slate-700 transition"
+            aria-label="세금 안내 닫기"
+            @click="showTaxInfo = false"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="space-y-2 text-sm text-slate-700">
+          <p>한국 거주자의 해외 주식 양도소득세는 다음과 같이 계산됩니다.</p>
+          <div class="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-2 text-xs font-mono text-slate-800">
+            <p>과세표준 = max(0, 양도차익 - 2,500,000원)</p>
+            <p>세액 = 과세표준 × (20% + 지방소득세 2%) = 과세표준 × 22%</p>
+            <p>세후 연평균 수익률 = 세전 연평균 수익률 × (1 - 0.22)</p>
+            <p>세후 배수 = (1 + 세후 연평균 수익률) ^ 투자기간</p>
+          </div>
+          <p class="text-xs text-slate-500">
+            차트에서는 미국 주식(USD 표기) 자산에만 위 세율을 적용하며, 비트코인과 디지털 자산·국내 자산에는 적용하지 않습니다. 기본공제액을 별도로 계산하지 않는 단순화 모델로, 동일 세율(22%)을 즉시 적용해 세후 성과를 추정합니다.
+          </p>
+        </div>
+        <div class="text-right">
+          <button
+            type="button"
+            class="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold"
+            @click="showTaxInfo = false"
+          >
+            확인
+          </button>
+        </div>
+      </div>
+    </div>
+  </teleport>
+
+  <teleport to="body">
+    <div
+      v-if="showDividendInfo"
+      class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 px-4 py-6 sm:py-10"
+      @click.self="showDividendInfo = false"
+    >
+      <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[calc(100vh-3rem)] overflow-y-auto p-6 space-y-4">
+        <div class="flex items-center justify-between">
+          <h4 class="text-base font-semibold text-slate-900">배당 재투자 계산 방식</h4>
+          <button
+            type="button"
+            class="text-slate-400 hover:text-slate-700 transition"
+            aria-label="배당 안내 닫기"
+            @click="showDividendInfo = false"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="space-y-2 text-sm text-slate-700">
+          <p>배당 포함을 켜면 Yahoo Finance 종목의 배당 재투자(Adjusted Close) 데이터를 다시 불러와 연도별 가격을 재계산합니다.</p>
+          <div class="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-2 text-xs font-mono text-slate-800">
+            <p>조정 종가<sub>t</sub> = (종가<sub>t</sub> + 배당금<sub>t</sub>) × 분할·배당 조정계수</p>
+            <p>재투자 가정: 배당금은 지급 즉시 동일 종목에 재투자 → Adjusted Close 사용</p>
+            <p>연도별 수익률 = 조정 종가 기반 CAGR / 누적 수익률</p>
+          </div>
+          <p class="text-xs text-slate-500">
+            즉, 배당 포함 시에는 배당금을 현금으로 받지 않고 같은 종목을 추가 매수했다고 가정해 배당 효과가 복리로 반영됩니다. 배당 정보가 없는 자산은 원래 가격 데이터를 그대로 사용합니다.
+          </p>
+        </div>
+        <div class="text-right">
+          <button
+            type="button"
+            class="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold"
+            @click="showDividendInfo = false"
+          >
+            확인
+          </button>
+        </div>
+      </div>
+    </div>
+  </teleport>
 </template>
 
 <script setup>
@@ -542,9 +655,10 @@ const chartTitle = computed(() => {
     return '차트'
   }
   const yearDiff = props.endYear - props.startYear + 1
+  const displayYears = Math.max(1, yearDiff - 1)
   let methodText
   if (props.calculationMethod === 'price') {
-    return `${yearDiff}년 가격 성과 비교 (${props.startYear} ~ ${props.endYear}, 배수 기준)`
+    return `${displayYears}년 가격 성과 비교 (${props.startYear} ~ ${props.endYear}, 배수 기준)`
   } else if (props.calculationMethod === 'cumulative') {
     methodText = '누적 수익률'
   } else if (props.calculationMethod === 'yearly_growth') {
@@ -552,7 +666,7 @@ const chartTitle = computed(() => {
   } else {
     methodText = '연평균 상승률'
   }
-  return `${yearDiff}년 ${methodText} 비교 (${props.startYear} ~ ${props.endYear})`
+  return `${displayYears}년 ${methodText} 비교 (${props.startYear} ~ ${props.endYear})`
 })
 
 const loadingProgress = computed(() => {
@@ -589,6 +703,8 @@ const tooltip = ref({
   top: 50
 })
 const showNormalizationInfo = ref(false)
+const showTaxInfo = ref(false)
+const showDividendInfo = ref(false)
 const loadingStartTime = ref(Date.now())
 const progressTick = ref(0) // 진행률 강제 업데이트용
 const progressUpdateInterval = ref(null)
