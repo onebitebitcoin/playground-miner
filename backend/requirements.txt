@@ -6,3 +6,4 @@ requests>=2.31.0
 mnemonic>=0.21
 bitcoinlib>=0.7.5
 pykrx>=1.0.48
+yfinance>=0.2.0
