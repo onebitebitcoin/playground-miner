@@ -601,6 +601,10 @@ const displayStartYear = ref(null)
 const sliderMinYear = ref(null)
 let abortController = null
 const progressLogs = ref([])
+function appendProgressLogs(...messages) {
+  if (!messages.length) return
+  progressLogs.value = [...progressLogs.value, ...messages]
+}
 const loadingProgress = ref(0)
 const loadingStageIndex = ref(0)
 const currentLoadingStage = computed(() => LOADING_STAGES[loadingStageIndex.value] || LOADING_STAGES[0])
@@ -1956,7 +1960,7 @@ function cancelRequest() {
     abortController = null
     loading.value = false
     stopLoadingStageTracking()
-    progressLogs.value.push('요청이 취소되었습니다.')
+    appendProgressLogs('요청이 취소되었습니다.')
   }
   priceRequestId += 1
   yearlyPriceMap.value = {}
@@ -2125,14 +2129,13 @@ async function runAnalysis(options = {}) {
   loading.value = true
   errorMessage.value = ''
   loadingProgress.value = 0
+  showLogs.value = true
   startLoadingStageTracking()
 
   if (progressLogs.value.length > 0) {
-    progressLogs.value.push('')
-    progressLogs.value.push('='.repeat(50))
-    progressLogs.value.push('')
+    appendProgressLogs('', '='.repeat(50), '')
   }
-  progressLogs.value.push('분석 요청 중...')
+  appendProgressLogs('분석 요청 중...')
 
   try {
     const payload = {
@@ -2140,7 +2143,7 @@ async function runAnalysis(options = {}) {
       includeDividends: includeDividends.value,
       signal: abortController.signal,
       onLog: (message) => {
-        progressLogs.value.push(message)
+        appendProgressLogs(message)
       }
     }
 
@@ -2149,16 +2152,15 @@ async function runAnalysis(options = {}) {
     prefetchDividendVariant(!includeDividends.value)
     completeLoadingStageTracking()
 
-    progressLogs.value.push('')
-    progressLogs.value.push('✓ 분석 완료')
+    appendProgressLogs('', '✓ 분석 완료')
   } catch (error) {
     stopLoadingStageTracking()
     if (error.name === 'AbortError') {
       errorMessage.value = '요청이 취소되었습니다.'
-      progressLogs.value.push('요청이 취소되었습니다.')
+      appendProgressLogs('요청이 취소되었습니다.')
     } else {
       errorMessage.value = error.message || '분석 중 오류가 발생했습니다.'
-      progressLogs.value.push(`오류: ${error.message}`)
+      appendProgressLogs(`오류: ${error.message}`)
       cancelDividendPrefetch()
     }
   } finally {
