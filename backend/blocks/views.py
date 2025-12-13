@@ -8,7 +8,7 @@ import threading
 import hashlib
 from datetime import datetime, timedelta
 import requests
-import yfinance as yf
+from . import yahoo_finance
 try:
     from pykrx import stock as pykrx_stock
 except ImportError:  # pragma: no cover - optional dependency
@@ -2549,11 +2549,7 @@ def _detect_safe_assets(prompt, quick_requests):
 
 
 def _fetch_yfinance_history(ticker, start_year, end_year, adjust_for_dividends=False):
-    """Yahoo Finance를 통해 데이터를 가져옵니다.
-
-    Args:
-        adjust_for_dividends (bool): True이면 배당/분할 조정 가격 사용
-    """
+    """Yahoo Finance 데이터를 yfinance 없이 직접 호출해 가져옵니다."""
     if not ticker:
         return []
     try:
@@ -2561,41 +2557,32 @@ def _fetch_yfinance_history(ticker, start_year, end_year, adjust_for_dividends=F
         end_dt = datetime(end_year, 12, 31)
         current_dt = datetime.utcnow()
 
-        stock = yf.Ticker(ticker)
-        df = stock.history(start=start_dt, end=end_dt, interval='1mo', auto_adjust=adjust_for_dividends)
+        rows = yahoo_finance.fetch_price_history(
+            ticker,
+            start_dt,
+            end_dt,
+            interval='1mo',
+            auto_adjust=adjust_for_dividends,
+        )
 
-        if df.empty:
+        if not rows:
             return []
 
-        rows = []
-        for index, row in df.iterrows():
-            close_price = row.get('Close')
-            if close_price is None or close_price <= 0:
-                continue
-            # index는 pandas Timestamp 객체
-            dt = index.to_pydatetime()
-            rows.append((dt, float(close_price)))
+        if end_year == current_dt.year:
+            last_dt = rows[-1][0]
+            if last_dt.year < current_dt.year or last_dt.month < current_dt.month:
+                current_month_start = datetime(current_dt.year, current_dt.month, 1)
+                latest = yahoo_finance.fetch_latest_price_if_stale(
+                    ticker,
+                    start_dt=current_month_start,
+                    end_dt=current_dt,
+                    auto_adjust=adjust_for_dividends,
+                )
+                if latest:
+                    rows.append(latest)
+                    logger.info('[%s] 최신 일별 가격 추가: %s (%.2f)', ticker, latest[0].strftime('%Y-%m-%d'), latest[1])
 
-        # 현재 연도의 현재 월 데이터가 누락되었을 경우, 일별 데이터로 최신 가격 추가
-        if end_year == current_dt.year and rows:
-            last_row_dt = rows[-1][0]
-            # 마지막 데이터가 현재 월보다 이전이면 최신 데이터 추가
-            if last_row_dt.year < current_dt.year or last_row_dt.month < current_dt.month:
-                try:
-                    # 현재 월의 일별 데이터 가져오기
-                    current_month_start = datetime(current_dt.year, current_dt.month, 1)
-                    df_daily = stock.history(start=current_month_start, end=current_dt, interval='1d', auto_adjust=adjust_for_dividends)
-                    if not df_daily.empty:
-                        # 가장 최근 데이터 추가
-                        latest_index = df_daily.index[-1]
-                        latest_close = df_daily.iloc[-1]['Close']
-                        if latest_close and latest_close > 0:
-                            latest_dt = latest_index.to_pydatetime()
-                            rows.append((latest_dt, float(latest_close)))
-                            logger.info('[%s] 최신 가격 추가: %s (%.2f)', ticker, latest_dt.strftime('%Y-%m-%d'), latest_close)
-                except Exception as e:
-                    logger.warning('[%s] 최신 가격 가져오기 실패: %s', ticker, e)
-
+        rows.sort(key=lambda item: item[0])
         log_suffix = ' (dividend-adjusted)' if adjust_for_dividends else ''
         logger.info('Yahoo Finance에서 %s 데이터 %d개 가져옴%s (%d-%d)', ticker, len(rows), log_suffix, start_year, end_year)
         return rows
@@ -2652,20 +2639,7 @@ def _fetch_dividend_profile(ticker):
 
     yield_ratio = None
     try:
-        stock = yf.Ticker(normalized)
-        try:
-            fast_info = stock.fast_info or {}
-        except Exception:
-            fast_info = {}
-        if isinstance(fast_info, dict):
-            yield_ratio = fast_info.get('last_dividend_yield') or fast_info.get('dividend_yield')
-
-        if yield_ratio is None:
-            try:
-                info = stock.info or {}
-            except Exception:
-                info = {}
-            yield_ratio = info.get('trailingAnnualDividendYield') or info.get('dividendYield')
+        yield_ratio = yahoo_finance.fetch_dividend_yield(normalized)
 
         if yield_ratio is None:
             _cache_dividend_info(normalized, None)
