@@ -1626,15 +1626,91 @@ function generateNaverFinanceUrl(series, year) {
   return `https://finance.naver.com/item/sise_day.naver?code=${stockCode}`
 }
 
-function convertValue(value, unit) {
+function convertValue(value, unit, targetMode = priceDisplayMode.value) {
   const sourceUnit = (unit || '').toLowerCase()
-  if (priceDisplayMode.value === 'krw' && sourceUnit !== 'krw') {
+  const normalizedTarget = targetMode === 'krw' ? 'krw' : 'usd'
+  if (!Number.isFinite(value)) return value
+  if (normalizedTarget === 'krw' && sourceUnit !== 'krw') {
     return value * (fxRate.value || 1300)
   }
-  if (priceDisplayMode.value === 'usd' && sourceUnit === 'krw') {
+  if (normalizedTarget === 'usd' && sourceUnit === 'krw') {
     return value / (fxRate.value || 1300)
   }
   return value
+}
+
+function isKoreanEquitySeries(series) {
+  if (!series) return false
+  const entry = findPriceEntry(series)
+  const ticker = (series.ticker || series.id || '').toUpperCase()
+  const source = (entry?.source || entry?.data_source || series.source || '').toString().toLowerCase()
+  if (source.includes('pykrx')) return true
+  if (/\.K[QS]$/.test(ticker)) return true
+
+  const categoryCandidates = [
+    series.category,
+    entry?.category,
+    getSeriesMetaValue(series, 'category'),
+    getSeriesMetaValue(series, 'asset_class'),
+    getSeriesMetaValue(series, 'asset_category')
+  ]
+
+  if (categoryCandidates.some((value) => {
+    if (!value) return false
+    const lower = value.toString().toLowerCase()
+    return lower.includes('국내') || lower.includes('korea') || lower.includes('kospi') || lower.includes('kosdaq')
+  })) {
+    return true
+  }
+
+  const regionCandidates = [
+    getSeriesMetaValue(series, 'region'),
+    getSeriesMetaValue(series, 'country'),
+    entry?.region
+  ]
+
+  return regionCandidates.some((value) => {
+    if (!value) return false
+    return value.toString().toLowerCase().includes('korea')
+  })
+}
+
+function getSeriesDisplayCurrency(series) {
+  return isKoreanEquitySeries(series) ? 'krw' : 'usd'
+}
+
+function getCurrencySymbolForMode(mode) {
+  return mode === 'krw' ? '₩' : '$'
+}
+
+function resolvePriceValueForCurrency(series, point, year, targetCurrency) {
+  const normalizedTarget = targetCurrency === 'krw' ? 'krw' : 'usd'
+  const entry = findPriceEntry(series)
+  if (entry) {
+    const altMap = entry.altPrices?.[normalizedTarget]
+    if (altMap && Number.isFinite(Number(altMap[year]))) {
+      return { value: Number(altMap[year]), unit: normalizedTarget }
+    }
+    const baseValue = Number(entry.prices?.[year])
+    if (Number.isFinite(baseValue)) {
+      const converted = convertValue(baseValue, entry.unit || series.unit || '', normalizedTarget)
+      return { value: converted, unit: normalizedTarget }
+    }
+  }
+
+  if (point) {
+    const rawValue = Number(point.raw_value ?? point.rawValue)
+    if (Number.isFinite(rawValue)) {
+      const converted = convertValue(rawValue, series.unit || '', normalizedTarget)
+      return { value: converted, unit: normalizedTarget }
+    }
+    const fallback = Number(point.multiple ?? point.value)
+    if (Number.isFinite(fallback)) {
+      return { value: fallback, unit: null }
+    }
+  }
+
+  return { value: null, unit: normalizedTarget }
 }
 
 function getUnitSymbol(unit) {
@@ -1762,11 +1838,10 @@ function getReturnForYear(series, year) {
   if (!point) return '-'
 
   if (analysisResultType.value === 'price') {
-    const entry = findPriceEntry(series)
-    const raw = entry?.prices?.[year]
-    const value = Number.isFinite(raw) ? raw : Number(point.multiple) || Number(point.value)
+    const displayCurrency = getSeriesDisplayCurrency(series)
+    const { value } = resolvePriceValueForCurrency(series, point, year, displayCurrency)
     if (!Number.isFinite(value)) return '-'
-    const symbol = priceDisplayMode.value === 'krw' ? '₩' : '$'
+    const symbol = getCurrencySymbolForMode(displayCurrency)
     return `${symbol}${priceFormatter.format(value)}`
   }
 
