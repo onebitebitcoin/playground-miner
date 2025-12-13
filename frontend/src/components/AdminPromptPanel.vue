@@ -23,14 +23,17 @@
     </button>
 
     <div v-if="showDebug" class="space-y-3 mt-6">
-      <div ref="logContainer" class="bg-slate-900 text-slate-300 p-4 rounded-xl text-xs font-mono overflow-x-auto whitespace-pre-wrap max-h-60 overflow-y-auto border border-slate-700 shadow-inner leading-relaxed">
+      <div
+        ref="logContainer"
+        class="bg-slate-900 text-slate-300 p-4 rounded-xl text-xs font-mono overflow-x-auto whitespace-pre-wrap max-h-60 overflow-y-auto border border-slate-700 shadow-inner leading-relaxed select-text"
+      >
         <div v-if="!displayLogs.length" class="text-slate-500 italic">대기 중...</div>
         <div
           v-for="(log, i) in displayLogs"
           :key="i"
-          class="mb-0.5 last:mb-0 border-b border-slate-800/50 pb-0.5 last:border-0 last:pb-0"
+          class="mb-0.5 last:mb-0 border-b border-slate-800/50 pb-0.5 last:border-0 last:pb-0 select-text"
         >
-          <span class="text-slate-500 mr-2 select-none">[{{ String(i + 1).padStart(3, '0') }}]</span>
+          <span class="text-slate-500 mr-2">[{{ String(i + 1).padStart(3, '0') }}]</span>
           <span
             :class="log.includes('Error') || log.includes('오류') || log.includes('실패') || log.includes('Failed')
               ? 'text-rose-400'

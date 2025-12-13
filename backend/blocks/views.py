@@ -110,6 +110,14 @@ SAFE_ASSETS = {
         'category': '주식지수',
         'aliases': ['나스닥 100', '나스닥100', 'nasdaq 100', 'nasdaq100']
     },
+    'kospi': {
+        'label': '코스피 지수 (^KS11)',
+        'ticker': '^KS11',
+        'stooq_symbol': 'kospi',
+        'unit': 'index',
+        'category': '주식지수',
+        'aliases': ['코스피', 'kospi', 'kospi composite', 'kospi composite index', '^ks11', 'ks11', '코스피 지수']
+    },
     'soxx': {
         'label': 'iShares Semiconductor ETF (SOXX)',
         'ticker': 'SOXX',
@@ -157,6 +165,38 @@ SAFE_ASSETS = {
         'unit': 'USD',
         'category': '미국 소비재',
         'aliases': ['코카콜라', 'coca cola', 'coke', 'ko']
+    },
+    'berkshire_a': {
+        'label': '버크셔해서웨이 클래스 A (BRK.A)',
+        'ticker': 'BRK-A',
+        'stooq_symbol': 'brk.a.us',
+        'unit': 'USD',
+        'category': '미국 주식',
+        'aliases': [
+            '버크셔해서웨이 클래스 a',
+            '버크셔해서웨이 a',
+            '버크셔 a',
+            'berkshire hathaway class a',
+            'berkshire hathaway a',
+            'brk.a',
+            'brk-a'
+        ]
+    },
+    'berkshire_b': {
+        'label': '버크셔해서웨이 클래스 B (BRK.B)',
+        'ticker': 'BRK-B',
+        'stooq_symbol': 'brk.b.us',
+        'unit': 'USD',
+        'category': '미국 주식',
+        'aliases': [
+            '버크셔해서웨이',
+            '버크셔해서웨이 클래스 b',
+            '버크셔 b',
+            'berkshire hathaway',
+            'berkshire hathaway class b',
+            'brk.b',
+            'brk-b'
+        ]
     },
     'dxy': {
         'label': '달러지수(UUP)',
