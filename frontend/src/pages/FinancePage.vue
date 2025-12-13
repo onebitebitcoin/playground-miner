@@ -12,11 +12,14 @@
           <button
             v-for="tab in tabs"
             :key="tab.key"
-            class="flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors"
+            class="flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             :class="activeTab === tab.key
               ? 'bg-white text-slate-900 shadow-sm'
               : 'text-slate-500'"
-            @click="activeTab = tab.key"
+            :disabled="tab.disabled"
+            :aria-disabled="tab.disabled ? 'true' : 'false'"
+            :title="tab.disabled ? tab.disabledLabel || '현재 비활성화된 탭입니다' : undefined"
+            @click="handleTabClick(tab)"
           >
             {{ tab.label }}
           </button>
@@ -529,7 +532,7 @@ const DATA_STAGE_KEY = 'data'
 
 const tabs = [
   { key: 'historical', label: '과거 수익률' },
-  { key: 'future', label: '미래 시나리오' }
+  { key: 'future', label: '미래 시나리오', disabled: true, disabledLabel: '준비 중인 기능입니다' }
 ]
 
 const QUICK_COMPARE_CONTEXT_MAP = {
@@ -581,6 +584,10 @@ const pendingAgentCall = ref(false)
 const lineColors = ['#0f172a', '#2563eb', '#f97316', '#dc2626', '#059669', '#7c3aed', '#ea580c', '#0891b2', '#be185d', '#4338ca']
 
 const activeTab = ref('historical')
+const handleTabClick = (tab) => {
+  if (tab.disabled) return
+  activeTab.value = tab.key
+}
 const prompt = ref('')
 const selectedContextKey = ref('safe_assets')
 const hiddenSeries = ref(new Set())

@@ -97,13 +97,15 @@ const sidebarConfig = ref({
   show_mining: true,
   show_utxo: true,
   show_wallet: true,
-  show_fee: true
+  show_fee: true,
+  show_finance: false
 })
 const sidebarOptions = [
   { key: 'show_mining', label: '비트코인 채굴', description: '채굴 페이지 메뉴 표시' },
   { key: 'show_utxo', label: 'UTXO', description: 'UTXO 페이지 메뉴 표시' },
   { key: 'show_wallet', label: '지갑', description: '지갑 페이지 메뉴 표시' },
-  { key: 'show_fee', label: '수수료 계산', description: '수수료 계산 페이지 메뉴 표시' }
+  { key: 'show_fee', label: '수수료 계산', description: '수수료 계산 페이지 메뉴 표시' },
+  { key: 'show_finance', label: '재무 관리', description: '재무 관리 페이지 메뉴 표시' }
 ]
 const sidebarConfigLoading = ref(false)
 const walletPasswordInput = ref('')

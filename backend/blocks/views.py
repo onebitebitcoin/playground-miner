@@ -2053,6 +2053,8 @@ def _ensure_sidebar_schema():
                 cur.execute(f"SHOW COLUMNS FROM {table}")
                 existing = {r[0] for r in cur.fetchall()}
 
+            if 'show_finance' not in existing:
+                cur.execute(f"ALTER TABLE {table} ADD COLUMN show_finance boolean DEFAULT false")
             if 'wallet_password_hash' not in existing:
                 cur.execute(f"ALTER TABLE {table} ADD COLUMN wallet_password_hash varchar(128) DEFAULT ''")
             if 'wallet_password_plain' not in existing:
@@ -2069,7 +2071,8 @@ def sidebar_config_view(request):
         'show_mining': True,
         'show_utxo': True,
         'show_wallet': True,
-        'show_fee': True
+        'show_fee': True,
+        'show_finance': False,
     })
     return JsonResponse({'ok': True, 'config': config.as_dict()})
 
@@ -2098,6 +2101,8 @@ def admin_update_sidebar_config_view(request):
         config.show_wallet = bool(data['show_wallet'])
     if 'show_fee' in data:
         config.show_fee = bool(data['show_fee'])
+    if 'show_finance' in data:
+        config.show_finance = bool(data['show_finance'])
 
     config.save()
     return JsonResponse({'ok': True, 'config': config.as_dict()})

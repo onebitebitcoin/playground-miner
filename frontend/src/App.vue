@@ -118,8 +118,13 @@ const sidebarConfig = vueRef({
   show_mining: true,
   show_utxo: true,
   show_wallet: true,
-  show_fee: true
+  show_fee: true,
+  show_finance: false
 })
+
+// Current nickname/admin flags
+const currentNickname = vueRef(localStorage.getItem('nickname') || '')
+const isAdminFlag = vueRef(localStorage.getItem('isAdmin') === 'true')
 
 const menuItems = computed(() => {
   const items = []
@@ -141,12 +146,12 @@ const menuItems = computed(() => {
     items.push({ key: 'fee', label: '수수료 계산' })
   }
 
-  items.push({ key: 'finance', label: '재무 관리' })
+  if (sidebarConfig.value.show_finance) {
+    items.push({ key: 'finance', label: '재무 관리' })
+  }
 
   // Add admin menu only for admin users
-  const nickname = localStorage.getItem('nickname')
-  const adminStatus = localStorage.getItem('isAdmin')
-  if (nickname === 'admin' && adminStatus === 'true') {
+  if (currentNickname.value === 'admin' && isAdminFlag.value) {
     items.push({ key: 'admin', label: '관리자' })
   }
 
@@ -164,9 +169,6 @@ const isNicknameSetup = computed(() => route.name === 'nickname')
 // Mobile menu state
 const mobileMenuOpen = vueRef(false)
 
-
-// Current nickname
-const currentNickname = vueRef(localStorage.getItem('nickname') || '')
 
 // Load sidebar config
 const loadSidebarConfig = async () => {
@@ -190,11 +192,15 @@ onMounted(() => {
     if (e.key === 'nickname') {
       currentNickname.value = e.newValue || ''
     }
+    if (e.key === 'isAdmin') {
+      isAdminFlag.value = e.newValue === 'true'
+    }
   })
 
   // Also listen for custom events for same-tab updates
   window.addEventListener('nicknameChanged', (e) => {
     currentNickname.value = e.detail || ''
+    isAdminFlag.value = localStorage.getItem('isAdmin') === 'true'
   })
 
   // Listen for sidebar config updates
@@ -218,6 +224,7 @@ function logout() {
 
   // Update current nickname
   currentNickname.value = ''
+  isAdminFlag.value = false
 
   // Navigate to nickname setup page
   router.push({ name: 'nickname' })
