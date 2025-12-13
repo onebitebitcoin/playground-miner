@@ -176,8 +176,14 @@ SAFE_ASSETS = {
             '버크셔해서웨이 클래스 a',
             '버크셔해서웨이 a',
             '버크셔 a',
+            '버크셔해서웨이 inc a',
+            '버크셔해서웨이 inc 클래스 a',
             'berkshire hathaway class a',
+            'berkshire hathaway inc class a',
+            'berkshire hathaway inc. class a',
+            'berkshire hathaway inc a',
             'berkshire hathaway a',
+            'berkshire hathaway inc class a shares',
             'brk.a',
             'brk-a'
         ]
@@ -192,8 +198,13 @@ SAFE_ASSETS = {
             '버크셔해서웨이',
             '버크셔해서웨이 클래스 b',
             '버크셔 b',
+            '버크셔해서웨이 inc b',
+            '버크셔해서웨이 inc 클래스 b',
             'berkshire hathaway',
             'berkshire hathaway class b',
+            'berkshire hathaway inc class b',
+            'berkshire hathaway inc. class b',
+            'berkshire hathaway inc b',
             'brk.b',
             'brk-b'
         ]
