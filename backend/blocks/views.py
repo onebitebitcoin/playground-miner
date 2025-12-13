@@ -37,6 +37,7 @@ from .models import (
 from django.db import connection
 from django.conf import settings
 from .broadcast import broadcaster
+from .finance_stream import finance_stream_manager
 from .btc import derive_bip84_addresses, fetch_blockstream_balances, calc_total_sats, derive_bip84_account_zpub, derive_master_fingerprint, _normalize_mnemonic
 from mnemonic import Mnemonic as MnemonicValidator
 
@@ -5168,6 +5169,9 @@ def finance_historical_returns_view(request):
     _ensure_finance_cache_purged(context_key)
     include_dividends = bool(payload.get('include_dividends'))
     backend_logger.info("Include Dividends: %s", include_dividends)
+    stream_channel = (payload.get('stream_channel') or '').strip()
+    if stream_channel:
+        finance_stream_manager.prepare_channel(stream_channel)
 
     # Derive years (reusing existing logic helpers)
     start_hint = payload.get('start_year')
@@ -5191,15 +5195,42 @@ def finance_historical_returns_view(request):
     else:
         # Original non-streaming implementation
         all_logs = []
-        all_logs.append(f"시스템: {start_year}-{end_year} 멀티 에이전트 분석 시작")
+
+        def append_log(message):
+            if not message:
+                return
+            all_logs.append(message)
+            if stream_channel:
+                finance_stream_manager.publish(stream_channel, {'type': 'log', 'message': message})
+
+        def stream_error(message):
+            if stream_channel and message:
+                finance_stream_manager.publish(stream_channel, {'type': 'error', 'message': message})
+
+        def stream_complete(status='ok'):
+            if stream_channel:
+                finance_stream_manager.publish(stream_channel, {'type': 'complete', 'status': status})
+
+        def consume_agent_stream(generator):
+            result_data = None
+            for event in generator:
+                event_type = event.get('type')
+                if event_type == 'log':
+                    append_log(event.get('message'))
+                elif event_type == 'result':
+                    result_data = event.get('data')
+            return result_data
+
+        append_log(f"시스템: {start_year}-{end_year} 멀티 에이전트 분석 시작")
 
         # --- Multi-Agent Workflow ---
 
         # Agent 1: Intent Classifier
         backend_logger.info("STEP 1: Running IntentClassifierAgent")
         intent_agent = IntentClassifierAgent()
-        intent_result, intent_logs = intent_agent.run(prompt, quick_requests)
-        all_logs.extend(intent_logs)
+        intent_result = consume_agent_stream(intent_agent.stream(prompt, quick_requests))
+        if intent_result is None:
+            intent_result = {'allowed': False, 'error': '자산 추출 중 오류가 발생했습니다.'}
 
         backend_logger.info("Intent Result: %s", intent_result)
 
@@ -5208,6 +5239,8 @@ def finance_historical_returns_view(request):
             processing_time_ms = int((time.time() - start_time) * 1000)
             _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
                              intent_result.get('error', 'Request blocked'), 0, processing_time_ms)
+            stream_error(intent_result.get('error', 'Request blocked'))
+            stream_complete('error')
             return JsonResponse({
                 'ok': False,
                 'error': intent_result.get('error', 'Request blocked'),
@@ -5224,6 +5257,8 @@ def finance_historical_returns_view(request):
             processing_time_ms = int((time.time() - start_time) * 1000)
             _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
                              '분석할 자산을 찾을 수 없습니다.', 0, processing_time_ms)
+            stream_error('분석할 자산을 찾을 수 없습니다.')
+            stream_complete('error')
             return JsonResponse({
                 'ok': False,
                 'error': '분석할 자산을 찾을 수 없습니다.',
@@ -5237,14 +5272,13 @@ def finance_historical_returns_view(request):
                 assets = merged_assets
                 intent_result['assets'] = assets
                 added_labels = ', '.join(a.get('label', a.get('id', '')) for a in added_assets)
-                all_logs.append(f"[의도 분석] 사용자 지정 자산 추가: {added_labels}")
+                append_log(f"[의도 분석] 사용자 지정 자산 추가: {added_labels}")
         validated_assets = assets
 
         # Agent 2: Price Retriever
         backend_logger.info("STEP 2: Running PriceRetrieverAgent")
         retriever_agent = PriceRetrieverAgent()
-        price_data_map, retriever_logs = retriever_agent.run(validated_assets, start_year, end_year)
-        all_logs.extend(retriever_logs)
+        price_data_map = consume_agent_stream(retriever_agent.stream(validated_assets, start_year, end_year)) or {}
 
         backend_logger.info("Price Data Map Keys: %s", list(price_data_map.keys()) if price_data_map else "EMPTY")
 
@@ -5253,6 +5287,8 @@ def finance_historical_returns_view(request):
             processing_time_ms = int((time.time() - start_time) * 1000)
             _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
                              '자산 데이터를 가져올 수 없습니다.', len(assets), processing_time_ms)
+            stream_error('자산 데이터를 가져올 수 없습니다. (티커를 확인해주세요)')
+            stream_complete('error')
             return JsonResponse({
                 'ok': False,
                 'error': '자산 데이터를 가져올 수 없습니다. (티커를 확인해주세요)',
@@ -5262,13 +5298,19 @@ def finance_historical_returns_view(request):
         # Agent 3: Calculator
         backend_logger.info("STEP 3: Running CalculatorAgent with method: %s", calculation_method)
         calculator_agent = CalculatorAgent()
-        series_data, chart_data_table, summary, calculator_logs = calculator_agent.run(price_data_map, start_year, end_year, calculation_method, include_dividends=include_dividends)
-        all_logs.extend(calculator_logs)
+        calc_result = consume_agent_stream(
+            calculator_agent.stream(price_data_map, start_year, end_year, calculation_method, include_dividends=include_dividends)
+        ) or {}
+        series_data = calc_result.get('series', [])
+        chart_data_table = calc_result.get('table', [])
+        summary = calc_result.get('summary', '')
 
         if not series_data:
             processing_time_ms = int((time.time() - start_time) * 1000)
             _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
                              '유효한 수익률 데이터를 계산할 수 없습니다.', len(assets), processing_time_ms)
+            stream_error('유효한 수익률 데이터를 계산할 수 없습니다.')
+            stream_complete('error')
             return JsonResponse({
                 'ok': False,
                 'error': '유효한 수익률 데이터를 계산할 수 없습니다.',
@@ -5279,8 +5321,9 @@ def finance_historical_returns_view(request):
         backend_logger.info("STEP 4: Running AnalysisAgent")
         analysis_agent = AnalysisAgent()
         combined_prompt_for_analysis = ' '.join(([prompt] if prompt else []) + quick_requests)
-        analysis_summary, analysis_logs = analysis_agent.run(series_data, start_year, end_year, calculation_method, combined_prompt_for_analysis)
-        all_logs.extend(analysis_logs)
+        analysis_summary = consume_agent_stream(
+            analysis_agent.stream(series_data, start_year, end_year, calculation_method, combined_prompt_for_analysis)
+        ) or ''
 
         # Cache Result (if context_key is present)
         usd_krw_rate = get_cached_usdkrw_rate()
@@ -5291,6 +5334,7 @@ def finance_historical_returns_view(request):
         processing_time_ms = int((time.time() - start_time) * 1000)
         _log_finance_query(user_identifier, prompt, quick_requests, context_key, True,
                          '', len(assets), processing_time_ms)
+        stream_complete('ok')
 
         # Construct Response
         response_payload = {

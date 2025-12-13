@@ -2,10 +2,13 @@ import asyncio
 import json
 import threading
 from pathlib import Path
+from urllib.parse import parse_qs
+from queue import Empty
 
 from django.core.asgi import get_asgi_application
 from django.db.models import Max
 
+from blocks.finance_stream import finance_stream_manager
 
 django_asgi_app = get_asgi_application()
 
@@ -94,8 +97,45 @@ async def ws_stream_app(scope, receive, send):
         await send({'type': 'websocket.close'})
 
 
+async def ws_finance_logs_app(scope, receive, send):
+    assert scope['type'] == 'websocket'
+    query_bytes = scope.get('query_string', b'') or b''
+    params = parse_qs(query_bytes.decode('utf-8'))
+    channel_id = (params.get('channel') or [''])[0]
+    if not channel_id:
+        await send({'type': 'websocket.close'})
+        return
+
+    await send({'type': 'websocket.accept', 'headers': [(b'cache-control', b'no-cache')]})
+    event_queue = finance_stream_manager.subscribe(channel_id)
+    loop = asyncio.get_event_loop()
+
+    try:
+        while True:
+            # Handle client disconnects
+            try:
+                msg = await asyncio.wait_for(receive(), timeout=0.05)
+                if msg['type'] == 'websocket.disconnect':
+                    break
+            except asyncio.TimeoutError:
+                pass
+
+            try:
+                data = event_queue.get_nowait()
+            except Empty:
+                continue
+
+            await send({'type': 'websocket.send', 'text': data})
+    finally:
+        finance_stream_manager.unsubscribe(channel_id)
+        await send({'type': 'websocket.close'})
+
+
 async def application(scope, receive, send):
     if scope['type'] == 'websocket':
+        path = scope.get('path', '')
+        if path.startswith('/ws/finance'):
+            return await ws_finance_logs_app(scope, receive, send)
         return await ws_stream_app(scope, receive, send)
     # Fallback to Django for HTTP
     return await django_asgi_app(scope, receive, send)
