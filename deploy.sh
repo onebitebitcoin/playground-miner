@@ -72,7 +72,6 @@ if [ -f "$BACKEND_DIR/requirements.txt" ]; then
   echo "Installing Python dependencies..."
   pip install --upgrade pip
   pip install -r requirements.txt
-  pip install gunicorn
 
   echo "Checking for missing migrations..."
   if ! python manage.py makemigrations --check --dry-run; then
