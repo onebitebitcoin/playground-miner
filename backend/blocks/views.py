@@ -4251,56 +4251,58 @@ class IntentClassifierAgent:
     """
     def run(self, prompt, quick_requests):
         logs = []
-        logs.append("[의도 분석] 사용자 요청 분석 중...")
+        result = None
+        for event in self.stream(prompt, quick_requests):
+            if event['type'] == 'log':
+                logs.append(event['message'])
+            elif event['type'] == 'result':
+                result = event['data']
+        if result is None:
+            result = {'allowed': False, 'error': '자산 추출 중 오류가 발생했습니다.'}
+        return result, logs
 
-        # Combine prompt and quick requests
-        # If no explicit time period mentioned, add "지난 10년" context
+    def stream(self, prompt, quick_requests):
+        yield from self._run_generator(prompt, quick_requests)
+
+    def _run_generator(self, prompt, quick_requests):
+        yield {'type': 'log', 'message': "[의도 분석] 사용자 요청 분석 중..."}
+
         combined_prompt = f"{prompt} {' '.join(quick_requests)}" if quick_requests else prompt
         if not combined_prompt.strip():
             combined_prompt = "비트코인과 대표 자산의 과거 연평균 상승률을 비교해줘."
 
-        # Add default time period if not mentioned
         time_keywords = ['년', '기간', '동안', '지난', '최근', '10년', '5년', '20년', 'year']
         has_time_period = any(keyword in combined_prompt.lower() for keyword in time_keywords)
 
         if not has_time_period:
             combined_prompt = f"{combined_prompt} (지난 10년간의 데이터)"
-            logs.append("[의도 분석] 기본 기간 설정: 지난 10년")
+            yield {'type': 'log', 'message': "[의도 분석] 기본 기간 설정: 지난 10년"}
 
-        # 1. Guardrail Check
         try:
             allowed, reason = _check_prompt_intent(combined_prompt)
             if not allowed:
-                logs.append(f"[의도 분석] 요청 차단됨. 사유: {reason}")
-                return {'allowed': False, 'error': '요청이 거부되었습니다. ' + reason}, logs
-            logs.append("[의도 분석] 보안 검사 통과")
+                yield {'type': 'log', 'message': f"[의도 분석] 요청 차단됨. 사유: {reason}"}
+                yield {'type': 'result', 'data': {'allowed': False, 'error': '요청이 거부되었습니다. ' + reason}}
+                return
+            yield {'type': 'log', 'message': "[의도 분석] 보안 검사 통과"}
         except Exception as e:
-            logs.append(f"[의도 분석] 보안 검사 실패 ({e}). 계속 진행합니다.")
+            yield {'type': 'log', 'message': f"[의도 분석] 보안 검사 실패 ({e}). 계속 진행합니다."}
 
-        # 2. Keyword-based Classification (Simplified)
         prompt_lower = combined_prompt.lower()
-        calculation_method = 'cagr' # Default
+        calculation_method = 'cagr'
 
-        # PRIORITY 1: Explicit Price Requests or Investment Questions
         if any(k in prompt_lower for k in ['가격', '종가', 'price', 'value', 'year-end', '연말', '시세', '투자했다면', '투자', 'investment', '얼마', 'how much', '만원', '후']):
             calculation_method = 'price'
-            logs.append("[의도 분석] 키워드 감지: '가격/투자(Price)' 분석 요청")
-
-        # PRIORITY 2: Year-over-Year Growth
+            yield {'type': 'log', 'message': "[의도 분석] 키워드 감지: '가격/투자(Price)' 분석 요청"}
         elif any(k in prompt_lower for k in ['증감률', 'growth', 'change', 'yoy', '전년', '성장률', '변동률']):
             calculation_method = 'yearly_growth'
-            logs.append("[의도 분석] 키워드 감지: '증감률(YoY)' 분석 요청")
-
-        # PRIORITY 3: Cumulative Returns
+            yield {'type': 'log', 'message': "[의도 분석] 키워드 감지: '증감률(YoY)' 분석 요청"}
         elif any(k in prompt_lower for k in ['누적', 'cumulative', 'total return', '총 수익률']):
             calculation_method = 'cumulative'
-            logs.append("[의도 분석] 키워드 감지: '누적 수익률' 분석 요청")
-        
+            yield {'type': 'log', 'message': "[의도 분석] 키워드 감지: '누적 수익률' 분석 요청"}
         else:
-            logs.append("[의도 분석] 키워드 미감지: 기본값 '연평균 상승률(CAGR)' 적용")
+            yield {'type': 'log', 'message': "[의도 분석] 키워드 미감지: 기본값 '연평균 상승률(CAGR)' 적용"}
 
-
-        # 3. Call LLM (Asset Extraction ONLY)
         system_prompt = _get_agent_prompt('intent_classifier',
             "You are a financial asset extractor. Your goal is to extract the target assets from the user's prompt.\n\n"
             "**IMPORTANT CONTEXT**: Unless otherwise specified, all analysis requests are for historical data from the past 10 years (지난 10년간의 데이터). "
@@ -4325,7 +4327,7 @@ class IntentClassifierAgent:
             base_url = getattr(settings, 'OPENAI_API_BASE', 'https://api.openai.com/v1').rstrip('/')
             model = getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini')
 
-            logs.append("[의도 분석] AI를 사용하여 자산 목록 추출 중...")
+            yield {'type': 'log', 'message': "[의도 분석] AI를 사용하여 자산 목록 추출 중..."}
             response = requests.post(
                 f"{base_url}/chat/completions",
                 headers={
@@ -4356,11 +4358,9 @@ class IntentClassifierAgent:
                 asset_labels = ', '.join(a.get('label', a.get('id', '')) for a in added_assets if a.get('id'))
                 group_names = ', '.join(detected_market_cap.get('groups', []))
                 assets.extend(added_assets)
-                logs.append(f"[의도 분석] {group_names} 자동 감지 → {len(added_assets)}개 자산 추가: {asset_labels}")
+                yield {'type': 'log', 'message': f"[의도 분석] {group_names} 자동 감지 → {len(added_assets)}개 자산 추가: {asset_labels}"}
 
-            # Basic validation/cleanup
             clean_assets = []
-            # track duplicates using lowercase IDs
             seen_ids = set()
             
             for a in assets:
@@ -4370,17 +4370,13 @@ class IntentClassifierAgent:
                 if not raw_id and not raw_label:
                     continue
 
-                # Try to match with known assets for canonical info, but DO NOT filter out if unknown
                 known_config = _find_known_asset_config(raw_id, raw_label)
                 
                 if known_config:
-                    # Use canonical info from known_config
                     final_id = known_config.get('id')
                     final_label = known_config.get('label') or final_id
                     asset_type = known_config.get('category', 'asset')
                 else:
-                    # Pass through unknown assets as requested
-                    # PriceRetriever will handle (or fail later)
                     final_id = raw_id
                     final_label = raw_label or raw_id
                     asset_type = 'unknown'
@@ -4398,7 +4394,6 @@ class IntentClassifierAgent:
                 }
                 clean_assets.append(asset_entry)
 
-            # Logging for UI
             if calculation_method == 'cumulative':
                 method_label = '누적 수익률'
             elif calculation_method == 'yearly_growth':
@@ -4408,13 +4403,13 @@ class IntentClassifierAgent:
             else:
                 method_label = '연평균 상승률(CAGR)'
 
-            logs.append(f"[의도 분석] {len(clean_assets)}개 자산 추출 완료: {', '.join(a['label'] for a in clean_assets)}")
-            logs.append(f"[의도 분석] 최종 계산 방식: {method_label}")
-            return {'allowed': True, 'assets': clean_assets, 'calculation_method': calculation_method}, logs
+            yield {'type': 'log', 'message': f"[의도 분석] {len(clean_assets)}개 자산 추출 완료: {', '.join(a['label'] for a in clean_assets)}"}
+            yield {'type': 'log', 'message': f"[의도 분석] 최종 계산 방식: {method_label}"}
+            yield {'type': 'result', 'data': {'allowed': True, 'assets': clean_assets, 'calculation_method': calculation_method}}
 
         except Exception as e:
-            logs.append(f"[의도 분석] 자산 추출 실패: {e}")
-            return {'allowed': False, 'error': '자산 추출 중 오류가 발생했습니다.'}, logs
+            yield {'type': 'log', 'message': f"[의도 분석] 자산 추출 실패: {e}"}
+            yield {'type': 'result', 'data': {'allowed': False, 'error': '자산 추출 중 오류가 발생했습니다.'}}
 
 
 class PriceRetrieverAgent:
@@ -4425,26 +4420,34 @@ class PriceRetrieverAgent:
     """
     def run(self, assets, start_year, end_year):
         logs = []
-        logs.append(f"[데이터 수집] {len(assets)}개 자산의 {start_year}-{end_year} 데이터 가져오는 중...")
-
         price_data_map = {}
+        for event in self.stream(assets, start_year, end_year):
+            if event['type'] == 'log':
+                logs.append(event['message'])
+            elif event['type'] == 'result':
+                price_data_map = event['data']
+        return price_data_map, logs
+
+    def stream(self, assets, start_year, end_year):
+        yield from self._run_generator(assets, start_year, end_year)
+
+    def _run_generator(self, assets, start_year, end_year):
+        price_data_map = {}
+        yield {'type': 'log', 'message': f"[데이터 수집] {len(assets)}개 자산의 {start_year}-{end_year} 데이터 가져오는 중..."}
 
         for asset in assets:
             asset_id = asset['id']
             label = asset['label']
             asset_type = asset.get('type', 'unknown')
 
-            logs.append(f"[데이터 수집] {label} 처리 중...")
+            yield {'type': 'log', 'message': f"[데이터 수집] {label} 처리 중..."}
 
-            # 1. Check cache first (Cache Hit)
             cached_data = self._check_price_cache(asset_id, start_year, end_year)
             if cached_data:
-                logs.append(f"[데이터 수집] ✓ {label}: 캐시됨 (cache hit) - {len(cached_data['yearly_prices'])}개 데이터 포인트")
-                # Convert cached yearly prices to history format (list of tuples with datetime objects)
+                yield {'type': 'log', 'message': f"[데이터 수집] ✓ {label}: 캐시됨 (cache hit) - {len(cached_data['yearly_prices'])}개 데이터 포인트"}
                 history = []
                 for year_str, price in sorted(cached_data['yearly_prices'].items()):
                     year_int = int(year_str)
-                    # Create datetime object for December 31st of each year (year-end closing price)
                     dt = datetime(year_int, 12, 31)
                     history.append((dt, float(price)))
 
@@ -4467,18 +4470,12 @@ class PriceRetrieverAgent:
                 }
                 continue
 
-            # 2. Cache Miss - Map to internal config structure
-            logs.append(f"[데이터 수집] {label}: 외부 API에서 조회 중...")
+            yield {'type': 'log', 'message': f"[데이터 수집] {label}: 외부 API에서 조회 중..."}
             config = _find_known_asset_config(asset_id, label)
 
             if not config:
-                # If not found in presets, construct a config based on the Agent 1 output
-                # This is crucial for the new dynamic behavior
-
-                # Determine if this is a Korean stock based on ticker pattern
                 is_korean_stock_ticker = bool(re.match(r'\d{6}\.(KS|KQ|KL)', asset_id))
 
-                # Set category: force '국내 주식' if ticker ends with .KS/.KQ/.KL
                 if asset_type == 'kr_stock' or is_korean_stock_ticker:
                     category = '국내 주식'
                     unit = 'KRW'
@@ -4494,13 +4491,11 @@ class PriceRetrieverAgent:
                     'unit': unit
                 }
 
-                # Try to guess stooq symbol if not Korean stock
                 if not (asset_type == 'kr_stock' or is_korean_stock_ticker):
                     config['stooq_symbol'] = _guess_stooq_symbol(asset_id)
 
-                logs.append(f"[데이터 수집] {label}: 동적 config 생성 완료 (Category: {category}, Ticker: {asset_id})")
+                yield {'type': 'log', 'message': f"[데이터 수집] {label}: 동적 config 생성 완료 (Category: {category}, Ticker: {asset_id})"}
 
-            # 3. Fetch History from external API
             try:
                 result = _fetch_asset_history(config, start_year, end_year)
                 if result:
@@ -4514,16 +4509,15 @@ class PriceRetrieverAgent:
                         'calculation_method': asset.get('calculation_method', 'cagr'),
                         'metadata': enriched_metadata
                     }
-                    # Show detailed info including ticker and category
                     ticker_info = config.get('ticker', asset_id)
                     category_info = config.get('category', '알 수 없음')
-                    logs.append(f"[데이터 수집] ✓ {label}: {source}에서 {len(history)}개 데이터 포인트 수집 완료 (Ticker: {ticker_info}, Category: {category_info})")
+                    yield {'type': 'log', 'message': f"[데이터 수집] ✓ {label}: {source}에서 {len(history)}개 데이터 포인트 수집 완료 (Ticker: {ticker_info}, Category: {category_info})"}
                 else:
-                    logs.append(f"[데이터 수집] ✗ {label}: 데이터 없음")
+                    yield {'type': 'log', 'message': f"[데이터 수집] ✗ {label}: 데이터 없음"}
             except Exception as e:
-                logs.append(f"[데이터 수집] ✗ {label} 실패: {e}")
+                yield {'type': 'log', 'message': f"[데이터 수집] ✗ {label} 실패: {e}"}
 
-        return price_data_map, logs
+        yield {'type': 'result', 'data': price_data_map}
 
     def _check_price_cache(self, asset_id, start_year, end_year):
         """
@@ -4582,8 +4576,18 @@ class CalculatorAgent:
     """
     def run(self, price_data_map, start_year, end_year, calculation_method='cagr', include_dividends=False):
         logs = []
+        result_data = {'series': [], 'table': [], 'summary': ''}
+        for event in self.stream(price_data_map, start_year, end_year, calculation_method, include_dividends=include_dividends):
+            if event['type'] == 'log':
+                logs.append(event['message'])
+            elif event['type'] == 'result':
+                result_data = event['data']
+        return result_data['series'], result_data['table'], result_data['summary'], logs
 
-        # Determine method label based on calculation_method
+    def stream(self, price_data_map, start_year, end_year, calculation_method='cagr', include_dividends=False):
+        yield from self._run_generator(price_data_map, start_year, end_year, calculation_method, include_dividends)
+
+    def _run_generator(self, price_data_map, start_year, end_year, calculation_method, include_dividends):
         if calculation_method == 'price':
             method_label = '가격(Price)'
         elif calculation_method == 'cumulative':
@@ -4593,14 +4597,14 @@ class CalculatorAgent:
         else:
             method_label = '연평균 상승률(CAGR)'
 
-        logs.append(f"[수익률 계산] {method_label} 계산 및 데이터 포맷팅 중...")
+        yield {'type': 'log', 'message': f"[수익률 계산] {method_label} 계산 및 데이터 포맷팅 중..."}
 
         if include_dividends:
             adjusted = self._apply_dividend_reinvestment(price_data_map, start_year, end_year)
             if adjusted:
-                logs.append(f"[수익률 계산] 배당 재투자 적용: {len(adjusted)}개 자산")
+                yield {'type': 'log', 'message': f"[수익률 계산] 배당 재투자 적용: {len(adjusted)}개 자산"}
             else:
-                logs.append("[수익률 계산] 배당 재투자 적용 대상이 없습니다.")
+                yield {'type': 'log', 'message': "[수익률 계산] 배당 재투자 적용 대상이 없습니다."}
 
         series_list = []
 
@@ -4609,16 +4613,14 @@ class CalculatorAgent:
             config = data['config']
             source = data.get('source', 'Unknown')
 
-            # Get calculation method for this specific asset (or use default)
             asset_calc_method = data.get('calculation_method', calculation_method)
 
-            # Build Series for Chart (includes points data)
             try:
                 series_obj = _build_asset_series(config['id'], config, history, start_year, end_year, asset_calc_method)
                 if series_obj:
                     series_obj['id'] = config['id']
                     series_obj['calculation_method'] = asset_calc_method
-                    series_obj['source'] = source  # Add data source to series
+                    series_obj['source'] = source
                     metadata = data.get('metadata') or {}
                     if metadata:
                         series_obj['metadata'] = metadata
@@ -4627,21 +4629,16 @@ class CalculatorAgent:
                                 series_obj[meta_key] = meta_value
                     series_list.append(series_obj)
                 else:
-                     logs.append(f"[수익률 계산] {config['label']}: 데이터 부족으로 시리즈 생성 불가")
+                    yield {'type': 'log', 'message': f"[수익률 계산] {config['label']}: 데이터 부족으로 시리즈 생성 불가"}
             except Exception as e:
-                logs.append(f"[수익률 계산] {config['label']} 시리즈 생성 오류: {e}")
+                yield {'type': 'log', 'message': f"[수익률 계산] {config['label']} 시리즈 생성 오류: {e}"}
 
-        # Sort by return metric descending (CAGR/Cumulative/YoY/Price change)
         series_list.sort(key=lambda x: x.get('annualized_return_pct', -999), reverse=True)
-
-        # Convert series points to table format for display below legend
         chart_data_table = self._build_chart_data_table(series_list, calculation_method)
-
-        logs.append(f"[수익률 계산] {len(series_list)}개 시리즈 생성 완료")
+        yield {'type': 'log', 'message': f"[수익률 계산] {len(series_list)}개 시리즈 생성 완료"}
 
         summary = self._generate_summary(series_list, start_year, end_year)
-
-        return series_list, chart_data_table, summary, logs
+        yield {'type': 'result', 'data': {'series': series_list, 'table': chart_data_table, 'summary': summary}}
 
     def _apply_dividend_reinvestment(self, price_data_map, start_year, end_year):
         """
@@ -4764,12 +4761,24 @@ class AnalysisAgent:
     """
     def run(self, series_list, start_year, end_year, calculation_method, prompt):
         logs = []
-        logs.append("[분석 생성] 비트코인 중심 분석 리포트 생성 중...")
+        summary = "분석할 데이터가 없습니다."
+        for event in self.stream(series_list, start_year, end_year, calculation_method, prompt):
+            if event['type'] == 'log':
+                logs.append(event['message'])
+            elif event['type'] == 'result':
+                summary = event['data']
+        return summary, logs
+
+    def stream(self, series_list, start_year, end_year, calculation_method, prompt):
+        yield from self._run_generator(series_list, start_year, end_year, calculation_method, prompt)
+
+    def _run_generator(self, series_list, start_year, end_year, calculation_method, prompt):
+        yield {'type': 'log', 'message': "[분석 생성] 비트코인 중심 분석 리포트 생성 중..."}
 
         if not series_list:
-            return "분석할 데이터가 없습니다.", logs
+            yield {'type': 'result', 'data': "분석할 데이터가 없습니다."}
+            return
 
-        # Find Bitcoin in the series
         bitcoin = None
         other_assets = []
 
@@ -4781,18 +4790,17 @@ class AnalysisAgent:
                 other_assets.append(series)
 
         if not bitcoin:
-            # If no Bitcoin found, fall back to generic analysis
-            logs.append("[분석 생성] 비트코인 데이터를 찾을 수 없어 일반 분석으로 대체")
-            return self._generate_generic_analysis(series_list, start_year, end_year, calculation_method), logs
+            yield {'type': 'log', 'message': "[분석 생성] 비트코인 데이터를 찾을 수 없어 일반 분석으로 대체"}
+            yield {'type': 'result', 'data': self._generate_generic_analysis(series_list, start_year, end_year, calculation_method)}
+            return
 
-        # Generate Bitcoin-focused analysis using LLM
         try:
             analysis_text = self._generate_ai_analysis(bitcoin, other_assets, start_year, end_year, calculation_method, prompt)
-            logs.append("[분석 생성] AI 분석 리포트 생성 완료")
-            return analysis_text, logs
+            yield {'type': 'log', 'message': "[분석 생성] AI 분석 리포트 생성 완료"}
+            yield {'type': 'result', 'data': analysis_text}
         except Exception as e:
-            logs.append(f"[분석 생성] AI 분석 실패: {e}, 기본 분석으로 대체")
-            return self._generate_fallback_analysis(bitcoin, other_assets, start_year, end_year, calculation_method, prompt), logs
+            yield {'type': 'log', 'message': f"[분석 생성] AI 분석 실패: {e}, 기본 분석으로 대체"}
+            yield {'type': 'result', 'data': self._generate_fallback_analysis(bitcoin, other_assets, start_year, end_year, calculation_method, prompt)}
 
     def _get_asset_cagr_pct(self, asset):
         """Return CAGR (연평균 상승률) for the asset if available."""
@@ -5328,10 +5336,12 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
 
         # Agent 1: Intent Classifier
         intent_agent = IntentClassifierAgent()
-        intent_result, intent_logs = intent_agent.run(prompt, quick_requests)
-
-        for log in intent_logs:
-            yield send_log(log)
+        intent_result = None
+        for event in intent_agent.stream(prompt, quick_requests):
+            if event['type'] == 'log':
+                yield send_log(event['message'])
+            elif event['type'] == 'result':
+                intent_result = event['data']
 
         if not intent_result.get('allowed'):
             processing_time_ms = int((time.time() - start_time) * 1000)
@@ -5362,10 +5372,12 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
 
         # Agent 2: Price Retriever
         retriever_agent = PriceRetrieverAgent()
-        price_data_map, retriever_logs = retriever_agent.run(validated_assets, start_year, end_year)
-
-        for log in retriever_logs:
-            yield send_log(log)
+        price_data_map = {}
+        for event in retriever_agent.stream(validated_assets, start_year, end_year):
+            if event['type'] == 'log':
+                yield send_log(event['message'])
+            elif event['type'] == 'result':
+                price_data_map = event['data']
 
         if not price_data_map:
             processing_time_ms = int((time.time() - start_time) * 1000)
@@ -5376,10 +5388,17 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
 
         # Agent 3: Calculator
         calculator_agent = CalculatorAgent()
-        series_data, chart_data_table, summary, calculator_logs = calculator_agent.run(price_data_map, start_year, end_year, calculation_method, include_dividends=include_dividends)
-
-        for log in calculator_logs:
-            yield send_log(log)
+        series_data = []
+        chart_data_table = []
+        summary = ''
+        for event in calculator_agent.stream(price_data_map, start_year, end_year, calculation_method, include_dividends=include_dividends):
+            if event['type'] == 'log':
+                yield send_log(event['message'])
+            elif event['type'] == 'result':
+                result_payload = event['data']
+                series_data = result_payload.get('series', [])
+                chart_data_table = result_payload.get('table', [])
+                summary = result_payload.get('summary', '')
 
         if not series_data:
             processing_time_ms = int((time.time() - start_time) * 1000)
@@ -5391,10 +5410,12 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
         # Agent 4: Analysis (Generate narrative summary)
         analysis_agent = AnalysisAgent()
         combined_prompt_for_analysis = ' '.join(([prompt] if prompt else []) + quick_requests)
-        analysis_summary, analysis_logs = analysis_agent.run(series_data, start_year, end_year, calculation_method, combined_prompt_for_analysis)
-
-        for log in analysis_logs:
-            yield send_log(log)
+        analysis_summary = ''
+        for event in analysis_agent.stream(series_data, start_year, end_year, calculation_method, combined_prompt_for_analysis):
+            if event['type'] == 'log':
+                yield send_log(event['message'])
+            elif event['type'] == 'result':
+                analysis_summary = event['data']
 
         # Cache and send final result
         usd_krw_rate = get_cached_usdkrw_rate()
