@@ -6,7 +6,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Load .env from project root (two levels up from settings.py)
 env_path = BASE_DIR.parent / '.env'
-config = Config(RepositoryEnv(env_path)) if env_path.exists() else Config()
+# Decouple Config always requires a repository; fall back to an empty mapping
+# so production environments without a .env still work via os.environ.
+config = Config(RepositoryEnv(env_path)) if env_path.exists() else Config({})
 
 # Load environment variables
 SECRET_KEY = config('SECRET_KEY', default='dev-secret-key-change-in-production')
