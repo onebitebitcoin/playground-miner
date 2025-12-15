@@ -137,6 +137,13 @@ SECURITY_LOG_FILE = _resolve_log_file('SECURITY_LOG_FILE', 'security.log')
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 OPENAI_API_BASE = config('OPENAI_API_BASE', default='https://api.openai.com/v1')
 OPENAI_MODEL = config('OPENAI_MODEL', default='gpt-4o-mini')
+COMPATIBILITY_OPENAI_MODEL = config('COMPATIBILITY_OPENAI_MODEL', default='gpt-5-mini')
+
+# Gemini API configuration
+GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
+GEMINI_MODEL = config('GEMINI_MODEL', default='gemini-2.5-flash')
+COMPATIBILITY_DEFAULT_PROVIDER = config('COMPATIBILITY_DEFAULT_PROVIDER', default='openai')  # 'openai' or 'gemini'
+
 ECOS_API_KEY = config('ECOS_API_KEY', default='')
 
 # FRED API for M2 Money Supply data

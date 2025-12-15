@@ -33,6 +33,8 @@ from .models import (
     FinanceQuickRequest,
     FinanceQuickCompareGroup,
     AssetPriceCache,
+    CompatibilityAgentPrompt,
+    CompatibilityQuickPreset,
 )
 from django.db import connection
 from django.conf import settings
@@ -40,6 +42,174 @@ from .broadcast import broadcaster
 from .finance_stream import finance_stream_manager
 from .btc import derive_bip84_addresses, fetch_blockstream_balances, calc_total_sats, derive_bip84_account_zpub, derive_master_fingerprint, _normalize_mnemonic
 from mnemonic import Mnemonic as MnemonicValidator
+from .prompts import COMPATIBILITY_AGENT_DEFAULT_PROMPT
+
+
+def _call_openai_chat_model(model_name, system_prompt, user_prompt, temperature=0.7, top_p=1.0, presence_penalty=0.0, frequency_penalty=0.0, max_tokens=None):
+    api_key = getattr(settings, 'OPENAI_API_KEY', '')
+    if not api_key:
+        raise ValueError('OPENAI_API_KEY is not configured.')
+
+    base_url = getattr(settings, 'OPENAI_API_BASE', 'https://api.openai.com/v1').rstrip('/')
+    resolved_model = model_name or getattr(settings, 'COMPATIBILITY_OPENAI_MODEL', getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini'))
+
+    # GPT-5 계열 모델은 Responses API 사용
+    is_gpt5 = 'gpt-5' in resolved_model.lower()
+
+    if is_gpt5:
+        logger.info('[Compatibility][OpenAI] GPT-5 감지 - Responses API 사용 - model=%s', resolved_model)
+    else:
+        logger.info('[Compatibility][OpenAI] Chat Completions API 사용 - model=%s', resolved_model)
+
+    try:
+        if is_gpt5:
+            # GPT-5: Responses API 사용
+            # system_prompt와 user_prompt를 결합하여 input으로 전달
+            combined_input = f"{system_prompt}\n\n{user_prompt}"
+
+            # Responses API는 model과 input만 지원 (temperature, max_tokens 등 불지원)
+            json_payload = {
+                'model': resolved_model,
+                'input': combined_input,
+            }
+
+            response = requests.post(
+                f"{base_url}/responses",
+                headers={
+                    'Authorization': f'Bearer {api_key}',
+                    'Content-Type': 'application/json'
+                },
+                json=json_payload,
+                timeout=90
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            # Responses API 응답 형식 처리
+            # 응답 구조: data['output'] 배열에서 type='message'인 항목의 content에서 text 추출
+            if 'output' not in data:
+                logger.error('[Compatibility][OpenAI][GPT-5] output 필드 없음: %s', data)
+                raise ValueError('Responses API 응답에 output 필드가 없습니다.')
+
+            # output 배열에서 message 타입 찾기
+            message_output = None
+            for item in data['output']:
+                if item.get('type') == 'message':
+                    message_output = item
+                    break
+
+            if not message_output:
+                logger.error('[Compatibility][OpenAI][GPT-5] message 타입을 찾을 수 없음: %s', data)
+                raise ValueError('Responses API 응답에서 message를 찾을 수 없습니다.')
+
+            # content 배열에서 output_text 찾기
+            content_text = None
+            for content_item in message_output.get('content', []):
+                if content_item.get('type') == 'output_text':
+                    content_text = content_item.get('text', '')
+                    break
+
+            if content_text is None:
+                logger.error('[Compatibility][OpenAI][GPT-5] output_text를 찾을 수 없음: %s', message_output)
+                raise ValueError('Responses API 응답에서 텍스트를 찾을 수 없습니다.')
+
+            actual_model = data.get('model', resolved_model)
+            logger.info('[Compatibility][OpenAI][GPT-5] 응답 수신 - model=%s, tokens=%s', actual_model, data.get('usage'))
+            return content_text.strip(), 'openai', actual_model
+        else:
+            # GPT-4 등 기존 모델: Chat Completions API 사용
+            json_payload = {
+                'model': resolved_model,
+                'messages': [
+                    {'role': 'system', 'content': system_prompt},
+                    {'role': 'user', 'content': user_prompt}
+                ],
+                'temperature': temperature,
+                'top_p': top_p,
+                'presence_penalty': presence_penalty,
+                'frequency_penalty': frequency_penalty,
+            }
+            if max_tokens is not None:
+                json_payload['max_tokens'] = max_tokens
+
+            response = requests.post(
+                f"{base_url}/chat/completions",
+                headers={
+                    'Authorization': f'Bearer {api_key}',
+                    'Content-Type': 'application/json'
+                },
+                json=json_payload,
+                timeout=90
+            )
+            response.raise_for_status()
+            data = response.json()
+            choices = data.get('choices') or []
+            if not choices:
+                logger.error('[Compatibility][OpenAI] 응답 choices 비어 있음: %s', data)
+                raise ValueError('OpenAI 응답이 비어 있습니다.')
+            logger.info('[Compatibility][OpenAI] 응답 수신 - tokens=%s', data.get('usage'))
+            return choices[0]['message']['content'].strip(), 'openai', resolved_model
+    except requests.HTTPError as exc:
+        error_body = exc.response.text if exc.response else ''
+        error_status = exc.response.status_code if exc.response else 'N/A'
+        logger.exception('[Compatibility][OpenAI] HTTP 오류 status=%s body=%s', error_status, error_body)
+        # 에러 메시지에 상세 정보 포함
+        raise ValueError(f'OpenAI API 오류 ({error_status}): {error_body}') from exc
+    except Exception:
+        logger.exception('[Compatibility][OpenAI] 호출 실패')
+        raise
+
+
+def _call_gemini_chat_model(model_name, system_prompt, user_prompt, temperature=0.7, top_p=1.0, presence_penalty=0.0, frequency_penalty=0.0, max_tokens=None):
+    """Call Google Gemini API for compatibility analysis."""
+    api_key = getattr(settings, 'GEMINI_API_KEY', '')
+    if not api_key:
+        raise ValueError('GEMINI_API_KEY is not configured.')
+
+    resolved_model = model_name or getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
+    logger.info('[Compatibility][Gemini] 호출 준비 - model=%s', resolved_model)
+
+    try:
+        import google.generativeai as genai
+
+        # Configure Gemini API
+        genai.configure(api_key=api_key)
+
+        # Initialize model
+        model = genai.GenerativeModel(resolved_model)
+
+        # Combine system prompt and user prompt
+        full_prompt = f"{system_prompt}\n\n{user_prompt}"
+
+        # Generate content
+        generation_config = {
+            'temperature': temperature,
+            'top_p': top_p,
+        }
+        if max_tokens is not None:
+            generation_config['max_output_tokens'] = max_tokens
+        
+        # presence_penalty and frequency_penalty are not directly supported by Gemini's generation_config
+        # and would require more complex mapping or safety settings.
+
+        response = model.generate_content(
+            full_prompt,
+            generation_config=generation_config
+        )
+
+        if not response.text:
+            logger.error('[Compatibility][Gemini] 응답이 비어 있음')
+            raise ValueError('Gemini 응답이 비어 있습니다.')
+
+        logger.info('[Compatibility][Gemini] 응답 수신 - model=%s', resolved_model)
+        return response.text.strip(), 'gemini', resolved_model
+
+    except ImportError:
+        logger.exception('[Compatibility][Gemini] google-generativeai 패키지가 설치되지 않음')
+        raise ValueError('google-generativeai 패키지를 설치해야 합니다: pip install google-generativeai')
+    except Exception as exc:
+        logger.exception('[Compatibility][Gemini] 호출 실패: %s', str(exc))
+        raise
 
 
 
@@ -1288,7 +1458,10 @@ def is_admin(request):
                 try:
                     content_type = (request.META.get('CONTENT_TYPE') or '').lower()
                     if 'application/json' in content_type:
-                        data = json.loads(request.body.decode('utf-8') or '{}')
+                        # Cache the body to allow multiple reads
+                        if not hasattr(request, '_cached_body'):
+                            request._cached_body = request.body
+                        data = json.loads(request._cached_body.decode('utf-8') or '{}')
                         username = data.get('username', '')
                 except Exception:
                     username = ''
@@ -6181,6 +6354,612 @@ def admin_agent_prompt_detail_view(request, agent_type):
                 'ok': False,
                 'error': f'Agent prompt not found: {agent_type}'
             }, status=404)
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+def _get_or_create_default_compatibility_prompt():
+    """Ensure the compatibility agent prompt exists."""
+    prompt, _ = CompatibilityAgentPrompt.objects.get_or_create(
+        agent_key='saju_bitcoin',
+        defaults={
+            'name': '비트코인 궁합 에이전트',
+            'description': '비트코인을 디지털 금으로 바라보는 사주 분석 전문가',
+            'system_prompt': COMPATIBILITY_AGENT_DEFAULT_PROMPT.strip(),
+            'model_name': getattr(settings, 'COMPATIBILITY_OPENAI_MODEL', 'gpt-5-mini'),
+            'is_active': True,
+            'temperature': 0.2,
+            'top_p': 0.9,
+            'presence_penalty': 0.6,
+            'frequency_penalty': 0.4,
+            'max_tokens': 700,
+        }
+    )
+    return prompt
+
+
+def _run_compatibility_agent(prompt, user_context, temperature=0.7):
+    """Run compatibility agent with either OpenAI or Gemini based on configuration."""
+    # Extract all parameters from the prompt object
+    model_name_from_prompt = (prompt.model_name or '').strip()
+    temperature_from_prompt = prompt.temperature
+    top_p_from_prompt = prompt.top_p
+    presence_penalty_from_prompt = prompt.presence_penalty
+    frequency_penalty_from_prompt = prompt.frequency_penalty
+    max_tokens_from_prompt = prompt.max_tokens
+
+    # Use the temperature passed from frontend payload if available, otherwise use prompt's config
+    # The 'temperature' argument to this function comes from payload.get('temperature', 0.7)
+    resolved_temperature = temperature
+
+    # Determine provider based on model_name_from_prompt
+    default_provider = getattr(settings, 'COMPATIBILITY_DEFAULT_PROVIDER', 'gemini').lower()
+    provider = default_provider
+    model_name = model_name_from_prompt # Use model name from prompt config
+    
+    if ':' in model_name:
+        provider, model_name = model_name.split(':', 1)
+        provider = provider.lower().strip()
+        model_name = model_name.strip()
+
+    # Validate model_name matches provider
+    # If provider is gemini but model_name looks like an OpenAI model, clear it
+    if provider == 'gemini' and model_name:
+        openai_models = ['gpt-3.5', 'gpt-4', 'gpt-4o']
+        if any(model_name.startswith(prefix) for prefix in openai_models):
+            logger.warning('[Compatibility] Model "%s" is OpenAI model but provider is gemini, using default Gemini model', model_name)
+            model_name = ''  # Use default Gemini model
+
+    # If provider is openai but model_name looks like a Gemini model, clear it
+    if provider == 'openai' and model_name:
+        gemini_models = ['gemini-', 'gemma-']
+        if any(model_name.startswith(prefix) for prefix in gemini_models):
+            logger.warning('[Compatibility] Model "%s" is Gemini model but provider is openai, using default OpenAI model', model_name)
+            model_name = ''  # Use default OpenAI model
+
+    logger.info('[Compatibility] 에이전트 실행 - provider=%s, model_name=%s, temp=%.2f, top_p=%.2f, pres_p=%.2f, freq_p=%.2f, max_tokens=%s',
+                provider, model_name, resolved_temperature, top_p_from_prompt,
+                presence_penalty_from_prompt, frequency_penalty_from_prompt, max_tokens_from_prompt)
+
+    # Call the appropriate API with fallback
+    if provider == 'gemini':
+        try:
+            return _call_gemini_chat_model(
+                model_name,
+                prompt.system_prompt,
+                user_context,
+                temperature=resolved_temperature,
+                top_p=top_p_from_prompt,
+                max_tokens=max_tokens_from_prompt
+            )
+        except Exception as gemini_error:
+            # Check if it's a quota/rate limit error
+            error_str = str(gemini_error)
+            if 'ResourceExhausted' in str(type(gemini_error)) or '429' in error_str or 'quota' in error_str.lower():
+                logger.warning('[Compatibility] Gemini API quota exceeded, falling back to OpenAI')
+                try:
+                    return _call_openai_chat_model(
+                        '', # Use default model as it's a fallback
+                        prompt.system_prompt,
+                        user_context,
+                        temperature=resolved_temperature,
+                        top_p=top_p_from_prompt,
+                        presence_penalty=presence_penalty_from_prompt,
+                        frequency_penalty=frequency_penalty_from_prompt,
+                        max_tokens=max_tokens_from_prompt
+                    )
+                except Exception as openai_error:
+                    logger.error('[Compatibility] OpenAI fallback also failed: %s', openai_error)
+                    # Re-raise the original Gemini error
+                    raise gemini_error
+            else:
+                # Not a quota error, re-raise
+                raise
+    elif provider == 'openai':
+        return _call_openai_chat_model(
+            model_name,
+            prompt.system_prompt,
+            user_context,
+            temperature=resolved_temperature,
+            top_p=top_p_from_prompt,
+            presence_penalty=presence_penalty_from_prompt,
+            frequency_penalty=frequency_penalty_from_prompt,
+            max_tokens=max_tokens_from_prompt
+        )
+    else:
+        # Fallback to gemini as default
+        logger.warning('[Compatibility] Unknown provider "%s", falling back to gemini', provider)
+        try:
+            return _call_gemini_chat_model(
+                model_name,
+                prompt.system_prompt,
+                user_context,
+                temperature=resolved_temperature,
+                top_p=top_p_from_prompt,
+                max_tokens=max_tokens_from_prompt
+            )
+        except Exception as gemini_error:
+            error_str = str(gemini_error)
+            if 'ResourceExhausted' in str(type(gemini_error)) or '429' in error_str or 'quota' in error_str.lower():
+                logger.warning('[Compatibility] Gemini API quota exceeded, falling back to OpenAI')
+                return _call_openai_chat_model(
+                    '', # Use default model as it's a fallback
+                    prompt.system_prompt,
+                    user_context,
+                    temperature=resolved_temperature,
+                    top_p=top_p_from_prompt,
+                    presence_penalty=presence_penalty_from_prompt,
+                    frequency_penalty=frequency_penalty_from_prompt,
+                    max_tokens=max_tokens_from_prompt
+                )
+            else:
+                raise
+
+
+@csrf_exempt
+def compatibility_prompt_view(request):
+    """Public endpoint to fetch the current compatibility agent prompt."""
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+
+    prompt = _get_or_create_default_compatibility_prompt()
+    return JsonResponse({
+        'ok': True,
+        'prompt': prompt.as_dict()
+    })
+
+
+@csrf_exempt
+def compatibility_admin_prompt_view(request):
+    """Admin-only endpoint to view or update the compatibility agent prompt."""
+    if not is_admin(request):
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+
+    prompt = _get_or_create_default_compatibility_prompt()
+
+    if request.method == 'GET':
+        return JsonResponse({'ok': True, 'prompt': prompt.as_dict()})
+
+    payload = _load_json_body(request)
+    if payload is None:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    if request.method in ['PUT', 'PATCH']:
+        updated_fields = []
+        if 'name' in payload:
+            prompt.name = payload['name']
+            updated_fields.append('name')
+        if 'description' in payload:
+            prompt.description = payload['description']
+            updated_fields.append('description')
+        if 'model_name' in payload:
+            prompt.model_name = payload['model_name']
+            updated_fields.append('model_name')
+        if 'is_active' in payload:
+            prompt.is_active = bool(payload['is_active'])
+            updated_fields.append('is_active')
+        if 'system_prompt' in payload:
+            new_prompt = payload['system_prompt']
+            if isinstance(new_prompt, str):
+                new_prompt = new_prompt.strip('\ufeff')  # Remove accidental BOM
+            if new_prompt != prompt.system_prompt:
+                prompt.system_prompt = new_prompt
+                prompt.version += 1
+                updated_fields.extend(['system_prompt', 'version'])
+
+        if updated_fields:
+            fields = list({field for field in updated_fields})
+            if 'updated_at' not in fields:
+                fields.append('updated_at')
+            prompt.save(update_fields=fields)
+
+        return JsonResponse({'ok': True, 'prompt': prompt.as_dict()})
+
+    if request.method == 'POST':
+        action = (payload.get('action') or '').lower()
+        if action == 'reset':
+            prompt.system_prompt = COMPATIBILITY_AGENT_DEFAULT_PROMPT.strip()
+            prompt.is_active = True
+            prompt.model_name = getattr(settings, 'COMPATIBILITY_OPENAI_MODEL', 'gpt-5-mini')
+            prompt.version += 1
+            prompt.save(update_fields=['system_prompt', 'is_active', 'model_name', 'version', 'updated_at'])
+            return JsonResponse({'ok': True, 'prompt': prompt.as_dict()})
+        return JsonResponse({'ok': False, 'error': 'Unsupported action'}, status=400)
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+from .saju_util import calculate_saju, analyze_elements
+
+@csrf_exempt
+def compatibility_agent_generate_view(request):
+    """Call the compatibility agent (OpenAI or Gemini) to produce narrative text."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+
+    payload = _load_json_body(request)
+    if payload is None:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    # 1. Extract context or build it from structured data
+    context = (payload.get('context') or '').strip()
+    structured = payload.get('data') # Expecting { 'birthdate': 'YYYY-MM-DD', 'birth_time': 'HH:MM', ... }
+    
+    # 2. Perform explicit Saju calculation if birthdate is present
+    saju_info = ""
+    if structured and 'birthdate' in structured:
+        try:
+            bd_str = structured['birthdate']
+            bt_str = structured.get('birth_time')
+            
+            # Parse date
+            bd = datetime.strptime(bd_str, '%Y-%m-%d').date()
+            hour = None
+            minute = None
+            if bt_str:
+                try:
+                    bt = datetime.strptime(bt_str, '%H:%M').time()
+                    hour = bt.hour
+                    minute = bt.minute
+                except ValueError:
+                    pass
+            
+            # Calculate Pillars
+            pillars = calculate_saju(bd.year, bd.month, bd.day, hour, minute)
+            elements = analyze_elements(pillars)
+            
+            saju_info = (
+                f"\n\n[시스템 자동 계산된 사주 정보 - 이 정보를 최우선으로 신뢰하세요]\n"
+                f"양력 생년월일: {bd_str} {bt_str if bt_str else ''}\n"
+                f"년주(Year Pillar): {pillars['year_pillar']}\n"
+                f"월주(Month Pillar): {pillars['month_pillar']}\n"
+                f"일주(Day Pillar): {pillars['day_pillar']}\n"
+                f"시주(Time Pillar): {pillars['time_pillar'] or '알 수 없음'}\n"
+                f"오행 분포: 목({elements['wood']}) 화({elements['fire']}) 토({elements['earth']}) 금({elements['metal']}) 수({elements['water']})\n"
+                f"일간(Day Master): {pillars['day_pillar'][0]} (이것이 본원입니다)\n"
+            )
+            
+            # If context was empty, build a simple one. If existed, append.
+            if not context:
+                context = json.dumps(structured, ensure_ascii=False, indent=2)
+            
+            # Prepend the calculated info to context so the agent sees it first and authoritative
+            context = saju_info + "\n" + context
+            
+        except Exception as e:
+            logger.error(f"[Compatibility] Saju calculation failed: {e}")
+            # Continue without calculated info if fails
+
+    if not context:
+        return JsonResponse({'ok': False, 'error': 'context is required'}, status=400)
+
+    temp = payload.get('temperature', 0.7)
+    try:
+        temperature = float(temp)
+    except (ValueError, TypeError):
+        temperature = 0.7
+
+    temperature = max(0, min(1.2, temperature))
+
+    prompt = _get_or_create_default_compatibility_prompt()
+    if not prompt.is_active:
+        return JsonResponse({'ok': False, 'error': 'Compatibility agent is inactive.'}, status=503)
+
+    try:
+        logger.info('[Compatibility] 에이전트 요청 시작 - context_len=%d', len(context))
+        logger.info('[Compatibility] System Prompt Preview: %s...', prompt.system_prompt[:100].replace('\n', ' '))
+        narrative, provider, model_used = _run_compatibility_agent(prompt, context, temperature)
+    except ValueError as exc:
+        logger.warning('[Compatibility] 에이전트 입력 오류: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+    except Exception as exc:  # pragma: no cover - network failures
+        logger.exception("Compatibility agent request failed")
+        error_msg = str(exc)
+        # Gemini 할당량 초과 에러 처리
+        if 'ResourceExhausted' in str(type(exc)) or '429' in error_msg or 'quota' in error_msg.lower():
+            return JsonResponse({
+                'ok': False,
+                'error': 'API 할당량이 초과되었습니다. 잠시 후 다시 시도해주세요.',
+                'error_type': 'quota_exceeded'
+            }, status=429)
+        # OpenAI API key 미설정 에러 처리
+        if 'OPENAI_API_KEY is not configured' in error_msg:
+            return JsonResponse({
+                'ok': False,
+                'error': 'OpenAI API 키가 설정되지 않았습니다. 관리자에게 문의하세요.',
+                'error_type': 'api_key_missing'
+            }, status=503)
+        return JsonResponse({'ok': False, 'error': 'Agent request failed'}, status=502)
+
+    return JsonResponse({
+        'ok': True,
+        'narrative': narrative,
+        'provider': provider,
+        'model': model_used,
+        'prompt_version': prompt.version,
+    })
+
+
+@csrf_exempt
+def compatibility_analysis_save_view(request):
+    """Save a compatibility analysis result to the database"""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+
+    try:
+        payload = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    required_fields = ['birthdate', 'element', 'zodiac', 'yin_yang', 'score', 'rating', 'narrative']
+    for field in required_fields:
+        if field not in payload:
+            return JsonResponse({'ok': False, 'error': f'Missing required field: {field}'}, status=400)
+
+    try:
+        from datetime import datetime as dt
+        from .models import CompatibilityAnalysis
+
+        # Parse birthdate
+        birthdate = dt.strptime(payload['birthdate'], '%Y-%m-%d').date()
+
+        # Parse birth_time if provided
+        birth_time = None
+        if payload.get('birth_time'):
+            birth_time = dt.strptime(payload['birth_time'], '%H:%M').time()
+
+        # Get client IP
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            user_ip = x_forwarded_for.split(',')[0]
+        else:
+            user_ip = request.META.get('REMOTE_ADDR')
+
+        # Create the analysis record
+        analysis = CompatibilityAnalysis.objects.create(
+            birthdate=birthdate,
+            birth_time=birth_time,
+            gender=payload.get('gender', ''),
+            element=payload['element'],
+            zodiac=payload['zodiac'],
+            yin_yang=payload['yin_yang'],
+            score=int(payload['score']),
+            rating=payload['rating'],
+            narrative=payload['narrative'],
+            user_ip=user_ip
+        )
+
+        return JsonResponse({'ok': True, 'id': analysis.id, 'analysis': analysis.as_dict()})
+
+    except Exception as e:
+        logger.exception("Error saving compatibility analysis")
+        return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
+
+@csrf_exempt
+def compatibility_analysis_list_view(request):
+    """List compatibility analysis results with pagination (admin only)"""
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+
+    try:
+        from django.core.paginator import Paginator
+        from .models import CompatibilityAnalysis
+
+        # Get pagination parameters
+        page = int(request.GET.get('page', 1))
+        per_page = int(request.GET.get('per_page', 10))
+        per_page = min(per_page, 100)  # Max 100 per page
+
+        # Get all analyses ordered by creation time (newest first)
+        analyses = CompatibilityAnalysis.objects.all()
+
+        # Apply pagination
+        paginator = Paginator(analyses, per_page)
+        page_obj = paginator.get_page(page)
+
+        return JsonResponse({
+            'ok': True,
+            'analyses': [analysis.as_dict() for analysis in page_obj.object_list],
+            'pagination': {
+                'page': page_obj.number,
+                'per_page': per_page,
+                'total_pages': paginator.num_pages,
+                'total_count': paginator.count,
+                'has_next': page_obj.has_next(),
+                'has_previous': page_obj.has_previous(),
+            }
+        })
+
+    except Exception as e:
+        logger.exception("Error listing compatibility analyses")
+        return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
+
+def _ensure_default_compatibility_presets():
+    defaults = [
+        {
+            'label': '사용자',
+            'description': '나만의 정보를 직접 입력해 궁합을 계산하세요.',
+            'birthdate': None,
+            'gender': '',
+            'image_url': '',
+            'sort_order': 0,
+        },
+        {
+            'label': '마이클 세일러',
+            'birthdate': datetime(1965, 2, 4).date(),
+            'description': 'MicroStrategy CEO이자 비트코인 트리플 맥시.',
+            'gender': 'male',
+            'image_url': 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Michael_Saylor_2016.jpg/640px-Michael_Saylor_2016.jpg',
+            'sort_order': 1,
+        },
+        {
+            'label': '도널드 트럼프',
+            'birthdate': datetime(1946, 6, 14).date(),
+            'description': '전 미 대통령으로 친비트코인 행보를 강화 중.',
+            'gender': 'male',
+            'image_url': 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/56/Donald_Trump_official_portrait.jpg/640px-Donald_Trump_official_portrait.jpg',
+            'sort_order': 2,
+        },
+        {
+            'label': '래리 핑크',
+            'birthdate': datetime(1952, 11, 2).date(),
+            'description': '블랙록 CEO, 기관 비트코인 수요를 이끄는 인물.',
+            'gender': 'male',
+            'image_url': 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Laurence_D._Fink.jpg/640px-Laurence_D._Fink.jpg',
+            'sort_order': 3,
+        },
+        {
+            'label': '제이미 다이먼',
+            'birthdate': datetime(1956, 3, 13).date(),
+            'description': 'JP모건 CEO, 비판과 도입을 오가는 상징적 인물.',
+            'gender': 'male',
+            'image_url': 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/Jamie_Dimon_2018.jpg/640px-Jamie_Dimon_2018.jpg',
+            'sort_order': 4,
+        },
+        {
+            'label': '비탈릭 부테린',
+            'birthdate': datetime(1994, 1, 31).date(),
+            'description': '이더리움 창시자이자 크립토 철학자.',
+            'gender': 'male',
+            'image_url': 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1c/Vitalik_Buterin_TechCrunch_London_2015_%28cropped%29.jpg/640px-Vitalik_Buterin_TechCrunch_London_2015_%28cropped%29.jpg',
+            'sort_order': 5,
+        },
+    ]
+    for preset in defaults:
+        defaults_payload = preset.copy()
+        obj, created = CompatibilityQuickPreset.objects.get_or_create(label=preset['label'], defaults=defaults_payload)
+        if not created:
+            update_fields = []
+            if preset.get('description') and not obj.description:
+                obj.description = preset['description']
+                update_fields.append('description')
+            if obj.sort_order is None:
+                obj.sort_order = preset['sort_order']
+                update_fields.append('sort_order')
+            if preset.get('image_url') and not obj.image_url:
+                obj.image_url = preset['image_url']
+                update_fields.append('image_url')
+            if update_fields:
+                obj.save(update_fields=update_fields)
+
+
+@csrf_exempt
+def compatibility_quick_presets_view(request):
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+    _ensure_default_compatibility_presets()
+    presets = CompatibilityQuickPreset.objects.filter(is_active=True).order_by('sort_order', 'id')
+    return JsonResponse({'ok': True, 'presets': [preset.as_dict() for preset in presets]})
+
+
+@csrf_exempt
+def compatibility_admin_quick_presets_view(request):
+    if not is_admin(request):
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+
+    if request.method == 'GET':
+        _ensure_default_compatibility_presets()
+        presets = CompatibilityQuickPreset.objects.all().order_by('sort_order', 'id')
+        return JsonResponse({'ok': True, 'presets': [preset.as_dict() for preset in presets]})
+
+    if request.method == 'POST':
+        payload = _load_json_body(request)
+        if payload is None:
+            return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+        label = (payload.get('label') or '').strip()
+        birthdate_str = (payload.get('birthdate') or '').strip()
+        if not label or not birthdate_str:
+            return JsonResponse({'ok': False, 'error': 'label과 birthdate는 필수입니다.'}, status=400)
+
+        try:
+            birthdate = datetime.strptime(birthdate_str, '%Y-%m-%d').date()
+        except ValueError:
+            return JsonResponse({'ok': False, 'error': 'birthdate 형식은 YYYY-MM-DD 이어야 합니다.'}, status=400)
+
+        birth_time = None
+        birth_time_str = (payload.get('birth_time') or '').strip()
+        if birth_time_str:
+            try:
+                birth_time = datetime.strptime(birth_time_str, '%H:%M').time()
+            except ValueError:
+                return JsonResponse({'ok': False, 'error': 'birth_time 형식은 HH:MM 이어야 합니다.'}, status=400)
+
+        sort_order = payload.get('sort_order')
+        if sort_order is None:
+            max_order = CompatibilityQuickPreset.objects.aggregate(max_order=Max('sort_order'))['max_order'] or 0
+            sort_order = max_order + 1
+
+        preset = CompatibilityQuickPreset.objects.create(
+            label=label,
+            description=(payload.get('description') or '').strip(),
+            birthdate=birthdate,
+            birth_time=birth_time,
+            gender=(payload.get('gender') or '').strip(),
+            image_url=(payload.get('image_url') or '').strip(),
+            sort_order=int(sort_order),
+            is_active=bool(payload.get('is_active', True)),
+        )
+        return JsonResponse({'ok': True, 'preset': preset.as_dict()}, status=201)
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def compatibility_admin_quick_preset_detail_view(request, pk):
+    if not is_admin(request):
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+    try:
+        preset = CompatibilityQuickPreset.objects.get(pk=pk)
+    except CompatibilityQuickPreset.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'Preset not found'}, status=404)
+
+    if request.method == 'GET':
+        return JsonResponse({'ok': True, 'preset': preset.as_dict()})
+
+    if request.method in ['PUT', 'PATCH']:
+        payload = _load_json_body(request)
+        if payload is None:
+            return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+        if 'label' in payload and payload['label'] is not None:
+            preset.label = payload['label'].strip()
+        if 'birthdate' in payload and payload['birthdate']:
+            try:
+                preset.birthdate = datetime.strptime(payload['birthdate'], '%Y-%m-%d').date()
+            except ValueError:
+                return JsonResponse({'ok': False, 'error': 'birthdate 형식은 YYYY-MM-DD 이어야 합니다.'}, status=400)
+        if 'birth_time' in payload:
+            birth_time_value = (payload.get('birth_time') or '').strip()
+            if birth_time_value:
+                try:
+                    preset.birth_time = datetime.strptime(birth_time_value, '%H:%M').time()
+                except ValueError:
+                    return JsonResponse({'ok': False, 'error': 'birth_time 형식은 HH:MM 이어야 합니다.'}, status=400)
+            else:
+                preset.birth_time = None
+        if 'gender' in payload and payload['gender'] is not None:
+            preset.gender = payload['gender'].strip()
+        if 'description' in payload and payload['description'] is not None:
+            preset.description = payload['description'].strip()
+        if 'image_url' in payload and payload['image_url'] is not None:
+            preset.image_url = payload['image_url'].strip()
+        if 'sort_order' in payload and payload['sort_order'] is not None:
+            preset.sort_order = int(payload['sort_order'])
+        if 'is_active' in payload:
+            preset.is_active = bool(payload['is_active'])
+
+        preset.save()
+        return JsonResponse({'ok': True, 'preset': preset.as_dict()})
+
+    if request.method == 'DELETE':
+        preset_label = preset.label
+        preset_id = preset.id
+        preset.delete()
+        print(f"[DELETE] Deleted preset: {preset_label} (ID: {preset_id})")
+        return JsonResponse({'ok': True, 'deleted_id': preset_id, 'deleted_label': preset_label})
 
     return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
 

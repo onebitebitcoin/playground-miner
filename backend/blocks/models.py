@@ -705,3 +705,133 @@ class AgentPrompt(models.Model):
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat(),
         }
+
+
+class CompatibilityAgentPrompt(models.Model):
+    """System prompt configuration for the compatibility agent."""
+
+    agent_key = models.CharField(max_length=50, unique=True, db_index=True)
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, default='')
+    system_prompt = models.TextField()
+    model_name = models.CharField(max_length=100, default='openai:gpt-5-mini')
+    is_active = models.BooleanField(default=True)
+    temperature = models.FloatField(default=0.2)
+    top_p = models.FloatField(default=0.9)
+    presence_penalty = models.FloatField(default=0.6)
+    frequency_penalty = models.FloatField(default=0.4)
+    max_tokens = models.IntegerField(default=700)
+    version = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['agent_key']
+        indexes = [
+            models.Index(fields=['agent_key']),
+            models.Index(fields=['is_active']),
+        ]
+
+    def __str__(self):
+        return f"{self.name} (compat v{self.version})"
+
+    def as_dict(self):
+        return {
+            'id': self.id,
+            'agent_key': self.agent_key,
+            'name': self.name,
+            'description': self.description,
+            'system_prompt': self.system_prompt,
+            'model_name': self.model_name,
+            'is_active': self.is_active,
+            'version': self.version,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat(),
+        }
+
+
+class CompatibilityAnalysis(models.Model):
+    """Stores Bitcoin compatibility analysis results"""
+    birthdate = models.DateField()
+    birth_time = models.TimeField(null=True, blank=True)
+    gender = models.CharField(max_length=10, blank=True, null=True)  # 'male', 'female', or empty
+
+    # Calculated saju properties
+    element = models.CharField(max_length=10)  # e.g., '목(木)', '금(金)', etc.
+    zodiac = models.CharField(max_length=20)  # e.g., '자(쥐)', '축(소)', etc.
+    yin_yang = models.CharField(max_length=5)  # '음' or '양'
+
+    # Compatibility results
+    score = models.IntegerField()  # Compatibility score (0-100)
+    rating = models.CharField(max_length=50)  # e.g., '찰떡궁합', '균형 잡힌 합', etc.
+    narrative = models.TextField()  # AI-generated story/analysis
+
+    # Metadata
+    user_ip = models.GenericIPAddressField(null=True, blank=True)  # For tracking unique users
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['user_ip']),
+        ]
+
+    def __str__(self):
+        return f"{self.birthdate} - {self.element} ({self.score}점)"
+
+    def as_dict(self):
+        return {
+            'id': self.id,
+            'birthdate': self.birthdate.isoformat(),
+            'birth_time': self.birth_time.isoformat() if self.birth_time else None,
+            'gender': self.gender,
+            'element': self.element,
+            'zodiac': self.zodiac,
+            'yin_yang': self.yin_yang,
+            'score': self.score,
+            'rating': self.rating,
+            'narrative': self.narrative,
+            'user_ip': self.user_ip,
+            'created_at': self.created_at.isoformat(),
+        }
+
+
+class CompatibilityQuickPreset(models.Model):
+    """Preconfigured saju inputs that appear as quick presets on the compatibility page."""
+
+    label = models.CharField(max_length=100)
+    description = models.CharField(max_length=255, blank=True, default='')
+    birthdate = models.DateField(null=True, blank=True)
+    birth_time = models.TimeField(null=True, blank=True)
+    gender = models.CharField(max_length=10, blank=True, default='')  # 'male', 'female', etc.
+    image_url = models.URLField(blank=True, default='')
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['sort_order', 'id']
+        indexes = [
+            models.Index(fields=['is_active', 'sort_order']),
+        ]
+
+    def __str__(self):
+        birthdate_display = self.birthdate.isoformat() if self.birthdate else '정보 없음'
+        return f"{self.label} ({birthdate_display})"
+
+    def as_dict(self):
+        return {
+            'id': self.id,
+            'label': self.label,
+            'description': self.description,
+            'birthdate': self.birthdate.isoformat() if self.birthdate else None,
+            'birth_time': self.birth_time.isoformat() if self.birth_time else None,
+            'gender': self.gender,
+            'image_url': self.image_url,
+            'sort_order': self.sort_order,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat(),
+        }
