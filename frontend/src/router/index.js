@@ -6,6 +6,8 @@ import WalletKingstonePage from '../pages/WalletKingstonePage.vue'
 import WalletKingstoneDetailPage from '../pages/WalletKingstoneDetailPage.vue'
 import FeePage from '../pages/FeePage.vue'
 import FinancePage from '../pages/FinancePage.vue'
+import CompatibilityPage from '../pages/CompatibilityPage.vue'
+import TimeCapsulePage from '../pages/TimeCapsulePage.vue'
 import AdminPage from '../pages/AdminPage.vue'
 import NicknameSetup from '../pages/NicknameSetup.vue'
 
@@ -70,6 +72,18 @@ const routes = [
     path: '/finance',
     name: 'finance',
     component: FinancePage,
+    meta: { requiresNickname: true }
+  },
+  {
+    path: '/compatibility',
+    name: 'compatibility',
+    component: CompatibilityPage,
+    meta: { requiresNickname: true }
+  },
+  {
+    path: '/timecapsule',
+    name: 'timecapsule',
+    component: TimeCapsulePage,
     meta: { requiresNickname: true }
   },
   {

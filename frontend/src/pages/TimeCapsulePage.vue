@@ -49,7 +49,10 @@
               :class="mode === 'seal' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'"
               @click="switchMode('seal')"
             >
-              🔒 봉인
+              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              봉인
             </button>
             <button
               type="button"
@@ -67,7 +70,12 @@
 
         <div class="space-y-4">
           <div>
-            <label for="secret-key" class="text-sm font-medium text-slate-700">나만의 키</label>
+            <label for="secret-key" class="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              </svg>
+              나만의 키
+            </label>
             <div class="relative mt-1">
               <input
                 id="secret-key"
@@ -114,7 +122,12 @@
           <!-- Seal Mode: Message Input -->
           <div v-if="mode === 'seal'">
             <div class="flex items-center justify-between">
-              <label for="wish-message" class="text-sm font-medium text-slate-700">소망 메시지</label>
+              <label for="wish-message" class="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+                <svg class="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+                소망 메시지
+              </label>
               <span
                 class="text-xs"
                 :class="wishMessage.length >= messageLimit ? 'text-rose-500' : 'text-slate-500'"
@@ -172,14 +185,7 @@
         </div>
 
         <div class="flex flex-col gap-3 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            class="px-4 py-2 rounded-xl border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 transition disabled:opacity-50"
-            :disabled="mode === 'seal' ? (!secretKey && !wishMessage) : (!secretKey && !encryptedDataInput)"
-            @click="handleReset"
-          >
-            입력 초기화
-          </button>
+          
 
           <!-- Seal Mode Button -->
           <button
@@ -206,6 +212,22 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
               바로 봉인하기
+            </span>
+          </button>
+
+          <!-- Save Button (Seal Mode) -->
+          <button
+            v-if="mode === 'seal'"
+            type="button"
+            class="px-5 py-2 rounded-xl text-sm font-semibold text-white bg-emerald-500 hover:bg-emerald-600 shadow-sm transition relative overflow-hidden"
+            :disabled="!encryptedHash"
+            @click="copyEncryptedData"
+          >
+            <span class="flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v8m0-12H9.5a1.5 1.5 0 000 3H12" />
+              </svg>
+              저장하기
             </span>
           </button>
 
@@ -379,51 +401,52 @@
           </div>
 
           <!-- Capsule Status Text -->
-          <div v-if="!sealed && !opened" class="text-center">
-            <p class="text-sm font-medium text-slate-700">
-              <span v-if="opening" class="text-indigo-600 flex items-center justify-center gap-1 animate-pulse">
-                <svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="text-center mt-4">
+            <p class="text-xl font-bold transition-colors duration-300">
+              <span v-if="opening" class="text-indigo-600 flex items-center justify-center gap-2 animate-pulse">
+                <svg class="w-6 h-6 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                타임캡슐 열는 중...
+                타임캡슐 여는 중...
               </span>
-              <span v-else-if="opened" class="text-indigo-600 flex items-center justify-center gap-1">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <span v-else-if="opened" class="text-emerald-600 flex items-center justify-center gap-2">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
                 </svg>
-                열림
+                열림 (OPEN)
               </span>
-              <span v-else-if="sealing" class="text-amber-600 flex items-center justify-center gap-1 animate-pulse">
-                <svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <span v-else-if="sealing" class="text-amber-600 flex items-center justify-center gap-2 animate-pulse">
+                <svg class="w-6 h-6 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
                 봉인 중...
               </span>
-              <span v-else-if="capsuleReady && mode === 'seal'" class="text-emerald-600 flex items-center justify-center gap-1">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <span v-else-if="sealed" class="text-rose-600 flex items-center justify-center gap-2">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
-                봉인 완료
+                닫힘 (LOCKED)
               </span>
-              <span v-else-if="!hasSecret" class="text-slate-500">열림</span>
-              <span v-else class="text-indigo-600">준비됨</span>
+              <span v-else class="text-emerald-600 flex items-center justify-center gap-2">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                </svg>
+                열림 (OPEN)
+              </span>
             </p>
           </div>
 
-          <div v-if="opened && decryptedMessage" class="text-sm text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2 fade-in-up">
-            <div class="flex items-center gap-2 mb-3">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span class="font-medium">타임캡슐이 성공적으로 열렸습니다!</span>
-            </div>
-            <div class="bg-white border border-indigo-100 rounded-xl p-4">
-              <p class="text-xs uppercase tracking-wide text-indigo-600 mb-2">소망 메시지</p>
+          <div v-if="mode === 'unseal' && decryptedMessage" class="text-sm text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2 fade-in-up">
+              <p class="text-xs uppercase tracking-wide text-indigo-600 mb-2 flex items-center gap-1">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+                소망 메시지
+              </p>
               <p class="text-sm text-slate-900 whitespace-pre-wrap">{{ decryptedMessage }}</p>
             </div>
-          </div>
 
           <div
             v-if="sealed"
@@ -488,7 +511,7 @@ const encryptedHash = ref('')
 const lastUpdated = ref(null)
 const computing = ref(false)
 const errorMessage = ref('')
-const showSecret = ref(false)
+const showSecret = ref(true)
 
 // Decryption states
 const decryptKey = ref('')
@@ -698,7 +721,7 @@ async function triggerImmediateComputation() {
   setTimeout(() => {
     sealing.value = false
     sealed.value = true
-  }, 500)
+  }, 2000)
 }
 
 async function runComputation() {
@@ -971,11 +994,19 @@ function fallbackHash(value) {
 }
 
 @keyframes successGlow {
-  0%, 100% {
+  0% {
     box-shadow: 0 0 5px rgba(16, 185, 129, 0.3);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
   }
   50% {
     box-shadow: 0 0 20px rgba(16, 185, 129, 0.6);
+  }
+  100% {
+    box-shadow: 0 0 5px rgba(16, 185, 129, 0.3);
+    opacity: 1;
   }
 }
 

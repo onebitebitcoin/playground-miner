@@ -119,7 +119,8 @@ const sidebarConfig = vueRef({
   show_utxo: true,
   show_wallet: true,
   show_fee: true,
-  show_finance: false
+  show_finance: false,
+  show_compatibility: true
 })
 
 // Current nickname/admin flags
@@ -150,6 +151,13 @@ const menuItems = computed(() => {
     items.push({ key: 'finance', label: '재무 관리' })
   }
 
+  if (sidebarConfig.value.show_compatibility) {
+    items.push({ key: 'compatibility', label: '궁합' })
+  }
+
+  // Add time capsule menu item
+  items.push({ key: 'timecapsule', label: '타임캡슐' })
+
   // Add admin menu only for admin users
   if (currentNickname.value === 'admin' && isAdminFlag.value) {
     items.push({ key: 'admin', label: '관리자' })
@@ -175,7 +183,10 @@ const loadSidebarConfig = async () => {
   try {
     const result = await apiGetSidebarConfig()
     if (result.success && result.config) {
-      sidebarConfig.value = result.config
+      sidebarConfig.value = {
+        ...sidebarConfig.value,
+        ...result.config
+      }
     }
   } catch (error) {
     console.error('Failed to load sidebar config:', error)

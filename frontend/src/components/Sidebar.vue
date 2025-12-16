@@ -89,6 +89,21 @@ const getIcon = (key) => {
       h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M12 6v12' }),
       h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M16 8c0-1.657-2.239-3-4-3s-4 1.343-4 3 1.343 3 4 3 4 1.343 4 3-2.239 3-4 3-4-1.343-4-3' })
     ]),
+    compatibility: () => h('svg', {
+      fill: 'none',
+      stroke: 'currentColor',
+      viewBox: '0 0 24 24'
+    }, [
+      h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M4 6a4 4 0 017.07-2.83L12 4.1l.93-.93A4 4 0 1120 6c0 4-8 10-8 10S4 10 4 6z' })
+    ]),
+    // Time capsule icon (clock/archive)
+    timecapsule: () => h('svg', {
+      fill: 'none',
+      stroke: 'currentColor',
+      viewBox: '0 0 24 24'
+    }, [
+      h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' })
+    ]),
     // Admin user icon
     admin: () => h('svg', {
       fill: 'none',

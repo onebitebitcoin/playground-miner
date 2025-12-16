@@ -20,6 +20,7 @@ export default defineConfig({
     }
   },
   build: {
+    chunkSizeWarningLimit: 1200,
     rollupOptions: {
       input: {
         main: './index.html'

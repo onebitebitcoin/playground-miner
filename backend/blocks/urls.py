@@ -57,6 +57,16 @@ urlpatterns = [
     path('wallet/password/admin', views.admin_set_wallet_password_view, name='admin_set_wallet_password'),
     path('wallet/password/check', views.wallet_password_check_view, name='wallet_password_check'),
     path('wallet/password/admin/get', views.admin_get_wallet_password_view, name='admin_get_wallet_password'),
+    # Compatibility agent prompt
+    path('compatibility/prompt', views.compatibility_prompt_view, name='compatibility_prompt'),
+    path('compatibility/admin/prompt', views.compatibility_admin_prompt_view, name='compatibility_admin_prompt'),
+    path('compatibility/agent/generate', views.compatibility_agent_generate_view, name='compatibility_agent_generate'),
+    path('compatibility/quick-presets', views.compatibility_quick_presets_view, name='compatibility_quick_presets'),
+    path('compatibility/admin/quick-presets', views.compatibility_admin_quick_presets_view, name='compatibility_admin_quick_presets'),
+    path('compatibility/admin/quick-presets/<int:pk>', views.compatibility_admin_quick_preset_detail_view, name='compatibility_admin_quick_preset_detail'),
+    # Compatibility analysis endpoints
+    path('compatibility/analysis/save', views.compatibility_analysis_save_view, name='compatibility_analysis_save'),
+    path('compatibility/analysis/list', views.compatibility_analysis_list_view, name='compatibility_analysis_list'),
     # Finance management endpoints
     path('finance/admin/logs', views.admin_finance_logs_view, name='admin_finance_logs'),
     path('finance/admin/stats', views.admin_finance_stats_view, name='admin_finance_stats'),
