@@ -103,7 +103,8 @@ main() {
         python3 manage.py migrate --run-syncdb >/dev/null 2>&1 || true
 
         # Django 서버 백그라운드 실행
-        nohup python3 manage.py runserver 0.0.0.0:8000 > ../backend.log 2>&1 &
+        # nohup python3 manage.py runserver 0.0.0.0:8000 > ../backend.log 2>&1 &
+        nohup uvicorn playground_server.asgi:application --host 0.0.0.0 --port 8000 --reload > ../backend.log 2>&1 &
     else
         echo -e "${RED}❌ 가상환경을 찾을 수 없습니다.${NC}"
         exit 1
