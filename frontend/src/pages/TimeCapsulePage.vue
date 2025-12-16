@@ -579,9 +579,10 @@ const statusDescription = computed(() => {
       ? '비밀키를 입력하고 소망 메시지를 작성해주세요. 타임캡슐이 열려있습니다.'
       : '비밀키와 암호화된 데이터를 입력하여 타임캡슐을 열어보세요.'
   }
-  if (sealing.value) {
-    return '메시지가 타임캡슐 안으로 들어가고 있습니다...''
-  }
+      if (sealing.value) {
+      return '메시지가 타임캡슐 안으로 들어가고 있습니다...'
+    }
+  
   if (computing.value) {
     return '타임캡슐을 봉인하는 중입니다...'
   }
