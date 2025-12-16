@@ -835,3 +835,28 @@ class CompatibilityQuickPreset(models.Model):
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat(),
         }
+
+
+class TimeCapsule(models.Model):
+    """Stores encrypted time capsule messages and associated metadata"""
+    encrypted_message = models.TextField()
+    bitcoin_address = models.CharField(max_length=100)
+    user_info = models.TextField(blank=True, default='')  # Can store JSON or simple string
+    is_coupon_used = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"TimeCapsule {self.id} ({self.created_at.strftime('%Y-%m-%d')})"
+
+    def as_dict(self):
+        return {
+            'id': self.id,
+            'encrypted_message': self.encrypted_message,
+            'bitcoin_address': self.bitcoin_address,
+            'user_info': self.user_info,
+            'is_coupon_used': self.is_coupon_used,
+            'created_at': self.created_at.isoformat(),
+        }

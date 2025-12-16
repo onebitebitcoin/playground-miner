@@ -74,6 +74,17 @@
                 궁합
               </button>
               <button
+                @click="activeTab = 'time-capsule'"
+                :class="[
+                  activeTab === 'time-capsule'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
+                  'whitespace-nowrap py-2 px-1 border-b-2 font-medium text-xs md:text-sm'
+                ]"
+              >
+                타임캡슐
+              </button>
+              <button
                 @click="activeTab = 'sidebar'"
                 :class="[
                   activeTab === 'sidebar'
@@ -127,6 +138,12 @@
           :show-success="showSuccess"
           :show-error="showError"
         />
+        <AdminTimeCapsuleTab
+          v-else-if="activeTab === 'time-capsule'"
+          :is-admin="isAdmin"
+          :show-success="showSuccess"
+          :show-error="showError"
+        />
 
       </div>
 
@@ -156,6 +173,7 @@ import AdminFinanceTab from '../components/admin/AdminFinanceTab.vue'
 import AdminSettingsTab from '../components/admin/AdminSettingsTab.vue'
 import AdminMiningTab from '../components/admin/AdminMiningTab.vue'
 import AdminCompatibilityTab from '../components/admin/AdminCompatibilityTab.vue'
+import AdminTimeCapsuleTab from '../components/admin/AdminTimeCapsuleTab.vue'
 import { useNotification } from '../composables/useNotification'
 
 const activeTab = ref('mining')

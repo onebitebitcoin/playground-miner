@@ -492,6 +492,14 @@
               <span v-if="encryptedHash">{{ encryptedHash }}</span>
               <span v-else>소망 메시지를 입력하면 암호화된 데이터가 나타납니다.</span>
             </p>
+
+            <div v-if="assignedAddress" class="mt-4 pt-4 border-t border-slate-700 relative z-10">
+              <p class="text-xs uppercase tracking-wide text-slate-300 mb-1">할당된 비트코인 주소</p>
+              <div class="flex items-center gap-2">
+                <p class="font-mono text-xs sm:text-sm text-amber-400 break-all select-all">{{ assignedAddress }}</p>
+              </div>
+              <p class="text-[10px] text-slate-400 mt-1">이 주소는 타임캡슐과 연결되어 있습니다.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -502,12 +510,14 @@
 
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { API_BASE_URL } from '../api'
 
 const secretKey = ref('')
 const wishMessage = ref('')
 const privateKey = ref('')
 const publicKey = ref('')
 const encryptedHash = ref('')
+const assignedAddress = ref('')
 const lastUpdated = ref(null)
 const computing = ref(false)
 const errorMessage = ref('')
@@ -608,6 +618,7 @@ const textEncoder = new TextEncoder()
 
 watch([secretKey, wishMessage], () => {
   encryptedHash.value = ''
+  assignedAddress.value = ''
   errorMessage.value = ''
   sealed.value = false
   opened.value = false
@@ -708,6 +719,31 @@ async function copyEncryptedData() {
   }
 }
 
+async function saveTimeCapsule(encryptedMessage) {
+  try {
+    const nickname = localStorage.getItem('nickname') || 'Anonymous'
+    const response = await fetch(`${API_BASE_URL}/time-capsule/save`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        encrypted_message: encryptedMessage,
+        user_info: nickname
+      }),
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      assignedAddress.value = data.bitcoin_address
+    } else {
+      console.error('Failed to save time capsule')
+    }
+  } catch (error) {
+    console.error('Error saving time capsule:', error)
+  }
+}
+
 async function triggerImmediateComputation() {
   if (recomputeTimer) clearTimeout(recomputeTimer)
 
@@ -758,6 +794,7 @@ async function runComputation() {
     if (message) {
       const encrypted = await encryptMessage(message, secret)
       encryptedHash.value = encrypted
+      await saveTimeCapsule(encrypted)
     } else {
       encryptedHash.value = ''
     }

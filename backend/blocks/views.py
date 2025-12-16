@@ -6,6 +6,7 @@ import re
 import time
 import threading
 import hashlib
+import uuid
 from datetime import datetime, timedelta
 import requests
 from . import yahoo_finance
@@ -35,6 +36,7 @@ from .models import (
     AssetPriceCache,
     CompatibilityAgentPrompt,
     CompatibilityQuickPreset,
+    TimeCapsule,
 )
 from django.db import connection
 from django.conf import settings
@@ -7446,3 +7448,71 @@ def admin_price_cache_detail_view(request, pk):
         return JsonResponse({'ok': True, 'message': f'Cache for {asset_id} deleted'})
 
     return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+# ------------------------------------------------------------------------------
+# Time Capsule Views
+# ------------------------------------------------------------------------------
+
+@csrf_exempt
+def time_capsule_save_view(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        encrypted_message = data.get('encrypted_message')
+        user_info = data.get('user_info', '')
+        
+        if not encrypted_message:
+            return JsonResponse({'error': 'encrypted_message is required'}, status=400)
+            
+        # Generate a random Bitcoin address
+        try:
+            from bitcoinlib.keys import Key
+            k = Key()
+            address = k.address()
+        except Exception as e:
+            logger.warning(f"Failed to generate real address, using mock: {e}")
+            # Fallback to a mock address
+            address = '1' + uuid.uuid4().hex[:33]
+
+        capsule = TimeCapsule.objects.create(
+            encrypted_message=encrypted_message,
+            bitcoin_address=address,
+            user_info=user_info
+        )
+        
+        return JsonResponse(capsule.as_dict())
+    except Exception as e:
+        logger.error(f"Error saving time capsule: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+def admin_time_capsules_view(request):
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+        
+    capsules = TimeCapsule.objects.all().order_by('-created_at')
+    return JsonResponse([c.as_dict() for c in capsules], safe=False)
+
+@csrf_exempt
+def admin_time_capsule_update_coupon_view(request, pk):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+        
+    try:
+        capsule = TimeCapsule.objects.get(pk=pk)
+        data = json.loads(request.body)
+        is_coupon_used = data.get('is_coupon_used')
+        
+        if is_coupon_used is not None:
+            capsule.is_coupon_used = bool(is_coupon_used)
+            capsule.save()
+            
+        return JsonResponse(capsule.as_dict())
+    except TimeCapsule.DoesNotExist:
+        return JsonResponse({'error': 'Time capsule not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Error updating time capsule: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
