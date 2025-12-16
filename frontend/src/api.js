@@ -1,5 +1,6 @@
 // Use same-origin by default in production, override with VITE_API_BASE for local dev
 const BASE_URL = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
+export const API_BASE_URL = BASE_URL
 
 export async function fetchStatus() {
   const res = await fetch(`${BASE_URL}/api/status`, { headers: { 'Accept': 'application/json' } })
