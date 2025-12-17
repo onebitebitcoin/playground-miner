@@ -240,7 +240,7 @@
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v8m0-12H9.5a1.5 1.5 0 000 3H12" />
               </svg>
-              DB에 저장하기
+              저장하기
             </span>
           </button>
 
@@ -281,6 +281,13 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <span class="font-medium">타임캡슐이 성공적으로 봉인되었습니다!</span>
+        </div>
+
+        <div v-if="saved" class="text-sm text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2 flex items-center gap-2 fade-in-up">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          <span class="font-medium">데이터가 저장되었습니다</span>
         </div>
       </div>
 
@@ -506,13 +513,196 @@
               <span v-else>소망 메시지를 입력하면 암호화된 데이터가 나타납니다.</span>
             </p>
 
-            <div v-if="assignedAddress" class="mt-4 pt-4 border-t border-slate-700 relative z-10">
-              <p class="text-xs uppercase tracking-wide text-slate-300 mb-1">할당된 비트코인 주소</p>
-              <div class="flex items-center gap-2">
-                <p class="font-mono text-xs sm:text-sm text-amber-400 break-all select-all">{{ assignedAddress }}</p>
-              </div>
-              <p class="text-[10px] text-slate-400 mt-1">이 주소는 타임캡슐과 연결되어 있습니다.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- All Time Capsules List -->
+    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h3 class="text-lg font-semibold text-slate-900">전체 타임캡슐 목록</h3>
+          <p class="text-sm text-slate-500 mt-1">모든 사용자의 타임캡슐을 확인하세요.</p>
+        </div>
+        <button
+          @click="fetchCapsules(1)"
+          class="inline-flex items-center px-3 py-2 border border-slate-300 shadow-sm text-sm leading-4 font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
+        >
+          <svg class="-ml-0.5 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          새로고침
+        </button>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-300">
+          <thead class="bg-slate-50">
+            <tr>
+              <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 sm:pl-6">생성일</th>
+              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">사용자</th>
+              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">암호화된 메시지</th>
+              <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold text-slate-900">쿠폰 사용</th>
+              <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold text-slate-900">작업</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200 bg-white">
+            <tr v-for="capsule in capsules" :key="capsule.id">
+              <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm text-slate-500 sm:pl-6">
+                {{ formatDate(capsule.created_at) }}
+              </td>
+              <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                {{ capsule.user_info || '-' }}
+              </td>
+              <td class="px-3 py-4 text-sm text-slate-500 max-w-xs truncate" :title="capsule.encrypted_message">
+                {{ capsule.encrypted_message }}
+              </td>
+              <td class="whitespace-nowrap px-3 py-4 text-sm text-center">
+                <button
+                  disabled
+                  class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-not-allowed rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out opacity-60"
+                  :class="[capsule.is_coupon_used ? 'bg-emerald-600' : 'bg-slate-200']"
+                >
+                  <span class="sr-only">쿠폰 사용 여부 (읽기 전용)</span>
+                  <span
+                    aria-hidden="true"
+                    class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                    :class="[capsule.is_coupon_used ? 'translate-x-5' : 'translate-x-0']"
+                  />
+                </button>
+              </td>
+              <td class="whitespace-nowrap px-3 py-4 text-sm text-center">
+                <button
+                  v-if="canDeleteCapsule(capsule)"
+                  @click="confirmDeleteCapsule(capsule)"
+                  class="inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-rose-700 bg-rose-100 hover:bg-rose-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-rose-500 transition-colors"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span class="ml-1">삭제</span>
+                </button>
+                <span v-else class="text-xs text-slate-400">-</span>
+              </td>
+            </tr>
+            <tr v-if="capsules.length === 0">
+              <td colspan="5" class="px-3 py-8 text-center text-sm text-slate-500">
+                저장된 타임캡슐이 없습니다.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="totalPages > 1" class="flex items-center justify-between border-t border-slate-200 px-4 py-3 sm:px-6 mt-4">
+        <div class="flex flex-1 justify-between sm:hidden">
+          <button
+            @click="changePage(currentPage - 1)"
+            :disabled="!hasPrevious"
+            class="relative inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            이전
+          </button>
+          <button
+            @click="changePage(currentPage + 1)"
+            :disabled="!hasNext"
+            class="relative ml-3 inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            다음
+          </button>
+        </div>
+        <div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+          <div>
+            <p class="text-sm text-slate-700">
+              총 <span class="font-medium">{{ totalCount }}</span>개 중 <span class="font-medium">{{ (currentPage - 1) * 20 + 1 }}</span> - <span class="font-medium">{{ Math.min(currentPage * 20, totalCount) }}</span>
+            </p>
+          </div>
+          <div>
+            <nav class="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+              <button
+                @click="changePage(currentPage - 1)"
+                :disabled="!hasPrevious"
+                class="relative inline-flex items-center rounded-l-md px-2 py-2 text-slate-400 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span class="sr-only">이전</span>
+                <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd" />
+                </svg>
+              </button>
+              <button
+                 v-for="page in displayedPages"
+                 :key="page"
+                 @click="changePage(page)"
+                 :class="[
+                   page === currentPage ? 'z-10 bg-indigo-600 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600' : 'text-slate-900 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 focus:outline-offset-0',
+                   'relative inline-flex items-center px-4 py-2 text-sm font-semibold focus:z-20'
+                 ]"
+              >
+                {{ page }}
+              </button>
+              <button
+                @click="changePage(currentPage + 1)"
+                :disabled="!hasNext"
+                class="relative inline-flex items-center rounded-r-md px-2 py-2 text-slate-400 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span class="sr-only">다음</span>
+                <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                </svg>
+              </button>
+            </nav>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div v-if="deleteModal.show" class="fixed z-10 inset-0 overflow-y-auto">
+      <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 bg-slate-500 bg-opacity-75 transition-opacity" @click="cancelDeleteMyCapsule"></div>
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+        <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+          <div class="sm:flex sm:items-start">
+            <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-rose-100 sm:mx-0 sm:h-10 sm:w-10">
+              <svg class="h-6 w-6 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
             </div>
+            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+              <h3 class="text-lg leading-6 font-medium text-slate-900">타임캡슐 삭제</h3>
+              <div class="mt-2">
+                <p class="text-sm text-slate-500">
+                  이 타임캡슐을 정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
+                </p>
+                <div class="mt-2 text-xs text-slate-400 bg-slate-50 p-2 rounded">
+                  <div><strong>생성일:</strong> {{ formatDate(deleteModal.capsule?.created_at) }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+            <button
+              type="button"
+              @click="deleteMyCapsule"
+              :disabled="deleteModal.deleting"
+              class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-rose-600 text-base font-medium text-white hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-rose-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg v-if="deleteModal.deleting" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              {{ deleteModal.deleting ? '삭제 중...' : '삭제' }}
+            </button>
+            <button
+              type="button"
+              @click="cancelDeleteMyCapsule"
+              :disabled="deleteModal.deleting"
+              class="mt-3 w-full inline-flex justify-center rounded-md border border-slate-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 sm:mt-0 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              취소
+            </button>
           </div>
         </div>
       </div>
@@ -522,7 +712,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { API_BASE_URL } from '../api'
 
 const secretKey = ref('')
@@ -530,7 +720,6 @@ const wishMessage = ref('')
 const privateKey = ref('')
 const publicKey = ref('')
 const encryptedHash = ref('')
-const assignedAddress = ref('')
 const lastUpdated = ref(null)
 const computing = ref(false)
 const errorMessage = ref('')
@@ -553,6 +742,31 @@ const sealed = ref(false)
 const opening = ref(false)
 const opened = ref(false)
 const mode = ref('seal') // 'seal' or 'unseal'
+
+// My Capsules List
+const capsules = ref([])
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const hasNext = ref(false)
+const hasPrevious = ref(false)
+
+const deleteModal = ref({
+  show: false,
+  capsule: null,
+  deleting: false
+})
+
+const displayedPages = computed(() => {
+  const pages = []
+  const range = 2 // Current page +/- range
+  for (let i = 1; i <= totalPages.value; i++) {
+    if (i === 1 || i === totalPages.value || (i >= currentPage.value - range && i <= currentPage.value + range)) {
+      pages.push(i)
+    }
+  }
+  return pages.sort((a, b) => a - b).filter((page, index, self) => self.indexOf(page) === index) // Unique just in case
+})
 
 const messageLimit = 280
 
@@ -634,7 +848,6 @@ const textEncoder = new TextEncoder()
 
 watch([secretKey, wishMessage], () => {
   encryptedHash.value = ''
-  assignedAddress.value = ''
   errorMessage.value = ''
   sealed.value = false
   opened.value = false
@@ -644,6 +857,113 @@ watch([secretKey, wishMessage], () => {
 onBeforeUnmount(() => {
   if (recomputeTimer) clearTimeout(recomputeTimer)
 })
+
+onMounted(() => {
+  fetchCapsules()
+})
+
+async function fetchCapsules(page = 1) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/time-capsule/admin/list?page=${page}`)
+    if (response.ok) {
+      const data = await response.json()
+      if (data.results) {
+          capsules.value = data.results
+          currentPage.value = data.current_page
+          totalPages.value = data.num_pages
+          totalCount.value = data.count
+          hasNext.value = data.has_next
+          hasPrevious.value = data.has_previous
+      } else {
+          // Fallback if API returns array
+          capsules.value = data
+      }
+    } else {
+      console.error('Failed to fetch time capsules')
+    }
+  } catch (error) {
+    console.error('Error fetching time capsules:', error)
+  }
+}
+
+function changePage(page) {
+    if (page >= 1 && page <= totalPages.value) {
+        fetchCapsules(page)
+    }
+}
+
+function canDeleteCapsule(capsule) {
+  const currentNickname = localStorage.getItem('nickname') || 'Anonymous'
+  return capsule.user_info === currentNickname
+}
+
+function confirmDeleteCapsule(capsule) {
+  deleteModal.value = {
+    show: true,
+    capsule: capsule,
+    deleting: false
+  }
+}
+
+function cancelDeleteCapsule() {
+  if (deleteModal.value.deleting) return
+  deleteModal.value = {
+    show: false,
+    capsule: null,
+    deleting: false
+  }
+}
+
+async function deleteMyCapsule() {
+  if (!deleteModal.value.capsule) return
+
+  deleteModal.value.deleting = true
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/time-capsule/admin/delete/${deleteModal.value.capsule.id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (response.ok) {
+      // Remove from local list
+      capsules.value = capsules.value.filter(c => c.id !== deleteModal.value.capsule.id)
+      
+      // If page became empty and we are not on first page, go back
+      if (capsules.value.length === 0 && currentPage.value > 1) {
+          fetchCapsules(currentPage.value - 1)
+      } else {
+          // Refetch to get item from next page if available
+          fetchCapsules(currentPage.value)
+      }
+
+      // Reset deleting state before calling cancel
+      deleteModal.value.deleting = false
+      cancelDeleteCapsule()
+    } else {
+      const errorData = await response.json().catch(() => ({}))
+      alert(errorData.error || '삭제에 실패했습니다.')
+      deleteModal.value.deleting = false
+    }
+  } catch (error) {
+    console.error('Error deleting time capsule:', error)
+    alert('삭제 중 오류가 발생했습니다.')
+    deleteModal.value.deleting = false
+  }
+}
+
+function formatDate(isoString) {
+  if (!isoString) return '-'
+  return new Date(isoString).toLocaleString('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
 
 function toggleSecretVisibility() {
   showSecret.value = !showSecret.value
@@ -739,34 +1059,46 @@ async function copyEncryptedData() {
 async function saveTimeCapsule(encryptedMessage) {
   try {
     const nickname = localStorage.getItem('nickname') || 'Anonymous'
-    const response = await fetch(`${API_BASE_URL}/time-capsule/save`, {
+    const response = await fetch(`${API_BASE_URL}/api/time-capsule/save`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         encrypted_message: encryptedMessage,
+        bitcoin_address: publicKey.value,
         user_info: nickname
       }),
     })
-    
+
     if (response.ok) {
       const data = await response.json()
-      assignedAddress.value = data.bitcoin_address
+      return { success: true, data }
     } else {
-      console.error('Failed to save time capsule')
+      const errorData = await response.json().catch(() => ({}))
+      return { success: false, error: errorData.error || '저장에 실패했습니다' }
     }
   } catch (error) {
     console.error('Error saving time capsule:', error)
+    return { success: false, error: '네트워크 오류가 발생했습니다' }
   }
 }
 
 async function handleSave() {
   if (!encryptedHash.value) return
   saving.value = true
-  await saveTimeCapsule(encryptedHash.value)
+  errorMessage.value = ''
+
+  const result = await saveTimeCapsule(encryptedHash.value)
   saving.value = false
-  saved.value = true
+
+  if (result.success) {
+    saved.value = true
+    // Refresh the list after saving
+    fetchCapsules()
+  } else {
+    errorMessage.value = result.error
+  }
 }
 
 async function triggerImmediateComputation() {

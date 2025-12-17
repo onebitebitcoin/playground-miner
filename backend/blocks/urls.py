@@ -61,9 +61,11 @@ urlpatterns = [
     path('compatibility/prompt', views.compatibility_prompt_view, name='compatibility_prompt'),
     path('compatibility/admin/prompt', views.compatibility_admin_prompt_view, name='compatibility_admin_prompt'),
     path('compatibility/agent/generate', views.compatibility_agent_generate_view, name='compatibility_agent_generate'),
+    path('compatibility/agent/process-saju', views.process_saju_with_agent_view, name='compatibility_process_saju'),
     path('compatibility/quick-presets', views.compatibility_quick_presets_view, name='compatibility_quick_presets'),
     path('compatibility/admin/quick-presets', views.compatibility_admin_quick_presets_view, name='compatibility_admin_quick_presets'),
     path('compatibility/admin/quick-presets/<int:pk>', views.compatibility_admin_quick_preset_detail_view, name='compatibility_admin_quick_preset_detail'),
+    path('compatibility/admin/calculate-saju', views.calculate_saju_view, name='compatibility_calculate_saju'),
     # Compatibility analysis endpoints
     path('compatibility/analysis/save', views.compatibility_analysis_save_view, name='compatibility_analysis_save'),
     path('compatibility/analysis/list', views.compatibility_analysis_list_view, name='compatibility_analysis_list'),
@@ -83,4 +85,5 @@ urlpatterns = [
     path('time-capsule/save', views.time_capsule_save_view, name='time_capsule_save'),
     path('time-capsule/admin/list', views.admin_time_capsules_view, name='admin_time_capsules'),
     path('time-capsule/admin/update-coupon/<int:pk>', views.admin_time_capsule_update_coupon_view, name='admin_time_capsule_update_coupon'),
+    path('time-capsule/admin/delete/<int:pk>', views.admin_time_capsule_delete_view, name='admin_time_capsule_delete'),
 ]

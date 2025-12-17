@@ -264,6 +264,29 @@
                 :disabled="!isAdmin"
               />
             </label>
+            <label class="space-y-1 text-sm text-slate-600 md:col-span-2">
+              <div class="flex items-center justify-between">
+                <span class="font-medium text-slate-900">저장된 사주 데이터 (Markdown)</span>
+                <button
+                  type="button"
+                  class="text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+                  @click="handleCalculateSaju"
+                  :disabled="!isAdmin || calculatingSaju || !quickPresetForm.birthdate"
+                >
+                  {{ calculatingSaju ? '계산 중...' : '사주 데이터 자동 계산' }}
+                </button>
+              </div>
+              <textarea
+                v-model="quickPresetForm.stored_saju"
+                rows="6"
+                class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-mono focus:border-slate-900 focus:ring-0"
+                placeholder="사주 정보를 마크다운 형식으로 입력하세요."
+                :disabled="!isAdmin"
+              />
+              <p class="text-xs text-slate-500">
+                이 값이 존재하면 에이전트 요청 시 사주 계산 단계를 건너뛰거나, 참고 자료로 사용됩니다.
+              </p>
+            </label>
           </div>
           <div class="grid gap-4 md:grid-cols-3">
             <label class="space-y-1 text-sm text-slate-600 md:col-span-2">
@@ -338,7 +361,8 @@ import {
   updateCompatibilityAgentPrompt,
   createCompatibilityQuickPreset,
   updateCompatibilityQuickPreset,
-  deleteCompatibilityQuickPreset
+  deleteCompatibilityQuickPreset,
+  calculateSaju
 } from '../../services/compatibilityService'
 import { getCurrentUsername } from '../../utils/adminAuth'
 
@@ -376,6 +400,7 @@ const MODEL_OPTIONS = [
 const quickPresets = ref([])
 const quickPresetLoading = ref(true)
 const quickPresetSaving = ref(false)
+const calculatingSaju = ref(false)
 const editingQuickPresetId = ref(null)
 const quickPresetForm = ref(getEmptyQuickPresetForm())
 
@@ -387,6 +412,7 @@ function getEmptyQuickPresetForm() {
     birth_time: '',
     gender: '',
     image_url: '',
+    stored_saju: '',
     sort_order: '',
     is_active: true
   }
@@ -509,6 +535,7 @@ const startEditQuickPreset = (preset) => {
     birth_time: preset.birth_time || '',
     gender: preset.gender || '',
     image_url: preset.image_url || '',
+    stored_saju: preset.stored_saju || '',
     sort_order: preset.sort_order ?? '',
     is_active: preset.is_active !== false
   }
@@ -517,6 +544,35 @@ const startEditQuickPreset = (preset) => {
 const resetQuickPresetForm = () => {
   editingQuickPresetId.value = null
   quickPresetForm.value = getEmptyQuickPresetForm()
+}
+
+const handleCalculateSaju = async () => {
+  if (!quickPresetForm.value.birthdate) {
+    props.showError('생년월일을 입력해주세요.')
+    return
+  }
+  calculatingSaju.value = true
+  try {
+    const result = await calculateSaju({
+      birthdate: quickPresetForm.value.birthdate,
+      birthTime: quickPresetForm.value.birth_time
+    })
+    
+    // Format as Markdown
+    const p = result.pillars
+    const e = result.elements
+    let md = `### 사주 명식\n`
+    md += `- **생년월일**: ${result.birthdate} ${result.birth_time || ''}\n`
+    md += `- **사주**: ${p.year_pillar}(년) ${p.month_pillar}(월) ${p.day_pillar}(일) ${p.time_pillar || '알수없음'}(시)\n`
+    md += `- **오행**: 목${e.wood} 화${e.fire} 토${e.earth} 금${e.metal} 수${e.water}\n`
+    
+    quickPresetForm.value.stored_saju = md
+    props.showSuccess('사주 데이터를 계산했습니다.')
+  } catch (error) {
+    props.showError(error.message || '사주 계산에 실패했습니다.')
+  } finally {
+    calculatingSaju.value = false
+  }
 }
 
 const handleQuickPresetSubmit = async () => {
@@ -528,6 +584,7 @@ const handleQuickPresetSubmit = async () => {
     props.showError('이름과 생년월일은 필수입니다.')
     return
   }
+  
   quickPresetSaving.value = true
   try {
     const username = getCurrentUsername()
@@ -538,6 +595,7 @@ const handleQuickPresetSubmit = async () => {
       birth_time: quickPresetForm.value.birth_time || '',
       gender: quickPresetForm.value.gender || '',
       image_url: quickPresetForm.value.image_url || '',
+      stored_saju: quickPresetForm.value.stored_saju || '',
       is_active: quickPresetForm.value.is_active
     }
     if (quickPresetForm.value.sort_order !== '' && quickPresetForm.value.sort_order !== null) {

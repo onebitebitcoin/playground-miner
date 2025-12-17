@@ -601,7 +601,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue'
-import { fetchCompatibilityQuickPresets, generateCompatibilityNarrative, saveCompatibilityAnalysis } from '@/services/compatibilityService'
+import { fetchCompatibilityQuickPresets, generateCompatibilityNarrative, saveCompatibilityAnalysis, processSajuWithAgent } from '@/services/compatibilityService'
 
 const BITCOIN_HIGHLIGHTS = [
   {
@@ -955,6 +955,7 @@ function normalizeQuickPreset(preset, index = 0) {
     birthtime: preset.birth_time || preset.birthtime || '',
     gender: preset.gender || '',
     imageUrl: preset.image_url || preset.imageUrl || '',
+    storedSaju: preset.stored_saju || preset.storedSaju || '',
     assumeTimeUnknown: preset.assume_time_unknown ?? preset.assumeTimeUnknown ?? (!!(preset.birthdate || preset.birth_time || preset.birthtime) && !preset.birth_time && !preset.birthtime)
   }
 }
@@ -1316,8 +1317,13 @@ function normalizeTargetPayload() {
   return { year, month, day, time, gender: targetGender.value, name }
 }
 
-function applyQuickPreset(preset) {
+async function applyQuickPreset(preset) {
   if (!preset) return
+
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  console.log('🎯 [궁합] 사용자 프리셋 선택:', preset.label)
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
   selectedPresetId.value = preset.id || preset.label
   userName.value = preset.label || DEFAULT_USER_NAME
   gender.value = preset.gender || ''
@@ -1331,10 +1337,62 @@ function applyQuickPreset(preset) {
     birthtime.value = ''
     timeUnknown.value = !!preset.assumeTimeUnknown
   }
+
+  // Check if stored_saju exists
+  const hasStoredSaju = !!(preset.storedSaju && preset.storedSaju !== '{}')
+  console.log('📦 stored_saju 존재 여부:', hasStoredSaju)
+
+  if (hasStoredSaju) {
+    console.log('📚 DB에 저장된 사주 데이터 발견')
+    console.log('   - 데이터 길이:', preset.storedSaju.length, '자')
+    console.log('   - 미리보기:', preset.storedSaju.substring(0, 100) + '...')
+  } else {
+    console.log('🔢 저장된 사주 없음 - 생년월일로 계산 예정')
+    console.log('   - 생년월일:', preset.birthdate)
+    console.log('   - 태어난 시간:', preset.birthtime || '미상')
+  }
+
+  // Process saju with agent
+  try {
+    console.log('🤖 Agent 사주 처리 시작...')
+    const startTime = Date.now()
+
+    const result = await processSajuWithAgent({
+      storedSaju: preset.storedSaju || '',
+      name: preset.label || DEFAULT_USER_NAME,
+      birthdate: preset.birthdate || '',
+      birthTime: preset.birthtime || ''
+    })
+
+    const duration = Date.now() - startTime
+
+    console.log('✅ Agent 처리 완료 (' + duration + 'ms)')
+    console.log('   - 처리 방식:', result.type === 'summary' ? '📚 DB 요약' : '🔢 신규 계산')
+    console.log('   - 모델:', result.model)
+    console.log('   - 결과 길이:', result.summary.length, '자')
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log('📝 요약 결과:')
+    console.log(result.summary)
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+    if (result.summary) {
+      // Update description with agent summary
+      userDescription.value = result.summary
+    }
+  } catch (error) {
+    console.error('❌ Agent 사주 처리 실패:', error)
+    console.log('   - 기본 description 사용:', preset.description)
+    // Continue with preset application even if agent fails
+  }
 }
 
-function applyTargetQuickPreset(preset) {
+async function applyTargetQuickPreset(preset) {
   if (!preset) return
+
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  console.log('🎯 [궁합] 비교 대상 프리셋 선택:', preset.label)
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
   selectedTargetPresetId.value = preset.id || preset.label
   targetName.value = preset.label || DEFAULT_TARGET_NAME
   targetGender.value = preset.gender || ''
@@ -1347,6 +1405,53 @@ function applyTargetQuickPreset(preset) {
   } else {
     targetBirthtime.value = ''
     targetTimeUnknown.value = !!preset.assumeTimeUnknown
+  }
+
+  // Check if stored_saju exists
+  const hasStoredSaju = !!(preset.storedSaju && preset.storedSaju !== '{}')
+  console.log('📦 stored_saju 존재 여부:', hasStoredSaju)
+
+  if (hasStoredSaju) {
+    console.log('📚 DB에 저장된 사주 데이터 발견')
+    console.log('   - 데이터 길이:', preset.storedSaju.length, '자')
+    console.log('   - 미리보기:', preset.storedSaju.substring(0, 100) + '...')
+  } else {
+    console.log('🔢 저장된 사주 없음 - 생년월일로 계산 예정')
+    console.log('   - 생년월일:', preset.birthdate)
+    console.log('   - 태어난 시간:', preset.birthtime || '미상')
+  }
+
+  // Process saju with agent
+  try {
+    console.log('🤖 Agent 사주 처리 시작...')
+    const startTime = Date.now()
+
+    const result = await processSajuWithAgent({
+      storedSaju: preset.storedSaju || '',
+      name: preset.label || DEFAULT_TARGET_NAME,
+      birthdate: preset.birthdate || '',
+      birthTime: preset.birthtime || ''
+    })
+
+    const duration = Date.now() - startTime
+
+    console.log('✅ Agent 처리 완료 (' + duration + 'ms)')
+    console.log('   - 처리 방식:', result.type === 'summary' ? '📚 DB 요약' : '🔢 신규 계산')
+    console.log('   - 모델:', result.model)
+    console.log('   - 결과 길이:', result.summary.length, '자')
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log('📝 요약 결과:')
+    console.log(result.summary)
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+    if (result.summary) {
+      // Update description with agent summary
+      targetDescription.value = result.summary
+    }
+  } catch (error) {
+    console.error('❌ Agent 사주 처리 실패:', error)
+    console.log('   - 기본 description 사용:', preset.description)
+    // Continue with preset application even if agent fails
   }
 }
 

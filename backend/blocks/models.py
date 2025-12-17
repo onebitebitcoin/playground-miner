@@ -806,6 +806,7 @@ class CompatibilityQuickPreset(models.Model):
     birth_time = models.TimeField(null=True, blank=True)
     gender = models.CharField(max_length=10, blank=True, default='')  # 'male', 'female', etc.
     image_url = models.URLField(blank=True, default='')
+    stored_saju = models.TextField(blank=True, default='')
     sort_order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -830,6 +831,7 @@ class CompatibilityQuickPreset(models.Model):
             'birth_time': self.birth_time.isoformat() if self.birth_time else None,
             'gender': self.gender,
             'image_url': self.image_url,
+            'stored_saju': self.stored_saju,
             'sort_order': self.sort_order,
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat(),
@@ -840,9 +842,10 @@ class CompatibilityQuickPreset(models.Model):
 class TimeCapsule(models.Model):
     """Stores encrypted time capsule messages and associated metadata"""
     encrypted_message = models.TextField()
-    bitcoin_address = models.CharField(max_length=100)
+    bitcoin_address = models.CharField(max_length=100, default='')
     user_info = models.TextField(blank=True, default='')  # Can store JSON or simple string
     is_coupon_used = models.BooleanField(default=False)
+    mnemonic = models.ForeignKey('Mnemonic', on_delete=models.SET_NULL, null=True, blank=True, related_name='time_capsules')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -855,8 +858,9 @@ class TimeCapsule(models.Model):
         return {
             'id': self.id,
             'encrypted_message': self.encrypted_message,
-            'bitcoin_address': self.bitcoin_address,
             'user_info': self.user_info,
             'is_coupon_used': self.is_coupon_used,
+            'mnemonic_id': self.mnemonic_id,
+            'has_mnemonic': self.mnemonic_id is not None,
             'created_at': self.created_at.isoformat(),
         }

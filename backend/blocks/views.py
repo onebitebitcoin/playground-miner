@@ -6851,9 +6851,13 @@ def _ensure_default_compatibility_presets():
 def compatibility_quick_presets_view(request):
     if request.method != 'GET':
         return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
-    _ensure_default_compatibility_presets()
-    presets = CompatibilityQuickPreset.objects.filter(is_active=True).order_by('sort_order', 'id')
-    return JsonResponse({'ok': True, 'presets': [preset.as_dict() for preset in presets]})
+    try:
+        _ensure_default_compatibility_presets()
+        presets = CompatibilityQuickPreset.objects.filter(is_active=True).order_by('sort_order', 'id')
+        return JsonResponse({'ok': True, 'presets': [preset.as_dict() for preset in presets]})
+    except Exception as e:
+        logger.exception('[Compatibility] quick-presets view failed')
+        return JsonResponse({'ok': False, 'error': str(e)}, status=500)
 
 
 @csrf_exempt
@@ -6901,6 +6905,7 @@ def compatibility_admin_quick_presets_view(request):
             birth_time=birth_time,
             gender=(payload.get('gender') or '').strip(),
             image_url=(payload.get('image_url') or '').strip(),
+            stored_saju=payload.get('stored_saju', ''),
             sort_order=int(sort_order),
             is_active=bool(payload.get('is_active', True)),
         )
@@ -6948,6 +6953,8 @@ def compatibility_admin_quick_preset_detail_view(request, pk):
             preset.description = payload['description'].strip()
         if 'image_url' in payload and payload['image_url'] is not None:
             preset.image_url = payload['image_url'].strip()
+        if 'stored_saju' in payload:
+            preset.stored_saju = payload['stored_saju']
         if 'sort_order' in payload and payload['sort_order'] is not None:
             preset.sort_order = int(payload['sort_order'])
         if 'is_active' in payload:
@@ -6977,6 +6984,180 @@ def finance_quick_requests_view(request):
         'ok': True,
         'requests': [qr.as_dict() for qr in requests_qs]
     })
+
+
+@csrf_exempt
+def calculate_saju_view(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+
+    payload = _load_json_body(request)
+    if payload is None:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    birthdate_str = (payload.get('birthdate') or '').strip()
+    if not birthdate_str:
+        return JsonResponse({'ok': False, 'error': 'birthdate is required'}, status=400)
+
+    try:
+        bd = datetime.strptime(birthdate_str, '%Y-%m-%d').date()
+    except ValueError:
+        return JsonResponse({'ok': False, 'error': 'birthdate format must be YYYY-MM-DD'}, status=400)
+
+    birth_time_str = (payload.get('birth_time') or '').strip()
+    hour = None
+    minute = None
+    if birth_time_str:
+        try:
+            bt = datetime.strptime(birth_time_str, '%H:%M').time()
+            hour = bt.hour
+            minute = bt.minute
+        except ValueError:
+            pass # Treat as unknown time
+
+    try:
+        pillars = calculate_saju(bd.year, bd.month, bd.day, hour, minute)
+        elements = analyze_elements(pillars)
+
+        return JsonResponse({
+            'ok': True,
+            'saju': {
+                'pillars': pillars,
+                'elements': elements,
+                'birthdate': birthdate_str,
+                'birth_time': birth_time_str
+            }
+        })
+    except Exception as e:
+        logger.error(f"Saju calculation failed: {e}")
+        return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
+
+@csrf_exempt
+def process_saju_with_agent_view(request):
+    """Process saju information: either summarize existing stored_saju or generate new saju from birthdate."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+
+    payload = _load_json_body(request)
+    if payload is None:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    stored_saju = (payload.get('stored_saju') or '').strip()
+    name = (payload.get('name') or '').strip()
+    birthdate_str = (payload.get('birthdate') or '').strip()
+    birth_time_str = (payload.get('birth_time') or '').strip()
+
+    logger.info('[궁합 사주 처리] 시작 - name=%s, has_stored_saju=%s, birthdate=%s',
+                name, bool(stored_saju), birthdate_str)
+
+    try:
+        prompt = _get_or_create_default_compatibility_prompt()
+
+        if stored_saju:
+            # Case 1: Summarize existing stored_saju
+            logger.info('[궁합 사주 처리] 📚 DB에서 가져온 stored_saju 사용 - name=%s, stored_saju_length=%d',
+                       name, len(stored_saju))
+            logger.info('[궁합 사주 처리] stored_saju 미리보기: %s...', stored_saju[:200])
+
+            user_context = f"""다음은 {name}님의 사주 정보입니다. 이 정보를 150자 이내로 핵심만 간결하게 요약해주세요.
+
+{stored_saju}
+
+**요약 지침:**
+1. 사주 전문 용어는 사용하지 마세요
+2. 비트코인 투자와 관련된 핵심 성향만 추출하세요
+3. 150자 이내로 작성하세요
+4. 마크다운 헤딩이나 불렛 포인트 없이 간결한 텍스트로만 작성하세요"""
+
+            logger.info('[궁합 사주 처리] 🤖 Agent 요약 요청 시작 - name=%s', name)
+            response = _run_compatibility_agent(prompt, user_context, temperature=0.5)
+
+            if isinstance(response, tuple):
+                content, provider, model = response
+                response = {'content': content, 'provider': provider, 'model': model}
+
+            logger.info('[궁합 사주 처리] ✅ Agent 요약 완료 - name=%s, model=%s, summary_length=%d',
+                       name, response.get('model', ''), len(response.get('content', '')))
+            logger.info('[궁합 사주 처리] 요약 결과: %s', response.get('content', ''))
+
+            return JsonResponse({
+                'ok': True,
+                'summary': response.get('content', '').strip(),
+                'model': response.get('model', ''),
+                'type': 'summary'
+            })
+        elif birthdate_str:
+            # Case 2: Generate new saju from birthdate
+            logger.info('[궁합 사주 처리] 🔢 stored_saju 없음 - 생년월일로 사주 계산 시작 - name=%s, birthdate=%s',
+                       name, birthdate_str)
+
+            try:
+                bd = datetime.strptime(birthdate_str, '%Y-%m-%d').date()
+            except ValueError:
+                return JsonResponse({'ok': False, 'error': 'birthdate format must be YYYY-MM-DD'}, status=400)
+
+            hour = None
+            minute = None
+            if birth_time_str:
+                try:
+                    bt = datetime.strptime(birth_time_str, '%H:%M').time()
+                    hour = bt.hour
+                    minute = bt.minute
+                except ValueError:
+                    pass  # Treat as unknown time
+
+            pillars = calculate_saju(bd.year, bd.month, bd.day, hour, minute)
+            elements = analyze_elements(pillars)
+
+            logger.info('[궁합 사주 처리] 사주 계산 완료 - name=%s, pillars=%s, elements=%s',
+                       name, pillars, elements)
+
+            # Build context for agent
+            user_context = f"""다음은 {name}님의 사주 정보입니다:
+
+**생년월일**: {birthdate_str} {birth_time_str or '(시간 미상)'}
+**사주 명식**: {pillars['year_pillar']}(년) {pillars['month_pillar']}(월) {pillars['day_pillar']}(일) {pillars.get('time_pillar', '알수없음')}(시)
+**오행**: 목{elements['wood']} 화{elements['fire']} 토{elements['earth']} 금{elements['metal']} 수{elements['water']}
+
+이 사주를 바탕으로 {name}님의 비트코인 투자 성향을 150자 이내로 분석해주세요.
+
+**작성 지침:**
+1. 사주 전문 용어는 사용하지 마세요
+2. 비트코인 투자와 관련된 핵심 성향만 추출하세요
+3. 150자 이내로 작성하세요
+4. 마크다운 헤딩이나 불렛 포인트 없이 간결한 텍스트로만 작성하세요"""
+
+            logger.info('[궁합 사주 처리] 🤖 Agent 분석 요청 시작 - name=%s', name)
+            response = _run_compatibility_agent(prompt, user_context, temperature=0.7)
+
+            if isinstance(response, tuple):
+                content, provider, model = response
+                response = {'content': content, 'provider': provider, 'model': model}
+
+            logger.info('[궁합 사주 처리] ✅ Agent 분석 완료 - name=%s, model=%s, analysis_length=%d',
+                       name, response.get('model', ''), len(response.get('content', '')))
+            logger.info('[궁합 사주 처리] 분석 결과: %s', response.get('content', ''))
+
+            return JsonResponse({
+                'ok': True,
+                'summary': response.get('content', '').strip(),
+                'saju': {
+                    'pillars': pillars,
+                    'elements': elements,
+                    'birthdate': birthdate_str,
+                    'birth_time': birth_time_str
+                },
+                'model': response.get('model', ''),
+                'type': 'generated'
+            })
+        else:
+            logger.warning('[궁합 사주 처리] ❌ stored_saju와 birthdate 둘 다 없음 - name=%s', name)
+            return JsonResponse({'ok': False, 'error': 'Either stored_saju or birthdate is required'}, status=400)
+
+    except Exception as e:
+        logger.exception('[궁합 사주 처리] ❌ 에러 발생 - name=%s', name)
+        return JsonResponse({'ok': False, 'error': str(e)}, status=500)
 
 
 @csrf_exempt
@@ -7462,31 +7643,24 @@ def time_capsule_save_view(request):
     try:
         data = json.loads(request.body)
         encrypted_message = data.get('encrypted_message')
+        bitcoin_address = data.get('bitcoin_address', '')
         user_info = data.get('user_info', '')
-        
+
         if not encrypted_message:
             return JsonResponse({'error': 'encrypted_message is required'}, status=400)
-            
-        # Generate a random Bitcoin address
-        try:
-            from bitcoinlib.keys import Key
-            k = Key()
-            address = k.address()
-        except Exception as e:
-            logger.warning(f"Failed to generate real address, using mock: {e}")
-            # Fallback to a mock address
-            address = '1' + uuid.uuid4().hex[:33]
 
         capsule = TimeCapsule.objects.create(
             encrypted_message=encrypted_message,
-            bitcoin_address=address,
+            bitcoin_address=bitcoin_address,
             user_info=user_info
         )
-        
+
         return JsonResponse(capsule.as_dict())
     except Exception as e:
         logger.error(f"Error saving time capsule: {e}")
         return JsonResponse({'error': str(e)}, status=500)
+
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 @csrf_exempt
 def admin_time_capsules_view(request):
@@ -7494,25 +7668,64 @@ def admin_time_capsules_view(request):
         return JsonResponse({'error': 'Method not allowed'}, status=405)
         
     capsules = TimeCapsule.objects.all().order_by('-created_at')
-    return JsonResponse([c.as_dict() for c in capsules], safe=False)
+    
+    page_number = request.GET.get('page')
+    if page_number:
+        paginator = Paginator(capsules, 20)  # Show 20 contacts per page.
+        try:
+            page_obj = paginator.page(page_number)
+        except PageNotAnInteger:
+            page_obj = paginator.page(1)
+        except EmptyPage:
+            page_obj = paginator.page(paginator.num_pages)
+            
+        data = {
+            'results': [c.as_dict() for c in page_obj],
+            'count': paginator.count,
+            'num_pages': paginator.num_pages,
+            'current_page': page_obj.number,
+            'has_next': page_obj.has_next(),
+            'has_previous': page_obj.has_previous(),
+        }
+        return JsonResponse(data)
+    else:
+        return JsonResponse([c.as_dict() for c in capsules], safe=False)
 
 @csrf_exempt
 def admin_time_capsule_update_coupon_view(request, pk):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-        
+
     try:
         capsule = TimeCapsule.objects.get(pk=pk)
         data = json.loads(request.body)
         is_coupon_used = data.get('is_coupon_used')
-        
+
         if is_coupon_used is not None:
             capsule.is_coupon_used = bool(is_coupon_used)
             capsule.save()
-            
+
         return JsonResponse(capsule.as_dict())
     except TimeCapsule.DoesNotExist:
         return JsonResponse({'error': 'Time capsule not found'}, status=404)
     except Exception as e:
         logger.error(f"Error updating time capsule: {e}")
         return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+def admin_time_capsule_delete_view(request, pk):
+    if request.method != 'DELETE':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    try:
+        capsule = TimeCapsule.objects.get(pk=pk)
+        capsule_id = capsule.id
+        capsule.delete()
+
+        return JsonResponse({'ok': True, 'deleted_id': capsule_id})
+    except TimeCapsule.DoesNotExist:
+        return JsonResponse({'error': 'Time capsule not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Error deleting time capsule: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
+

@@ -250,3 +250,54 @@ export async function deleteCompatibilityQuickPreset({ username, id, signal } = 
   }
   return true
 }
+
+export async function calculateSaju({ birthdate, birthTime, signal } = {}) {
+  const body = { birthdate }
+  if (birthTime) {
+    body.birth_time = birthTime
+  }
+
+  const response = await fetch(`${BASE_URL}/api/compatibility/admin/calculate-saju`, {
+    method: 'POST',
+    headers: defaultHeaders,
+    body: JSON.stringify(body),
+    signal
+  })
+  const data = await handleResponse(response)
+  if (!data.ok) {
+    throw new Error(data.error || '사주 계산에 실패했습니다.')
+  }
+  return data.saju
+}
+
+export async function processSajuWithAgent({ storedSaju, name, birthdate, birthTime, signal } = {}) {
+  const body = {}
+
+  if (storedSaju) {
+    body.stored_saju = storedSaju
+  }
+
+  if (name) {
+    body.name = name
+  }
+
+  if (birthdate) {
+    body.birthdate = birthdate
+  }
+
+  if (birthTime) {
+    body.birth_time = birthTime
+  }
+
+  const response = await fetch(`${BASE_URL}/api/compatibility/agent/process-saju`, {
+    method: 'POST',
+    headers: defaultHeaders,
+    body: JSON.stringify(body),
+    signal
+  })
+  const data = await handleResponse(response)
+  if (!data.ok) {
+    throw new Error(data.error || '사주 처리에 실패했습니다.')
+  }
+  return data
+}

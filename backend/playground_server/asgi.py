@@ -1,9 +1,12 @@
 import asyncio
 import json
+import os
 import threading
 from pathlib import Path
 from urllib.parse import parse_qs
 from queue import Empty
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'playground_server.settings')
 
 from django.core.asgi import get_asgi_application
 from django.db.models import Max
