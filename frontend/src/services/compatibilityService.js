@@ -22,10 +22,13 @@ async function handleResponse(response) {
   return payload
 }
 
-export async function fetchCompatibilityAgentPrompt({ username, signal } = {}) {
+export async function fetchCompatibilityAgentPrompt({ username, agentKey = 'saju_bitcoin', signal } = {}) {
   const params = new URLSearchParams()
   if (username) {
     params.append('username', username)
+  }
+  if (agentKey) {
+    params.append('agent_key', agentKey)
   }
   const qs = params.toString() ? `?${params.toString()}` : ''
 
@@ -41,12 +44,13 @@ export async function fetchCompatibilityAgentPrompt({ username, signal } = {}) {
   return data.prompt
 }
 
-export async function updateCompatibilityAgentPrompt({ username, name, description, systemPrompt, modelName, isActive, signal } = {}) {
+export async function updateCompatibilityAgentPrompt({ username, agentKey = 'saju_bitcoin', name, description, systemPrompt, modelName, isActive, signal } = {}) {
   if (!username) {
     throw new Error('관리자 인증 정보가 필요합니다.')
   }
 
   const body = { username }
+  if (agentKey) body.agent_key = agentKey
   if (name !== undefined) body.name = name
   if (description !== undefined) body.description = description
   if (systemPrompt !== undefined) body.system_prompt = systemPrompt
@@ -66,14 +70,16 @@ export async function updateCompatibilityAgentPrompt({ username, name, descripti
   return data.prompt
 }
 
-export async function resetCompatibilityAgentPrompt({ username, signal } = {}) {
+export async function resetCompatibilityAgentPrompt({ username, agentKey = 'saju_bitcoin', signal } = {}) {
   if (!username) {
     throw new Error('관리자 인증 정보가 필요합니다.')
   }
+  const body = { username, action: 'reset' }
+  if (agentKey) body.agent_key = agentKey
   const response = await fetch(`${BASE_URL}/api/compatibility/admin/prompt`, {
     method: 'POST',
     headers: defaultHeaders,
-    body: JSON.stringify({ username, action: 'reset' }),
+    body: JSON.stringify(body),
     signal
   })
   const data = await handleResponse(response)
@@ -83,8 +89,13 @@ export async function resetCompatibilityAgentPrompt({ username, signal } = {}) {
   return data.prompt
 }
 
-export async function fetchPublicCompatibilityPrompt({ signal } = {}) {
-  const response = await fetch(`${BASE_URL}/api/compatibility/prompt`, {
+export async function fetchPublicCompatibilityPrompt({ agentKey = 'saju_bitcoin', signal } = {}) {
+  const params = new URLSearchParams()
+  if (agentKey) {
+    params.append('agent_key', agentKey)
+  }
+  const qs = params.toString() ? `?${params.toString()}` : ''
+  const response = await fetch(`${BASE_URL}/api/compatibility/prompt${qs}`, {
     method: 'GET',
     headers: defaultHeaders,
     signal
@@ -109,11 +120,80 @@ export async function fetchCompatibilityQuickPresets({ signal } = {}) {
   return data.presets || []
 }
 
-export async function generateCompatibilityNarrative({ context, data, temperature, signal } = {}) {
+export async function fetchCompatibilityReportTemplates({ signal } = {}) {
+  const response = await fetch(`${BASE_URL}/api/compatibility/report-templates`, {
+    method: 'GET',
+    headers: defaultHeaders,
+    signal
+  })
+  const data = await handleResponse(response)
+  if (!data.ok) {
+    throw new Error(data.error || '리포트 템플릿을 불러오지 못했습니다.')
+  }
+  return data.templates || []
+}
+
+export async function updateCompatibilityReportTemplate({ username, key, label, description, content, sortOrder, signal } = {}) {
+  if (!username) {
+    throw new Error('관리자 인증 정보가 필요합니다.')
+  }
+  if (!key) {
+    throw new Error('템플릿 key가 필요합니다.')
+  }
+  const body = { username }
+  if (label !== undefined) body.label = label
+  if (description !== undefined) body.description = description
+  if (content !== undefined) body.content = content
+  if (sortOrder !== undefined) body.sort_order = sortOrder
+
+  const response = await fetch(`${BASE_URL}/api/compatibility/admin/report-templates/${encodeURIComponent(key)}`, {
+    method: 'PATCH',
+    headers: defaultHeaders,
+    body: JSON.stringify(body),
+    signal
+  })
+  const data = await handleResponse(response)
+  if (!data.ok) {
+    throw new Error(data.error || '리포트 템플릿을 업데이트하지 못했습니다.')
+  }
+  return data.template
+}
+
+export async function runCompatibilityAgent({ agentKey = 'saju_bitcoin', context, data, temperature, signal } = {}) {
   const body = {}
+  if (agentKey) body.agent_key = agentKey
   if (context !== undefined) body.context = context
   if (data !== undefined) body.data = data
   if (temperature !== undefined) body.temperature = temperature
+
+  if (context !== undefined) {
+    const contextLength = typeof context === 'string' ? context.length : 0
+    console.log(
+      `%c[Agent:${agentKey}] ▶️ context 준비됨 (길이: ${contextLength}자)`,
+      'color:#2563eb;font-weight:bold;'
+    )
+    if (contextLength) {
+      const previewLimit = 800
+      const truncated = contextLength > previewLimit
+      const preview = truncated ? context.slice(0, previewLimit) : context
+      console.groupCollapsed(`[Agent:${agentKey}] ⤷ context 내용${truncated ? ` (앞 ${previewLimit}자)` : ''}`)
+      console.log(preview)
+      if (truncated) {
+        console.log(`… (추가 ${contextLength - previewLimit}자 생략)`)
+      }
+      console.groupEnd()
+    }
+  } else {
+    console.log(`[Agent:${agentKey}] ▶️ context 없음`)
+  }
+  if (data !== undefined) {
+    const keyPreview = data && typeof data === 'object' ? Object.keys(data) : []
+    console.log(
+      `[Agent:${agentKey}] ▶️ 구조화 데이터 전달 (키: ${keyPreview.join(', ') || '없음'})`
+    )
+  }
+
+  const startedAt = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now()
 
   const response = await fetch(`${BASE_URL}/api/compatibility/agent/generate`, {
     method: 'POST',
@@ -121,7 +201,33 @@ export async function generateCompatibilityNarrative({ context, data, temperatur
     body: JSON.stringify(body),
     signal
   })
-  return handleResponse(response)
+  try {
+    const payload = await handleResponse(response)
+    const duration = (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now()) - startedAt
+    if (payload?.ok) {
+      const narrative = payload?.narrative || ''
+      const preview = narrative.replace(/\s+/g, ' ').trim().slice(0, 160)
+      console.log(
+        `%c[Agent:${agentKey}] ✅ 응답 수신 (${Math.round(duration)}ms)`,
+        'color:#16a34a;font-weight:bold;',
+        {
+          provider: payload.provider || payload.model || 'unknown',
+          length: narrative.length,
+          preview
+        }
+      )
+    } else {
+      console.warn(
+        `[Agent:${agentKey}] ⚠️ 응답 이상 (${Math.round(duration)}ms):`,
+        payload?.error || '알 수 없는 오류'
+      )
+    }
+    return payload
+  } catch (error) {
+    const duration = (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now()) - startedAt
+    console.error(`[Agent:${agentKey}] ❌ 호출 실패 (${Math.round(duration)}ms):`, error?.message || error)
+    throw error
+  }
 }
 
 export async function saveCompatibilityAnalysis({ birthdate, birthTime, gender, element, zodiac, yinYang, score, rating, narrative, signal } = {}) {
@@ -249,55 +355,4 @@ export async function deleteCompatibilityQuickPreset({ username, id, signal } = 
     throw new Error(data.error || '빠른 설정을 삭제하지 못했습니다.')
   }
   return true
-}
-
-export async function calculateSaju({ birthdate, birthTime, signal } = {}) {
-  const body = { birthdate }
-  if (birthTime) {
-    body.birth_time = birthTime
-  }
-
-  const response = await fetch(`${BASE_URL}/api/compatibility/admin/calculate-saju`, {
-    method: 'POST',
-    headers: defaultHeaders,
-    body: JSON.stringify(body),
-    signal
-  })
-  const data = await handleResponse(response)
-  if (!data.ok) {
-    throw new Error(data.error || '사주 계산에 실패했습니다.')
-  }
-  return data.saju
-}
-
-export async function processSajuWithAgent({ storedSaju, name, birthdate, birthTime, signal } = {}) {
-  const body = {}
-
-  if (storedSaju) {
-    body.stored_saju = storedSaju
-  }
-
-  if (name) {
-    body.name = name
-  }
-
-  if (birthdate) {
-    body.birthdate = birthdate
-  }
-
-  if (birthTime) {
-    body.birth_time = birthTime
-  }
-
-  const response = await fetch(`${BASE_URL}/api/compatibility/agent/process-saju`, {
-    method: 'POST',
-    headers: defaultHeaders,
-    body: JSON.stringify(body),
-    signal
-  })
-  const data = await handleResponse(response)
-  if (!data.ok) {
-    throw new Error(data.error || '사주 처리에 실패했습니다.')
-  }
-  return data
 }

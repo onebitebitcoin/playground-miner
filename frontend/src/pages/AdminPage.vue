@@ -1,6 +1,6 @@
 <template>
-  <div class="min-h-screen bg-gray-50 px-3 py-4 sm:px-6">
-    <div class="max-w-6xl mx-auto">
+  <div class="min-h-screen bg-gray-50 px-3 py-4 sm:px-6 lg:px-12 xl:px-16">
+    <div class="mx-auto w-full">
       <!-- Header -->
       <div class="mb-6 md:mb-8">
         <h1 class="text-2xl md:text-3xl font-bold text-gray-900 mb-2">관리자 페이지</h1>

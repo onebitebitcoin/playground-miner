@@ -61,11 +61,11 @@ urlpatterns = [
     path('compatibility/prompt', views.compatibility_prompt_view, name='compatibility_prompt'),
     path('compatibility/admin/prompt', views.compatibility_admin_prompt_view, name='compatibility_admin_prompt'),
     path('compatibility/agent/generate', views.compatibility_agent_generate_view, name='compatibility_agent_generate'),
-    path('compatibility/agent/process-saju', views.process_saju_with_agent_view, name='compatibility_process_saju'),
+    path('compatibility/report-templates', views.compatibility_report_templates_view, name='compatibility_report_templates'),
+    path('compatibility/admin/report-templates/<str:key>', views.compatibility_admin_report_template_detail_view, name='compatibility_admin_report_template_detail'),
     path('compatibility/quick-presets', views.compatibility_quick_presets_view, name='compatibility_quick_presets'),
     path('compatibility/admin/quick-presets', views.compatibility_admin_quick_presets_view, name='compatibility_admin_quick_presets'),
     path('compatibility/admin/quick-presets/<int:pk>', views.compatibility_admin_quick_preset_detail_view, name='compatibility_admin_quick_preset_detail'),
-    path('compatibility/admin/calculate-saju', views.calculate_saju_view, name='compatibility_calculate_saju'),
     # Compatibility analysis endpoints
     path('compatibility/analysis/save', views.compatibility_analysis_save_view, name='compatibility_analysis_save'),
     path('compatibility/analysis/list', views.compatibility_analysis_list_view, name='compatibility_analysis_list'),
@@ -84,6 +84,11 @@ urlpatterns = [
     # Time Capsule endpoints
     path('time-capsule/save', views.time_capsule_save_view, name='time_capsule_save'),
     path('time-capsule/admin/list', views.admin_time_capsules_view, name='admin_time_capsules'),
+    path('time-capsule/admin/mnemonic', views.admin_time_capsule_mnemonic_view, name='admin_time_capsule_mnemonic'),
+    path('time-capsule/admin/broadcast-settings', views.admin_time_capsule_broadcast_settings_view, name='admin_time_capsule_broadcast_settings'),
+    path('time-capsule/admin/broadcast-test', views.admin_time_capsule_broadcast_test_view, name='admin_time_capsule_broadcast_test'),
+    path('time-capsule/admin/fee-estimates', views.admin_time_capsule_fee_estimates_view, name='admin_time_capsule_fee_estimates'),
+    path('time-capsule/admin/assign-address/<int:pk>', views.admin_time_capsule_assign_address_view, name='admin_time_capsule_assign_address'),
     path('time-capsule/admin/update-coupon/<int:pk>', views.admin_time_capsule_update_coupon_view, name='admin_time_capsule_update_coupon'),
     path('time-capsule/admin/delete/<int:pk>', views.admin_time_capsule_delete_view, name='admin_time_capsule_delete'),
 ]

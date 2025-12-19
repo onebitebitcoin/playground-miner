@@ -34,8 +34,8 @@ kill_processes() {
         sleep 1
     fi
     
-    # 포트 8000, 5173 사용 프로세스 확인 및 종료
-    for port in 8000 5173; do
+    # 포트 6273, 5173 사용 프로세스 확인 및 종료
+    for port in 6273 5173; do
         PID=$(lsof -ti:$port 2>/dev/null)
         if [ ! -z "$PID" ]; then
             echo -e "${RED}⚠️  포트 $port 사용 중인 프로세스 (PID: $PID) 종료 중...${NC}"
@@ -91,7 +91,7 @@ main() {
     check_dependencies
     
     # 백그라운드에서 Django 서버 실행
-    echo -e "${BLUE}🐍 Django 백엔드 서버 시작 중... (포트: 8000)${NC}"
+    echo -e "${BLUE}🐍 Django 백엔드 서버 시작 중... (포트: 6273)${NC}"
     cd backend
     
     # 가상환경 활성화 후 Django 서버 실행
@@ -103,8 +103,8 @@ main() {
         python3 manage.py migrate --run-syncdb >/dev/null 2>&1 || true
 
         # Django 서버 백그라운드 실행
-        # nohup python3 manage.py runserver 0.0.0.0:8000 > ../backend.log 2>&1 &
-        nohup uvicorn playground_server.asgi:application --host 0.0.0.0 --port 8000 --reload > ../backend.log 2>&1 &
+        # nohup python3 manage.py runserver 0.0.0.0:6273 > ../backend.log 2>&1 &
+        nohup uvicorn playground_server.asgi:application --host 0.0.0.0 --port 6273 --reload > ../backend.log 2>&1 &
     else
         echo -e "${RED}❌ 가상환경을 찾을 수 없습니다.${NC}"
         exit 1
@@ -125,7 +125,7 @@ main() {
     # Frontend 서버 실행 (포그라운드)
     echo -e "${BLUE}⚡ Vite 프론트엔드 서버 시작 중... (포트: 5173)${NC}"
     echo -e "${GREEN}🌍 프론트엔드: http://localhost:5173${NC}"
-    echo -e "${GREEN}🔧 백엔드 API: http://localhost:8000${NC}"
+    echo -e "${GREEN}🔧 백엔드 API: http://localhost:6273${NC}"
     echo ""
     echo -e "${YELLOW}📝 백엔드 로그는 backend.log 파일에서 확인할 수 있습니다.${NC}"
     echo -e "${YELLOW}🛑 종료하려면 Ctrl+C를 누르세요.${NC}"
@@ -146,7 +146,7 @@ main() {
         fi
         
         # 추가로 포트 기반 프로세스 종료
-        for port in 8000 5173; do
+        for port in 6273 5173; do
             PID=$(lsof -ti:$port 2>/dev/null)
             if [ ! -z "$PID" ]; then
                 kill -9 $PID 2>/dev/null || true

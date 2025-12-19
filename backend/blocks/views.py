@@ -9,12 +9,13 @@ import hashlib
 import uuid
 from datetime import datetime, timedelta
 import requests
+from urllib.parse import urlparse
 from . import yahoo_finance
 try:
     from pykrx import stock as pykrx_stock
 except ImportError:  # pragma: no cover - optional dependency
     pykrx_stock = None
-from django.db import transaction
+from django.db import transaction, OperationalError, ProgrammingError
 from django.db.models import Max, Q
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -36,7 +37,9 @@ from .models import (
     AssetPriceCache,
     CompatibilityAgentPrompt,
     CompatibilityQuickPreset,
+    CompatibilityReportTemplate,
     TimeCapsule,
+    TimeCapsuleBroadcastSetting,
 )
 from django.db import connection
 from django.conf import settings
@@ -44,7 +47,15 @@ from .broadcast import broadcaster
 from .finance_stream import finance_stream_manager
 from .btc import derive_bip84_addresses, fetch_blockstream_balances, calc_total_sats, derive_bip84_account_zpub, derive_master_fingerprint, _normalize_mnemonic
 from mnemonic import Mnemonic as MnemonicValidator
-from .prompts import COMPATIBILITY_AGENT_DEFAULT_PROMPT
+from .prompts import (
+    COMPATIBILITY_AGENT_DEFAULT_PROMPT,
+    STORY_EXTRACTOR_AGENT_PROMPT,
+    SAJU_AGENT_ANALYSIS_PROMPT,
+    COMPATIBILITY_PAIR_AGENT_PROMPT,
+    HIGHLIGHT_ANALYZER_PROMPT,
+)
+
+TIME_CAPSULE_MNEMONIC_USERNAME = 'timecapsule'
 
 
 def _call_openai_chat_model(model_name, system_prompt, user_prompt, temperature=0.7, top_p=1.0, presence_penalty=0.0, frequency_penalty=0.0, max_tokens=None):
@@ -1092,17 +1103,17 @@ def save_mnemonic_view(request):
         return JsonResponse({'ok': False, 'error': f'Validation failed: {e}'}, status=400)
 
     try:
-        # Save mnemonic - it will be encrypted automatically by the model
+        # Save mnemonic directly (stored in plaintext for this project)
         mnemonic_obj = Mnemonic.objects.create(
             username=username,
-            mnemonic=mnemonic,  # This will be encrypted by the model's save method
+            mnemonic=mnemonic,
             is_assigned=False
         )
 
         return JsonResponse({
             'ok': True,
             'id': mnemonic_obj.id,
-            'message': 'Mnemonic saved and encrypted successfully'
+            'message': 'Mnemonic이 저장되었습니다.'
         })
 
     except Exception as e:
@@ -1440,35 +1451,50 @@ def validate_mnemonic_view(request):
     except Exception:
         return JsonResponse({'ok': True, 'valid': False, 'word_count': len(words), 'normalized': mnorm, 'unknown_words': unknown})
 
+def _extract_username(request):
+    """Best-effort extraction of username from query params, body, headers or cookies."""
+    username = ''
+
+    # Prefer explicit username in query/form params
+    if request.method == 'GET':
+        username = request.GET.get('username', '')
+    else:
+        username = request.POST.get('username', '')
+        if not username:
+            try:
+                content_type = (request.META.get('CONTENT_TYPE') or '').lower()
+                if 'application/json' in content_type:
+                    if not hasattr(request, '_cached_body'):
+                        request._cached_body = request.body
+                    data = json.loads(request._cached_body.decode('utf-8') or '{}')
+                    username = data.get('username', '')
+            except Exception:
+                username = ''
+
+    # Allow custom headers for programmatic access
+    if not username:
+        username = request.META.get('HTTP_X_ADMIN_USERNAME', '') or request.META.get('HTTP_X_USERNAME', '')
+
+    # Fall back to cookie
+    if not username:
+        username = request.COOKIES.get('username', '')
+
+    return (username or '').strip()
+
 
 def is_admin(request):
     """Check if user has admin privileges (supports JSON POST bodies and cookies)."""
-    username = ''
+    username = _extract_username(request)
+    if username.lower() == 'admin':
+        return True
 
-    # Try to get username from cookie first
-    username = request.COOKIES.get('username', '')
-
-    # If not in cookie, try GET/POST parameters
-    if not username:
-        if request.method == 'GET':
-            username = request.GET.get('username', '')
-        else:
-            # Try form-encoded first
-            username = request.POST.get('username', '')
-            # If missing and JSON body is used, parse it
-            if not username:
-                try:
-                    content_type = (request.META.get('CONTENT_TYPE') or '').lower()
-                    if 'application/json' in content_type:
-                        # Cache the body to allow multiple reads
-                        if not hasattr(request, '_cached_body'):
-                            request._cached_body = request.body
-                        data = json.loads(request._cached_body.decode('utf-8') or '{}')
-                        username = data.get('username', '')
-                except Exception:
-                    username = ''
-
-    return username == 'admin'
+    logger.warning(
+        'Admin access denied for username=%s path=%s query=%s',
+        username or '[empty]',
+        request.path,
+        request.META.get('QUERY_STRING', ''),
+    )
+    return False
 
 
 @csrf_exempt
@@ -6360,24 +6386,186 @@ def admin_agent_prompt_detail_view(request, agent_type):
     return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
 
 
-def _get_or_create_default_compatibility_prompt():
-    """Ensure the compatibility agent prompt exists."""
-    prompt, _ = CompatibilityAgentPrompt.objects.get_or_create(
-        agent_key='saju_bitcoin',
-        defaults={
+DEFAULT_COMPATIBILITY_AGENT_KEY = 'saju_bitcoin'
+
+DEFAULT_COMPATIBILITY_REPORT_TEMPLATES = [
+    {
+        'key': 'user_vs_bitcoin',
+        'label': '개별 사용자와 비트코인의 궁합',
+        'description': '단일 사용자의 비트코인 궁합 리포트 지침',
+        'sort_order': 1,
+        'content': """{{SUBJECT_NAME}}의 사주와 비트코인 궁합을 분석하세요.{{SUBJECT_EXTRA}}
+
+**작성 지침 (반드시 준수):**
+
+1. **분량**: 800~1000자. 시스템 프롬프트의 요구(비트코인 커리어·재물·인간관계·전략)를 빠짐없이 반영하고, 문단 사이 공백 없이 촘촘히 작성하세요.
+2. **문체**: 모든 문장은 ‘~입니다’ 체로 작성하고, 각 항목의 핵심 문장은 **제목: 내용** 형태의 문장으로 시작하세요.
+
+3. **출력 템플릿(순서 고정, 마크다운 엄수)**:
+   - ## 프로필 브리핑
+     - 일간: …
+     - 오행 앵커: …
+     - 직업/역할: …
+   - ## 커리어 & 재물
+     - 불릿 2~3개로 비트코인 커리어와 재물 흐름 서술
+   - ## 인간관계
+     - 협업/대인관계 리듬과 리스크를 불릿 2개로 정리
+   - ## 비트코인 전략 체크리스트
+     - 1. …
+     - 2. …
+     - 3. …
+
+4. **근거 & 어휘**: 저장된 사주·스토리·오행 분포에서 최소 2가지 근거를 명시하고, 한자 대신 풀이형 표현을 사용하세요.
+
+5. **금지 사항**: 인사말, 잡담, “모르겠다” 류 표현, 표 생략, 섹션 누락 금지.""",
+    },
+    {
+        'key': 'team_vs_bitcoin',
+        'label': '두 사용자의 비트코인 궁합',
+        'description': '두 사람의 팀 리포트 지침',
+        'sort_order': 2,
+        'content': """{{USER_NAME}}와(과) {{TARGET_NAME}}가 함께 비트코인 투자할 때의 팀 궁합을 분석하세요.{{TEAM_EXTRA}}
+
+**작성 지침 (반드시 준수):**
+
+1. **분량**: 700~950자. 두 사람의 사주 앵커, 투자 습관, 협업 리듬, 전략 포지셔닝을 모두 다루세요.
+2. **문체**: 모든 문장을 ‘~입니다’ 체로 작성하고, 각 문단의 첫 문장은 '제목: 내용' 구조로 요약하세요.
+
+3. **출력 템플릿(순서 고정, 마크다운 엄수)**:
+   - ## 팀 특성 & 호흡
+     - 사용자 이름과 비교 대상 이름을 모두 언급하는 불릿 2~3개
+   - ## 커리어 & 재물 시너지
+     - 불릿 2개, 각 문장에 어느 사람이 어떤 역할을 맡는지 명시
+   - ## 인간관계/커뮤니케이션
+     - 불릿 2개, 갈등 방지법 포함
+   - ## 팀 비트코인 전략 체크리스트
+     - 1. 역할 분담 규칙
+     - 2. 의사결정 루틴
+     - 3. 리스크 통제법
+
+4. **근거**: 각 섹션에서 최소 한 번씩 두 사람의 사주 요약 또는 스토리에서 직접 언급한 특징을 인용하세요.
+
+5. **금지 사항**: 인사말, 모호한 표현, 생략표, 섹션 누락 금지.""",
+    },
+]
+
+
+def _resolve_openai_model_name():
+    """Return the raw OpenAI model name (without provider prefix)."""
+    value = getattr(settings, 'COMPATIBILITY_OPENAI_MODEL', 'gpt-5-mini')
+    if ':' in value:
+        _, value = value.split(':', 1)
+    return value.strip()
+
+
+def _get_default_compatibility_prompt_config(agent_key):
+    normalized_key = (agent_key or DEFAULT_COMPATIBILITY_AGENT_KEY).strip()
+    base_model = _resolve_openai_model_name()
+    default_model_name = f'openai:{base_model}'
+    defaults = {
+        'saju_bitcoin': {
             'name': '비트코인 궁합 에이전트',
             'description': '비트코인을 디지털 금으로 바라보는 사주 분석 전문가',
             'system_prompt': COMPATIBILITY_AGENT_DEFAULT_PROMPT.strip(),
-            'model_name': getattr(settings, 'COMPATIBILITY_OPENAI_MODEL', 'gpt-5-mini'),
+            'model_name': default_model_name,
             'is_active': True,
             'temperature': 0.2,
             'top_p': 0.9,
             'presence_penalty': 0.6,
             'frequency_penalty': 0.4,
             'max_tokens': 700,
-        }
+        },
+        'story_extractor': {
+            'name': '스토리 추출 에이전트',
+            'description': '선택된 인물의 알려진 행보와 특징을 서사형으로 정리합니다.',
+            'system_prompt': STORY_EXTRACTOR_AGENT_PROMPT.strip(),
+            'model_name': default_model_name,
+            'is_active': True,
+            'temperature': 0.6,
+            'top_p': 0.9,
+            'presence_penalty': 0.1,
+            'frequency_penalty': 0.1,
+            'max_tokens': 600,
+        },
+        'saju_analysis': {
+            'name': '사주 추론 에이전트',
+            'description': '인물 서사를 기반으로 투자 성향과 오행 앵커를 추론합니다.',
+            'system_prompt': SAJU_AGENT_ANALYSIS_PROMPT.strip(),
+            'model_name': default_model_name,
+            'is_active': True,
+            'temperature': 0.4,
+            'top_p': 0.85,
+            'presence_penalty': 0.2,
+            'frequency_penalty': 0.2,
+            'max_tokens': 700,
+        },
+        'pair_compatibility': {
+            'name': '두 사람 궁합 에이전트',
+            'description': '두 명의 사주 요약을 비교해 관계 전략을 제시합니다.',
+            'system_prompt': COMPATIBILITY_PAIR_AGENT_PROMPT.strip(),
+            'model_name': default_model_name,
+            'is_active': True,
+            'temperature': 0.5,
+            'top_p': 0.9,
+            'presence_penalty': 0.3,
+            'frequency_penalty': 0.3,
+            'max_tokens': 800,
+        },
+        'highlight_story': {
+            'name': '사주 하이라이트 에이전트',
+            'description': '사주 분석 결과에서 핵심 구절만 형광펜으로 표시합니다.',
+            'system_prompt': HIGHLIGHT_ANALYZER_PROMPT.strip(),
+            'model_name': default_model_name,
+            'is_active': True,
+            'temperature': 0.3,
+            'top_p': 0.8,
+            'presence_penalty': 0.0,
+            'frequency_penalty': 0.0,
+            'max_tokens': 800,
+        },
+    }
+
+    if normalized_key in defaults:
+        return defaults[normalized_key]
+
+    fallback = dict(defaults['saju_bitcoin'])
+    fallback.update({
+        'name': f'{normalized_key} 에이전트',
+        'description': '사용자 정의 궁합 에이전트',
+    })
+    return fallback
+
+
+def _get_or_create_compatibility_prompt(agent_key=None):
+    """Ensure the requested compatibility agent prompt exists."""
+    resolved_key = (agent_key or DEFAULT_COMPATIBILITY_AGENT_KEY).strip()
+    prompt, _ = CompatibilityAgentPrompt.objects.get_or_create(
+        agent_key=resolved_key,
+        defaults=_get_default_compatibility_prompt_config(resolved_key)
     )
+    _ensure_prompt_default_model(prompt)
     return prompt
+
+
+def _ensure_prompt_default_model(prompt):
+    """Force compatibility prompts to use the default OpenAI GPT-5 Mini model."""
+    if not prompt:
+        return
+    desired_model = f'openai:{_resolve_openai_model_name()}'
+    if prompt.model_name != desired_model:
+        prompt.model_name = desired_model
+        prompt.save(update_fields=['model_name', 'updated_at'])
+
+
+def _ensure_default_report_templates():
+    try:
+        for template in DEFAULT_COMPATIBILITY_REPORT_TEMPLATES:
+            CompatibilityReportTemplate.objects.get_or_create(
+                key=template['key'],
+                defaults=template,
+            )
+    except (OperationalError, ProgrammingError):
+        logger.warning('[Compatibility] Report template table unavailable - default seeding skipped')
 
 
 def _run_compatibility_agent(prompt, user_context, temperature=0.7):
@@ -6395,7 +6583,7 @@ def _run_compatibility_agent(prompt, user_context, temperature=0.7):
     resolved_temperature = temperature
 
     # Determine provider based on model_name_from_prompt
-    default_provider = getattr(settings, 'COMPATIBILITY_DEFAULT_PROVIDER', 'gemini').lower()
+    default_provider = getattr(settings, 'COMPATIBILITY_DEFAULT_PROVIDER', 'openai').lower()
     provider = default_provider
     model_name = model_name_from_prompt # Use model name from prompt config
     
@@ -6440,8 +6628,9 @@ def _run_compatibility_agent(prompt, user_context, temperature=0.7):
             if 'ResourceExhausted' in str(type(gemini_error)) or '429' in error_str or 'quota' in error_str.lower():
                 logger.warning('[Compatibility] Gemini API quota exceeded, falling back to OpenAI')
                 try:
+                    fallback_openai_model = _resolve_openai_model_name()
                     return _call_openai_chat_model(
-                        '', # Use default model as it's a fallback
+                        fallback_openai_model,
                         prompt.system_prompt,
                         user_context,
                         temperature=resolved_temperature,
@@ -6484,8 +6673,9 @@ def _run_compatibility_agent(prompt, user_context, temperature=0.7):
             error_str = str(gemini_error)
             if 'ResourceExhausted' in str(type(gemini_error)) or '429' in error_str or 'quota' in error_str.lower():
                 logger.warning('[Compatibility] Gemini API quota exceeded, falling back to OpenAI')
+                fallback_openai_model = _resolve_openai_model_name()
                 return _call_openai_chat_model(
-                    '', # Use default model as it's a fallback
+                    fallback_openai_model,
                     prompt.system_prompt,
                     user_context,
                     temperature=resolved_temperature,
@@ -6504,7 +6694,8 @@ def compatibility_prompt_view(request):
     if request.method != 'GET':
         return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
 
-    prompt = _get_or_create_default_compatibility_prompt()
+    agent_key = request.GET.get('agent_key') or DEFAULT_COMPATIBILITY_AGENT_KEY
+    prompt = _get_or_create_compatibility_prompt(agent_key)
     return JsonResponse({
         'ok': True,
         'prompt': prompt.as_dict()
@@ -6517,14 +6708,18 @@ def compatibility_admin_prompt_view(request):
     if not is_admin(request):
         return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
 
-    prompt = _get_or_create_default_compatibility_prompt()
+    base_agent_key = request.GET.get('agent_key') or DEFAULT_COMPATIBILITY_AGENT_KEY
 
     if request.method == 'GET':
+        prompt = _get_or_create_compatibility_prompt(base_agent_key)
         return JsonResponse({'ok': True, 'prompt': prompt.as_dict()})
 
     payload = _load_json_body(request)
     if payload is None:
         return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    agent_key = payload.get('agent_key') or base_agent_key
+    prompt = _get_or_create_compatibility_prompt(agent_key)
 
     if request.method in ['PUT', 'PATCH']:
         updated_fields = []
@@ -6560,11 +6755,14 @@ def compatibility_admin_prompt_view(request):
     if request.method == 'POST':
         action = (payload.get('action') or '').lower()
         if action == 'reset':
-            prompt.system_prompt = COMPATIBILITY_AGENT_DEFAULT_PROMPT.strip()
-            prompt.is_active = True
-            prompt.model_name = getattr(settings, 'COMPATIBILITY_OPENAI_MODEL', 'gpt-5-mini')
+            defaults = _get_default_compatibility_prompt_config(agent_key)
+            prompt.name = defaults['name']
+            prompt.description = defaults['description']
+            prompt.system_prompt = defaults['system_prompt']
+            prompt.is_active = defaults['is_active']
+            prompt.model_name = defaults['model_name']
             prompt.version += 1
-            prompt.save(update_fields=['system_prompt', 'is_active', 'model_name', 'version', 'updated_at'])
+            prompt.save(update_fields=['name', 'description', 'system_prompt', 'is_active', 'model_name', 'version', 'updated_at'])
             return JsonResponse({'ok': True, 'prompt': prompt.as_dict()})
         return JsonResponse({'ok': False, 'error': 'Unsupported action'}, status=400)
 
@@ -6583,18 +6781,21 @@ def compatibility_agent_generate_view(request):
     if payload is None:
         return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
 
+    agent_key = (payload.get('agent_key') or DEFAULT_COMPATIBILITY_AGENT_KEY).strip()
+
     # 1. Extract context or build it from structured data
     context = (payload.get('context') or '').strip()
-    structured = payload.get('data') # Expecting { 'birthdate': 'YYYY-MM-DD', 'birth_time': 'HH:MM', ... }
-    
-    # 2. Perform explicit Saju calculation if birthdate is present
-    saju_info = ""
-    if structured and 'birthdate' in structured:
+    structured = payload.get('data')  # Expecting { 'birthdate': 'YYYY-MM-DD', 'birth_time': 'HH:MM', ... }
+
+    if not context and structured:
+        context = json.dumps(structured, ensure_ascii=False, indent=2)
+
+    # 2. Perform explicit Saju calculation if requested for the Bitcoin agent
+    if agent_key == 'saju_bitcoin' and structured and 'birthdate' in structured:
         try:
             bd_str = structured['birthdate']
             bt_str = structured.get('birth_time')
-            
-            # Parse date
+
             bd = datetime.strptime(bd_str, '%Y-%m-%d').date()
             hour = None
             minute = None
@@ -6605,11 +6806,10 @@ def compatibility_agent_generate_view(request):
                     minute = bt.minute
                 except ValueError:
                     pass
-            
-            # Calculate Pillars
+
             pillars = calculate_saju(bd.year, bd.month, bd.day, hour, minute)
             elements = analyze_elements(pillars)
-            
+
             saju_info = (
                 f"\n\n[시스템 자동 계산된 사주 정보 - 이 정보를 최우선으로 신뢰하세요]\n"
                 f"양력 생년월일: {bd_str} {bt_str if bt_str else ''}\n"
@@ -6620,17 +6820,14 @@ def compatibility_agent_generate_view(request):
                 f"오행 분포: 목({elements['wood']}) 화({elements['fire']}) 토({elements['earth']}) 금({elements['metal']}) 수({elements['water']})\n"
                 f"일간(Day Master): {pillars['day_pillar'][0]} (이것이 본원입니다)\n"
             )
-            
-            # If context was empty, build a simple one. If existed, append.
+
             if not context:
                 context = json.dumps(structured, ensure_ascii=False, indent=2)
-            
-            # Prepend the calculated info to context so the agent sees it first and authoritative
+
             context = saju_info + "\n" + context
-            
+
         except Exception as e:
             logger.error(f"[Compatibility] Saju calculation failed: {e}")
-            # Continue without calculated info if fails
 
     if not context:
         return JsonResponse({'ok': False, 'error': 'context is required'}, status=400)
@@ -6643,19 +6840,19 @@ def compatibility_agent_generate_view(request):
 
     temperature = max(0, min(1.2, temperature))
 
-    prompt = _get_or_create_default_compatibility_prompt()
+    prompt = _get_or_create_compatibility_prompt(agent_key)
     if not prompt.is_active:
         return JsonResponse({'ok': False, 'error': 'Compatibility agent is inactive.'}, status=503)
 
     try:
-        logger.info('[Compatibility] 에이전트 요청 시작 - context_len=%d', len(context))
-        logger.info('[Compatibility] System Prompt Preview: %s...', prompt.system_prompt[:100].replace('\n', ' '))
+        logger.info('[Compatibility:%s] 에이전트 요청 시작 - context_len=%d', agent_key, len(context))
+        logger.info('[Compatibility:%s] System Prompt Preview: %s...', agent_key, prompt.system_prompt[:100].replace('\n', ' '))
         narrative, provider, model_used = _run_compatibility_agent(prompt, context, temperature)
     except ValueError as exc:
-        logger.warning('[Compatibility] 에이전트 입력 오류: %s', exc)
+        logger.warning('[Compatibility:%s] 에이전트 입력 오류: %s', agent_key, exc)
         return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
     except Exception as exc:  # pragma: no cover - network failures
-        logger.exception("Compatibility agent request failed")
+        logger.exception("[Compatibility:%s] Agent request failed", agent_key)
         error_msg = str(exc)
         # Gemini 할당량 초과 에러 처리
         if 'ResourceExhausted' in str(type(exc)) or '429' in error_msg or 'quota' in error_msg.lower():
@@ -6679,6 +6876,7 @@ def compatibility_agent_generate_view(request):
         'provider': provider,
         'model': model_used,
         'prompt_version': prompt.version,
+        'agent_key': agent_key,
     })
 
 
@@ -6848,6 +7046,68 @@ def _ensure_default_compatibility_presets():
 
 
 @csrf_exempt
+def compatibility_report_templates_view(request):
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+
+    try:
+        _ensure_default_report_templates()
+        key_filter = (request.GET.get('key') or '').strip()
+        templates = CompatibilityReportTemplate.objects.all().order_by('sort_order', 'id')
+        if key_filter:
+            templates = templates.filter(key=key_filter)
+
+        payload = [template.as_dict() for template in templates]
+    except (OperationalError, ProgrammingError):
+        logger.warning('[Compatibility] Report template table missing - returning empty list')
+        payload = []
+
+    return JsonResponse({'ok': True, 'templates': payload})
+
+
+@csrf_exempt
+def compatibility_admin_report_template_detail_view(request, key):
+    if not is_admin(request):
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+
+    try:
+        _ensure_default_report_templates()
+        template = CompatibilityReportTemplate.objects.get(key=key)
+    except (OperationalError, ProgrammingError):
+        return JsonResponse({'ok': False, 'error': 'Report template storage unavailable. Run migrations?'}, status=500)
+    except CompatibilityReportTemplate.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'Template not found'}, status=404)
+
+    if request.method == 'GET':
+        return JsonResponse({'ok': True, 'template': template.as_dict()})
+
+    if request.method in ['PUT', 'PATCH']:
+        payload = _load_json_body(request)
+        if payload is None:
+            return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+        updated_fields = []
+        if 'label' in payload and payload['label'] is not None:
+            template.label = payload['label'].strip()
+            updated_fields.append('label')
+        if 'description' in payload and payload['description'] is not None:
+            template.description = payload['description'].strip()
+            updated_fields.append('description')
+        if 'content' in payload and payload['content'] is not None:
+            template.content = payload['content']
+            updated_fields.append('content')
+        if 'sort_order' in payload and payload['sort_order'] is not None:
+            template.sort_order = int(payload['sort_order'])
+            updated_fields.append('sort_order')
+
+        if updated_fields:
+            template.save(update_fields=updated_fields + ['updated_at'])
+        return JsonResponse({'ok': True, 'template': template.as_dict()})
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
 def compatibility_quick_presets_view(request):
     if request.method != 'GET':
         return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
@@ -6905,7 +7165,6 @@ def compatibility_admin_quick_presets_view(request):
             birth_time=birth_time,
             gender=(payload.get('gender') or '').strip(),
             image_url=(payload.get('image_url') or '').strip(),
-            stored_saju=payload.get('stored_saju', ''),
             sort_order=int(sort_order),
             is_active=bool(payload.get('is_active', True)),
         )
@@ -6953,8 +7212,6 @@ def compatibility_admin_quick_preset_detail_view(request, pk):
             preset.description = payload['description'].strip()
         if 'image_url' in payload and payload['image_url'] is not None:
             preset.image_url = payload['image_url'].strip()
-        if 'stored_saju' in payload:
-            preset.stored_saju = payload['stored_saju']
         if 'sort_order' in payload and payload['sort_order'] is not None:
             preset.sort_order = int(payload['sort_order'])
         if 'is_active' in payload:
@@ -6985,179 +7242,6 @@ def finance_quick_requests_view(request):
         'requests': [qr.as_dict() for qr in requests_qs]
     })
 
-
-@csrf_exempt
-def calculate_saju_view(request):
-    if request.method != 'POST':
-        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
-
-    payload = _load_json_body(request)
-    if payload is None:
-        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
-
-    birthdate_str = (payload.get('birthdate') or '').strip()
-    if not birthdate_str:
-        return JsonResponse({'ok': False, 'error': 'birthdate is required'}, status=400)
-
-    try:
-        bd = datetime.strptime(birthdate_str, '%Y-%m-%d').date()
-    except ValueError:
-        return JsonResponse({'ok': False, 'error': 'birthdate format must be YYYY-MM-DD'}, status=400)
-
-    birth_time_str = (payload.get('birth_time') or '').strip()
-    hour = None
-    minute = None
-    if birth_time_str:
-        try:
-            bt = datetime.strptime(birth_time_str, '%H:%M').time()
-            hour = bt.hour
-            minute = bt.minute
-        except ValueError:
-            pass # Treat as unknown time
-
-    try:
-        pillars = calculate_saju(bd.year, bd.month, bd.day, hour, minute)
-        elements = analyze_elements(pillars)
-
-        return JsonResponse({
-            'ok': True,
-            'saju': {
-                'pillars': pillars,
-                'elements': elements,
-                'birthdate': birthdate_str,
-                'birth_time': birth_time_str
-            }
-        })
-    except Exception as e:
-        logger.error(f"Saju calculation failed: {e}")
-        return JsonResponse({'ok': False, 'error': str(e)}, status=500)
-
-
-@csrf_exempt
-def process_saju_with_agent_view(request):
-    """Process saju information: either summarize existing stored_saju or generate new saju from birthdate."""
-    if request.method != 'POST':
-        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
-
-    payload = _load_json_body(request)
-    if payload is None:
-        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
-
-    stored_saju = (payload.get('stored_saju') or '').strip()
-    name = (payload.get('name') or '').strip()
-    birthdate_str = (payload.get('birthdate') or '').strip()
-    birth_time_str = (payload.get('birth_time') or '').strip()
-
-    logger.info('[궁합 사주 처리] 시작 - name=%s, has_stored_saju=%s, birthdate=%s',
-                name, bool(stored_saju), birthdate_str)
-
-    try:
-        prompt = _get_or_create_default_compatibility_prompt()
-
-        if stored_saju:
-            # Case 1: Summarize existing stored_saju
-            logger.info('[궁합 사주 처리] 📚 DB에서 가져온 stored_saju 사용 - name=%s, stored_saju_length=%d',
-                       name, len(stored_saju))
-            logger.info('[궁합 사주 처리] stored_saju 미리보기: %s...', stored_saju[:200])
-
-            user_context = f"""다음은 {name}님의 사주 정보입니다. 이 정보를 150자 이내로 핵심만 간결하게 요약해주세요.
-
-{stored_saju}
-
-**요약 지침:**
-1. 사주 전문 용어는 사용하지 마세요
-2. 비트코인 투자와 관련된 핵심 성향만 추출하세요
-3. 150자 이내로 작성하세요
-4. 마크다운 헤딩이나 불렛 포인트 없이 간결한 텍스트로만 작성하세요"""
-
-            logger.info('[궁합 사주 처리] 🤖 Agent 요약 요청 시작 - name=%s', name)
-            response = _run_compatibility_agent(prompt, user_context, temperature=0.5)
-
-            if isinstance(response, tuple):
-                content, provider, model = response
-                response = {'content': content, 'provider': provider, 'model': model}
-
-            logger.info('[궁합 사주 처리] ✅ Agent 요약 완료 - name=%s, model=%s, summary_length=%d',
-                       name, response.get('model', ''), len(response.get('content', '')))
-            logger.info('[궁합 사주 처리] 요약 결과: %s', response.get('content', ''))
-
-            return JsonResponse({
-                'ok': True,
-                'summary': response.get('content', '').strip(),
-                'model': response.get('model', ''),
-                'type': 'summary'
-            })
-        elif birthdate_str:
-            # Case 2: Generate new saju from birthdate
-            logger.info('[궁합 사주 처리] 🔢 stored_saju 없음 - 생년월일로 사주 계산 시작 - name=%s, birthdate=%s',
-                       name, birthdate_str)
-
-            try:
-                bd = datetime.strptime(birthdate_str, '%Y-%m-%d').date()
-            except ValueError:
-                return JsonResponse({'ok': False, 'error': 'birthdate format must be YYYY-MM-DD'}, status=400)
-
-            hour = None
-            minute = None
-            if birth_time_str:
-                try:
-                    bt = datetime.strptime(birth_time_str, '%H:%M').time()
-                    hour = bt.hour
-                    minute = bt.minute
-                except ValueError:
-                    pass  # Treat as unknown time
-
-            pillars = calculate_saju(bd.year, bd.month, bd.day, hour, minute)
-            elements = analyze_elements(pillars)
-
-            logger.info('[궁합 사주 처리] 사주 계산 완료 - name=%s, pillars=%s, elements=%s',
-                       name, pillars, elements)
-
-            # Build context for agent
-            user_context = f"""다음은 {name}님의 사주 정보입니다:
-
-**생년월일**: {birthdate_str} {birth_time_str or '(시간 미상)'}
-**사주 명식**: {pillars['year_pillar']}(년) {pillars['month_pillar']}(월) {pillars['day_pillar']}(일) {pillars.get('time_pillar', '알수없음')}(시)
-**오행**: 목{elements['wood']} 화{elements['fire']} 토{elements['earth']} 금{elements['metal']} 수{elements['water']}
-
-이 사주를 바탕으로 {name}님의 비트코인 투자 성향을 150자 이내로 분석해주세요.
-
-**작성 지침:**
-1. 사주 전문 용어는 사용하지 마세요
-2. 비트코인 투자와 관련된 핵심 성향만 추출하세요
-3. 150자 이내로 작성하세요
-4. 마크다운 헤딩이나 불렛 포인트 없이 간결한 텍스트로만 작성하세요"""
-
-            logger.info('[궁합 사주 처리] 🤖 Agent 분석 요청 시작 - name=%s', name)
-            response = _run_compatibility_agent(prompt, user_context, temperature=0.7)
-
-            if isinstance(response, tuple):
-                content, provider, model = response
-                response = {'content': content, 'provider': provider, 'model': model}
-
-            logger.info('[궁합 사주 처리] ✅ Agent 분석 완료 - name=%s, model=%s, analysis_length=%d',
-                       name, response.get('model', ''), len(response.get('content', '')))
-            logger.info('[궁합 사주 처리] 분석 결과: %s', response.get('content', ''))
-
-            return JsonResponse({
-                'ok': True,
-                'summary': response.get('content', '').strip(),
-                'saju': {
-                    'pillars': pillars,
-                    'elements': elements,
-                    'birthdate': birthdate_str,
-                    'birth_time': birth_time_str
-                },
-                'model': response.get('model', ''),
-                'type': 'generated'
-            })
-        else:
-            logger.warning('[궁합 사주 처리] ❌ stored_saju와 birthdate 둘 다 없음 - name=%s', name)
-            return JsonResponse({'ok': False, 'error': 'Either stored_saju or birthdate is required'}, status=400)
-
-    except Exception as e:
-        logger.exception('[궁합 사주 처리] ❌ 에러 발생 - name=%s', name)
-        return JsonResponse({'ok': False, 'error': str(e)}, status=500)
 
 
 @csrf_exempt
@@ -7635,6 +7719,240 @@ def admin_price_cache_detail_view(request, pk):
 # Time Capsule Views
 # ------------------------------------------------------------------------------
 
+
+def _get_time_capsule_mnemonic():
+    """Return the mnemonic reserved for admin time capsule operations."""
+    mnemonic_obj = (
+        Mnemonic.objects
+        .filter(username=TIME_CAPSULE_MNEMONIC_USERNAME)
+        .exclude(mnemonic__isnull=True)
+        .exclude(mnemonic='')
+        .order_by('-id')
+        .first()
+    )
+    if mnemonic_obj:
+        mnemonic_value = (mnemonic_obj.mnemonic or '').strip()
+        # Treat obviously invalid values (e.g., base64 blobs) as missing so admins can recreate.
+        if ' ' not in mnemonic_value:
+            return None
+    return mnemonic_obj
+
+
+def _get_time_capsule_broadcast_setting():
+    """Return the singleton broadcast setting row (creating it if needed)."""
+    setting, _ = TimeCapsuleBroadcastSetting.objects.get_or_create(
+        pk=1,
+        defaults={
+            'fullnode_host': DEFAULT_BROADCAST_NODE['host'],
+            'fullnode_port': DEFAULT_BROADCAST_NODE['port'],
+        }
+    )
+    normalized_host = (setting.fullnode_host or '').strip()
+    if (
+        not normalized_host
+        or normalized_host in DEPRECATED_BROADCAST_HOSTS
+        or not setting.fullnode_port
+    ):
+        setting.fullnode_host = DEFAULT_BROADCAST_NODE['host']
+        setting.fullnode_port = DEFAULT_BROADCAST_NODE['port']
+        setting.save(update_fields=['fullnode_host', 'fullnode_port', 'updated_at'])
+    return setting
+
+
+@csrf_exempt
+def admin_time_capsule_mnemonic_view(request):
+    """Create or fetch the dedicated time capsule mnemonic."""
+    if request.method == 'GET':
+        mnemonic_obj = _get_time_capsule_mnemonic()
+        if not mnemonic_obj:
+            return JsonResponse({'ok': True, 'has_mnemonic': False})
+        mnemonic_plain = mnemonic_obj.get_mnemonic()
+
+        return JsonResponse({
+            'ok': True,
+            'has_mnemonic': True,
+            'mnemonic_id': mnemonic_obj.id,
+            'mnemonic': mnemonic_plain,
+            'assigned_count': mnemonic_obj.time_capsules.count(),
+            'next_address_index': int(mnemonic_obj.next_address_index or 0),
+        })
+
+    if request.method == 'POST':
+        if _get_time_capsule_mnemonic():
+            return JsonResponse({'ok': False, 'error': '이미 니모닉이 존재합니다.'}, status=400)
+        try:
+            generator = MnemonicValidator('english')
+            mnemonic_plain = generator.generate(strength=128)
+            mnemonic_obj = Mnemonic.objects.create(
+                username=TIME_CAPSULE_MNEMONIC_USERNAME,
+                mnemonic=mnemonic_plain,
+                is_assigned=True,
+                assigned_to='timecapsule',
+                next_address_index=0,
+            )
+            return JsonResponse({
+                'ok': True,
+                'mnemonic_id': mnemonic_obj.id,
+                'mnemonic': mnemonic_plain,
+                'next_address_index': 0,
+            })
+        except Exception as exc:
+            logger.error('Failed to generate time capsule mnemonic: %s', exc)
+            return JsonResponse({'ok': False, 'error': '니모닉 생성에 실패했습니다.'}, status=500)
+
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def admin_time_capsule_broadcast_settings_view(request):
+    """Manage full node connection info used for time capsule broadcasting."""
+
+    setting = _get_time_capsule_broadcast_setting()
+
+    if request.method == 'GET':
+        return JsonResponse({
+            'ok': True,
+            'settings': setting.as_dict(),
+            'recommended_nodes': RECOMMENDED_BROADCAST_NODES,
+        })
+
+    if request.method not in ['POST', 'PUT', 'PATCH']:
+        return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+    payload = _load_json_body(request)
+    if payload is None:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    host = (payload.get('fullnode_host') or '').strip()
+    port = payload.get('fullnode_port')
+
+    stored_value, hostname, scheme, normalized_port = _parse_broadcast_target(host, port)
+
+    if not hostname:
+        return JsonResponse({'ok': False, 'error': '풀노드 IP 또는 호스트를 입력하세요.'}, status=400)
+    if normalized_port is None or normalized_port <= 0 or normalized_port > 65535:
+        return JsonResponse({'ok': False, 'error': '유효한 포트 번호를 입력하세요.'}, status=400)
+
+    setting.fullnode_host = stored_value
+    setting.fullnode_port = normalized_port
+    setting.save(update_fields=['fullnode_host', 'fullnode_port', 'updated_at'])
+
+    return JsonResponse({
+        'ok': True,
+        'settings': setting.as_dict(),
+        'recommended_nodes': RECOMMENDED_BROADCAST_NODES,
+        'scheme': scheme,
+    })
+
+
+@csrf_exempt
+def admin_time_capsule_broadcast_test_view(request):
+    """Test connectivity to the configured Bitcoin node via REST chain info."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+    payload = _load_json_body(request) or {}
+
+    setting = _get_time_capsule_broadcast_setting()
+    host = (payload.get('fullnode_host') or setting.fullnode_host or '').strip()
+    port = payload.get('fullnode_port') or setting.fullnode_port
+
+    stored_value, hostname, scheme, normalized_port = _parse_broadcast_target(host, port)
+
+    if not hostname or not normalized_port:
+        logger.warning('Broadcast test rejected due to missing host/port (host=%s, port=%s)', host, port)
+        return JsonResponse({'ok': False, 'error': '먼저 풀노드 IP와 포트를 설정하세요.'}, status=400)
+
+    if normalized_port <= 0 or normalized_port > 65535:
+        logger.warning('Broadcast test rejected due to invalid port: %s', normalized_port)
+        return JsonResponse({'ok': False, 'error': '유효한 포트 번호를 입력하세요.'}, status=400)
+
+    url = f"{scheme}://{hostname}:{normalized_port}/rest/chaininfo.json"
+    logger.info('Attempting time capsule broadcast test via %s', url)
+    try:
+        resp = requests.get(url, timeout=5)
+        resp.raise_for_status()
+        info = resp.json()
+        height = info.get('blocks') or info.get('headers')
+        logger.info('Broadcast test succeeded for %s (height=%s chain=%s)', url, height, info.get('chain'))
+        return JsonResponse({
+            'ok': True,
+            'block_height': height,
+            'chain': info.get('chain', ''),
+            'raw': info,
+        })
+    except Exception as exc:
+        logger.exception('Failed to reach time capsule full node at %s', url)
+        return JsonResponse({'ok': False, 'error': f'연결 실패: {exc}'}, status=502)
+
+
+@csrf_exempt
+def admin_time_capsule_fee_estimates_view(request):
+    """Fetch current fee estimates from mempool.space."""
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+    try:
+        resp = requests.get('https://mempool.space/api/v1/fees/recommended', timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+        return JsonResponse({'ok': True, 'fees': data})
+    except Exception as exc:
+        logger.error('Failed to fetch mempool.space fees: %s', exc)
+        return JsonResponse({'ok': False, 'error': '수수료 정보를 가져오지 못했습니다.'}, status=502)
+
+
+@csrf_exempt
+def admin_time_capsule_assign_address_view(request, pk):
+    """Assign the next unused native SegWit address to a time capsule entry."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    mnemonic_obj = _get_time_capsule_mnemonic()
+    if not mnemonic_obj:
+        return JsonResponse({'ok': False, 'error': '타임캡슐 니모닉이 생성되지 않았습니다.'}, status=400)
+
+    try:
+        with transaction.atomic():
+            mnemonic_locked = Mnemonic.objects.select_for_update().get(pk=mnemonic_obj.pk)
+            capsule = TimeCapsule.objects.select_for_update().get(pk=pk)
+
+            if capsule.bitcoin_address:
+                return JsonResponse({
+                    'ok': True,
+                    'address': capsule.bitcoin_address,
+                    'already_assigned': True,
+                    'capsule': capsule.as_dict(),
+                })
+
+            mnemonic_plain = mnemonic_locked.get_mnemonic()
+            next_index = int(mnemonic_locked.next_address_index or 0)
+            try:
+                address = derive_bip84_addresses(mnemonic_plain, change=0, start=next_index, count=1)[0]
+            except Exception as exc:
+                logger.error('Failed to derive time capsule address: %s', exc)
+                raise
+
+            capsule.bitcoin_address = address
+            capsule.mnemonic = mnemonic_locked
+            capsule.address_index = next_index
+            capsule.save(update_fields=['bitcoin_address', 'mnemonic', 'address_index'])
+
+            mnemonic_locked.next_address_index = next_index + 1
+            mnemonic_locked.save(update_fields=['next_address_index'])
+
+            return JsonResponse({
+                'ok': True,
+                'address': address,
+                'address_index': next_index,
+                'capsule': capsule.as_dict(),
+            })
+    except TimeCapsule.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': '타임캡슐을 찾을 수 없습니다.'}, status=404)
+    except Exception as exc:
+        logger.error('Failed to assign bitcoin address to capsule %s: %s', pk, exc)
+        return JsonResponse({'ok': False, 'error': '주소 할당에 실패했습니다.'}, status=500)
+
 @csrf_exempt
 def time_capsule_save_view(request):
     if request.method != 'POST':
@@ -7643,7 +7961,6 @@ def time_capsule_save_view(request):
     try:
         data = json.loads(request.body)
         encrypted_message = data.get('encrypted_message')
-        bitcoin_address = data.get('bitcoin_address', '')
         user_info = data.get('user_info', '')
 
         if not encrypted_message:
@@ -7651,7 +7968,8 @@ def time_capsule_save_view(request):
 
         capsule = TimeCapsule.objects.create(
             encrypted_message=encrypted_message,
-            bitcoin_address=bitcoin_address,
+            # Addresses are only assigned by admins via the mnemonic-derived workflow.
+            bitcoin_address='',
             user_info=user_info
         )
 
@@ -7728,4 +8046,61 @@ def admin_time_capsule_delete_view(request, pk):
     except Exception as e:
         logger.error(f"Error deleting time capsule: {e}")
         return JsonResponse({'error': str(e)}, status=500)
+DEFAULT_BROADCAST_NODE = {
+    'label': 'Nunchuk Electrum',
+    'host': 'https://mainnet.nunchuk.io',
+    'port': 443,
+    'description': 'Nunchuk에서 공개하는 메인넷 Electrum 풀노드 엔드포인트입니다.',
+}
 
+DEPRECATED_BROADCAST_HOSTS = {
+    'https://blockstream.info',
+    'blockstream.info',
+    'https://coconutwallet.io',
+    'coconutwallet.io',
+    'https://nunchuk.io',
+    'nunchuk.io',
+}
+
+RECOMMENDED_BROADCAST_NODES = [
+    DEFAULT_BROADCAST_NODE,
+]
+
+
+def _parse_broadcast_target(host, port):
+    """Return sanitized storage value, hostname, scheme, and port."""
+    raw_host = (host or '').strip()
+    scheme = None
+    hostname = raw_host
+    normalized_port = None
+
+    if raw_host.startswith(('http://', 'https://')):
+        parsed = urlparse(raw_host)
+        scheme = parsed.scheme or 'http'
+        hostname = parsed.hostname or ''
+        if parsed.port:
+            normalized_port = parsed.port
+    else:
+        hostname = raw_host
+
+    if port is not None and port != '':
+        try:
+            normalized_port = int(port)
+        except (TypeError, ValueError):
+            normalized_port = None
+
+    if normalized_port is None:
+        normalized_port = 443 if scheme == 'https' else 8332
+
+    if scheme is None:
+        scheme = 'https' if normalized_port == 443 else 'http'
+
+    stored_value = raw_host
+    if scheme == 'https' and not raw_host.startswith(('http://', 'https://')) and hostname:
+        stored_value = f'https://{hostname}'
+    elif scheme == 'http' and raw_host.startswith('https://') and hostname:
+        stored_value = f'http://{hostname}'
+    elif not stored_value:
+        stored_value = hostname
+
+    return stored_value, hostname, scheme, normalized_port

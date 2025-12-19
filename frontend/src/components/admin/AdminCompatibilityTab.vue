@@ -3,10 +3,10 @@
     <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
       <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">비트코인 궁합 에이전트</p>
-          <h3 class="text-xl font-semibold text-slate-900 mt-1">시스템 프롬프트 관리</h3>
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">궁합 에이전트</p>
+          <h3 class="text-xl font-semibold text-slate-900 mt-1">{{ activeAgentMeta.label }} 시스템 프롬프트</h3>
           <p class="text-sm text-slate-500 mt-1">
-            비트코인을 디지털 금·초희소 자산으로 바라보는 사주 전문가 프롬프트를 저장하고 수정합니다.
+            {{ activeAgentMeta.hint }}
           </p>
         </div>
         <div class="flex flex-wrap items-center gap-3 text-sm text-slate-600">
@@ -16,6 +16,21 @@
           </span>
           <span class="px-3 py-1 rounded-full bg-slate-900 text-white text-xs font-semibold">v{{ promptMeta.version || 1 }}</span>
         </div>
+      </div>
+
+      <div class="flex flex-wrap gap-2 mt-4">
+        <button
+          v-for="agent in AGENT_PROMPT_TABS"
+          :key="agent.key"
+          type="button"
+          class="px-3 py-1.5 rounded-full text-xs font-semibold transition-colors"
+          :class="agent.key === activeAgentKey
+            ? 'bg-slate-900 text-white shadow'
+            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+          @click="setActiveAgent(agent.key)"
+        >
+          {{ agent.label }}
+        </button>
       </div>
 
       <div v-if="loading" class="text-center py-12 text-slate-500">프롬프트를 불러오는 중...</div>
@@ -117,6 +132,75 @@
       </div>
     </section>
 
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+      <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">보고서 컨텍스트</p>
+          <h3 class="text-xl font-semibold text-slate-900 mt-1">궁합 리포트 템플릿</h3>
+          <p class="text-sm text-slate-500 mt-1">
+            사용자/비교 대상/팀 리포트에 추가되는 세부 지침을 수정할 수 있습니다. 플레이스홀더를 사용하면 이름이나 추가 정보를 동적으로 삽입할 수 있습니다.
+          </p>
+        </div>
+      </div>
+
+      <div v-if="reportTemplateLoading" class="text-center py-10 text-slate-500">리포트 템플릿을 불러오는 중...</div>
+
+      <div v-else class="space-y-6 mt-6">
+        <div
+          v-for="template in reportTemplates"
+          :key="template.key"
+          class="border border-slate-200 rounded-2xl p-5 space-y-3"
+        >
+          <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p class="text-sm font-semibold text-slate-900">{{ template.label }}</p>
+              <p class="text-xs text-slate-500">{{ template.description || '설명이 없습니다.' }}</p>
+            </div>
+            <span class="text-[11px] font-semibold text-slate-500 bg-slate-100 rounded-full px-3 py-1 uppercase tracking-wide">
+              {{ template.key }}
+            </span>
+          </div>
+
+          <div class="flex flex-wrap gap-2 text-xs text-slate-500">
+            <span
+              v-for="placeholder in getTemplatePlaceholders(template.key)"
+              :key="placeholder.token"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700"
+            >
+              <code class="font-mono text-[10px]">{{ placeholder.token }}</code>
+              <span>· {{ placeholder.hint }}</span>
+            </span>
+          </div>
+
+          <textarea
+            v-model="template.content"
+            rows="12"
+            class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-mono text-slate-800 focus:border-slate-900 focus:ring-0"
+            :disabled="!isAdmin"
+          />
+
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p class="text-xs text-slate-500">
+              마지막 업데이트:
+              <span class="font-medium text-slate-700">{{ formatTimestampLabel(template.updated_at) }}</span>
+            </p>
+            <button
+              type="button"
+              class="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold disabled:opacity-60"
+              @click="handleReportTemplateSave(template)"
+              :disabled="!isAdmin || template._saving"
+            >
+              {{ template._saving ? '저장 중...' : '템플릿 저장' }}
+            </button>
+          </div>
+        </div>
+        <div class="text-xs text-slate-500 border border-dashed border-slate-200 rounded-xl p-3">
+          플레이스홀더는 대괄호와 대문자로 표기되며, 예: <code class="font-mono" v-pre>{{SUBJECT_NAME}}</code>.
+          제공되지 않은 플레이스홀더는 자동으로 비워집니다.
+        </div>
+      </div>
+    </section>
+
     <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
       <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div>
@@ -180,7 +264,6 @@
                 {{ preset.birth_time || '미상' }}
               </p>
               <p class="text-xs text-slate-500">성별: {{ preset.gender || '미입력' }} · 정렬: {{ preset.sort_order }}</p>
-              <p v-if="preset.description" class="text-xs text-slate-400">{{ preset.description }}</p>
               <div class="flex gap-2 mt-2">
                 <button
                   type="button"
@@ -254,39 +337,6 @@
                 <option value="female">여성</option>
               </select>
             </label>
-            <label class="space-y-1 text-sm text-slate-600 md:col-span-2">
-              <span class="font-medium text-slate-900">설명</span>
-              <textarea
-                v-model="quickPresetForm.description"
-                rows="2"
-                class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-900 focus:ring-0"
-                placeholder="예: MicroStrategy CEO이자 비트코인 트리플 맥시."
-                :disabled="!isAdmin"
-              />
-            </label>
-            <label class="space-y-1 text-sm text-slate-600 md:col-span-2">
-              <div class="flex items-center justify-between">
-                <span class="font-medium text-slate-900">저장된 사주 데이터 (Markdown)</span>
-                <button
-                  type="button"
-                  class="text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
-                  @click="handleCalculateSaju"
-                  :disabled="!isAdmin || calculatingSaju || !quickPresetForm.birthdate"
-                >
-                  {{ calculatingSaju ? '계산 중...' : '사주 데이터 자동 계산' }}
-                </button>
-              </div>
-              <textarea
-                v-model="quickPresetForm.stored_saju"
-                rows="6"
-                class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-mono focus:border-slate-900 focus:ring-0"
-                placeholder="사주 정보를 마크다운 형식으로 입력하세요."
-                :disabled="!isAdmin"
-              />
-              <p class="text-xs text-slate-500">
-                이 값이 존재하면 에이전트 요청 시 사주 계산 단계를 건너뛰거나, 참고 자료로 사용됩니다.
-              </p>
-            </label>
           </div>
           <div class="grid gap-4 md:grid-cols-3">
             <label class="space-y-1 text-sm text-slate-600 md:col-span-2">
@@ -352,17 +402,18 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   fetchCompatibilityAgentPrompt,
   fetchPublicCompatibilityPrompt,
   fetchAdminCompatibilityQuickPresets,
+  fetchCompatibilityReportTemplates,
   resetCompatibilityAgentPrompt,
   updateCompatibilityAgentPrompt,
   createCompatibilityQuickPreset,
   updateCompatibilityQuickPreset,
   deleteCompatibilityQuickPreset,
-  calculateSaju
+  updateCompatibilityReportTemplate
 } from '../../services/compatibilityService'
 import { getCurrentUsername } from '../../utils/adminAuth'
 
@@ -372,6 +423,17 @@ const props = defineProps({
   showError: { type: Function, required: true }
 })
 
+const AGENT_PROMPT_TABS = [
+  { key: 'saju_bitcoin', label: '비트코인 궁합', hint: '비트코인을 기준으로 개인 사주를 해석합니다.' },
+  { key: 'story_extractor', label: '스토리 추출', hint: '선택된 인물의 알려진 서사를 요약합니다.' },
+  { key: 'saju_analysis', label: '사주 추론', hint: '서사 기반으로 투자 성향을 정리합니다.' },
+  { key: 'pair_compatibility', label: '두 사람 궁합', hint: '두 사람 관계의 시너지와 리스크를 판단합니다.' },
+  { key: 'highlight_story', label: '하이라이트', hint: '사주 분석 결과의 핵심 구절만 형광펜 처리합니다.' }
+]
+
+const activeAgentKey = ref(AGENT_PROMPT_TABS[0].key)
+const activeAgentMeta = computed(() => AGENT_PROMPT_TABS.find((tab) => tab.key === activeAgentKey.value) || AGENT_PROMPT_TABS[0])
+
 const loading = ref(true)
 const saving = ref(false)
 const resetting = ref(false)
@@ -379,19 +441,21 @@ const promptMeta = ref({
   version: 1,
   updated_at: null
 })
+const promptCache = ref({})
+const DEFAULT_COMPAT_MODEL = 'openai:gpt-5-mini'
 const formData = ref({
   name: '',
   description: '',
   system_prompt: '',
-  model_name: '',
+  model_name: DEFAULT_COMPAT_MODEL,
   is_active: true
 })
 const MODEL_OPTIONS = [
-  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (기본)' },
+  { value: DEFAULT_COMPAT_MODEL, label: 'GPT-5 Mini (기본, OpenAI)' },
+  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
   { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
   { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
   { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
-  { value: 'openai:gpt-5-mini', label: 'GPT-5 Mini (OpenAI)' },
   { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
   { value: 'gpt-4o', label: 'GPT-4o' },
   { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini' }
@@ -400,19 +464,31 @@ const MODEL_OPTIONS = [
 const quickPresets = ref([])
 const quickPresetLoading = ref(true)
 const quickPresetSaving = ref(false)
-const calculatingSaju = ref(false)
 const editingQuickPresetId = ref(null)
 const quickPresetForm = ref(getEmptyQuickPresetForm())
+
+const reportTemplates = ref([])
+const reportTemplateLoading = ref(true)
+
+const REPORT_TEMPLATE_PLACEHOLDERS = {
+  user_vs_bitcoin: [
+    { token: '{{SUBJECT_NAME}}', hint: '분석 대상 이름' },
+    { token: '{{SUBJECT_EXTRA}}', hint: '추가 정보 블록 (없으면 비움)' }
+  ],
+  team_vs_bitcoin: [
+    { token: '{{USER_NAME}}', hint: '사용자 이름' },
+    { token: '{{TARGET_NAME}}', hint: '비교 대상 이름' },
+    { token: '{{TEAM_EXTRA}}', hint: '추가 요약 정보 (없으면 비움)' }
+  ]
+}
 
 function getEmptyQuickPresetForm() {
   return {
     label: '',
-    description: '',
     birthdate: '',
     birth_time: '',
     gender: '',
     image_url: '',
-    stored_saju: '',
     sort_order: '',
     is_active: true
   }
@@ -425,27 +501,46 @@ const lastUpdatedLabel = computed(() => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 })
 
-const loadPrompt = async () => {
+const formatTimestampLabel = (value) => {
+  if (!value) return '기록 없음'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+const applyPromptToForm = (prompt) => {
+  if (!prompt) return
+  formData.value = {
+    name: prompt.name || '',
+    description: prompt.description || '',
+    system_prompt: prompt.system_prompt || '',
+    model_name: prompt.model_name || DEFAULT_COMPAT_MODEL,
+    is_active: prompt.is_active !== false
+  }
+  promptMeta.value = {
+    version: prompt.version || 1,
+    updated_at: prompt.updated_at || null
+  }
+}
+
+const loadPrompt = async (agentKey = activeAgentKey.value) => {
   loading.value = true
   try {
+    const cached = promptCache.value[agentKey]
+    if (cached) {
+      applyPromptToForm(cached)
+      loading.value = false
+      return
+    }
     let prompt = null
     if (props.isAdmin) {
       const username = getCurrentUsername()
-      prompt = await fetchCompatibilityAgentPrompt({ username })
+      prompt = await fetchCompatibilityAgentPrompt({ username, agentKey })
     } else {
-      prompt = await fetchPublicCompatibilityPrompt({})
+      prompt = await fetchPublicCompatibilityPrompt({ agentKey })
     }
-    formData.value = {
-      name: prompt.name || '',
-      description: prompt.description || '',
-      system_prompt: prompt.system_prompt || '',
-      model_name: prompt.model_name || '',
-      is_active: prompt.is_active !== false
-    }
-    promptMeta.value = {
-      version: prompt.version || 1,
-      updated_at: prompt.updated_at || null
-    }
+    promptCache.value[agentKey] = prompt
+    applyPromptToForm(prompt)
   } catch (error) {
     props.showError(error.message || '프롬프트를 불러올 수 없습니다.')
   } finally {
@@ -470,6 +565,53 @@ const loadQuickPresets = async () => {
   }
 }
 
+const loadReportTemplates = async () => {
+  reportTemplateLoading.value = true
+  try {
+    const templates = await fetchCompatibilityReportTemplates()
+    reportTemplates.value = Array.isArray(templates)
+      ? templates.map((tpl) => ({ ...tpl }))
+      : []
+  } catch (error) {
+    props.showError(error.message || '리포트 템플릿을 불러오지 못했습니다.')
+    reportTemplates.value = []
+  } finally {
+    reportTemplateLoading.value = false
+  }
+}
+
+const handleReportTemplateSave = async (template) => {
+  if (!props.isAdmin) {
+    props.showError('관리자 권한이 필요합니다.')
+    return
+  }
+  template._saving = true
+  try {
+    const username = getCurrentUsername()
+    const updated = await updateCompatibilityReportTemplate({
+      username,
+      key: template.key,
+      label: template.label,
+      description: template.description,
+      content: template.content,
+      sortOrder: template.sort_order
+    })
+    Object.assign(template, updated)
+    props.showSuccess('리포트 템플릿을 저장했습니다.')
+  } catch (error) {
+    props.showError(error.message || '리포트 템플릿 저장에 실패했습니다.')
+  } finally {
+    template._saving = false
+  }
+}
+
+const getTemplatePlaceholders = (key) => REPORT_TEMPLATE_PLACEHOLDERS[key] || []
+
+function setActiveAgent(key) {
+  if (activeAgentKey.value === key) return
+  activeAgentKey.value = key
+}
+
 const handleSave = async () => {
   if (!props.isAdmin) {
     props.showError('관리자 권한이 필요합니다.')
@@ -480,12 +622,14 @@ const handleSave = async () => {
     const username = getCurrentUsername()
     const prompt = await updateCompatibilityAgentPrompt({
       username,
+      agentKey: activeAgentKey.value,
       name: formData.value.name,
       description: formData.value.description,
       systemPrompt: formData.value.system_prompt,
       modelName: formData.value.model_name,
       isActive: formData.value.is_active
     })
+    promptCache.value[activeAgentKey.value] = prompt
     promptMeta.value = {
       version: prompt.version || promptMeta.value.version,
       updated_at: prompt.updated_at || promptMeta.value.updated_at
@@ -506,18 +650,9 @@ const handleReset = async () => {
   resetting.value = true
   try {
     const username = getCurrentUsername()
-    const prompt = await resetCompatibilityAgentPrompt({ username })
-    formData.value = {
-      name: prompt.name || '',
-      description: prompt.description || '',
-      system_prompt: prompt.system_prompt || '',
-      model_name: prompt.model_name || '',
-      is_active: prompt.is_active !== false
-    }
-    promptMeta.value = {
-      version: prompt.version || promptMeta.value.version,
-      updated_at: prompt.updated_at || promptMeta.value.updated_at
-    }
+    const prompt = await resetCompatibilityAgentPrompt({ username, agentKey: activeAgentKey.value })
+    promptCache.value[activeAgentKey.value] = prompt
+    applyPromptToForm(prompt)
     props.showSuccess('기본 프롬프트로 초기화했습니다.')
   } catch (error) {
     props.showError(error.message || '초기화에 실패했습니다.')
@@ -530,12 +665,10 @@ const startEditQuickPreset = (preset) => {
   editingQuickPresetId.value = preset.id
   quickPresetForm.value = {
     label: preset.label || '',
-    description: preset.description || '',
     birthdate: preset.birthdate || '',
     birth_time: preset.birth_time || '',
     gender: preset.gender || '',
     image_url: preset.image_url || '',
-    stored_saju: preset.stored_saju || '',
     sort_order: preset.sort_order ?? '',
     is_active: preset.is_active !== false
   }
@@ -544,35 +677,6 @@ const startEditQuickPreset = (preset) => {
 const resetQuickPresetForm = () => {
   editingQuickPresetId.value = null
   quickPresetForm.value = getEmptyQuickPresetForm()
-}
-
-const handleCalculateSaju = async () => {
-  if (!quickPresetForm.value.birthdate) {
-    props.showError('생년월일을 입력해주세요.')
-    return
-  }
-  calculatingSaju.value = true
-  try {
-    const result = await calculateSaju({
-      birthdate: quickPresetForm.value.birthdate,
-      birthTime: quickPresetForm.value.birth_time
-    })
-    
-    // Format as Markdown
-    const p = result.pillars
-    const e = result.elements
-    let md = `### 사주 명식\n`
-    md += `- **생년월일**: ${result.birthdate} ${result.birth_time || ''}\n`
-    md += `- **사주**: ${p.year_pillar}(년) ${p.month_pillar}(월) ${p.day_pillar}(일) ${p.time_pillar || '알수없음'}(시)\n`
-    md += `- **오행**: 목${e.wood} 화${e.fire} 토${e.earth} 금${e.metal} 수${e.water}\n`
-    
-    quickPresetForm.value.stored_saju = md
-    props.showSuccess('사주 데이터를 계산했습니다.')
-  } catch (error) {
-    props.showError(error.message || '사주 계산에 실패했습니다.')
-  } finally {
-    calculatingSaju.value = false
-  }
 }
 
 const handleQuickPresetSubmit = async () => {
@@ -590,12 +694,10 @@ const handleQuickPresetSubmit = async () => {
     const username = getCurrentUsername()
     const payload = {
       label: quickPresetForm.value.label.trim(),
-      description: quickPresetForm.value.description.trim(),
       birthdate: quickPresetForm.value.birthdate,
       birth_time: quickPresetForm.value.birth_time || '',
       gender: quickPresetForm.value.gender || '',
       image_url: quickPresetForm.value.image_url || '',
-      stored_saju: quickPresetForm.value.stored_saju || '',
       is_active: quickPresetForm.value.is_active
     }
     if (quickPresetForm.value.sort_order !== '' && quickPresetForm.value.sort_order !== null) {
@@ -641,13 +743,16 @@ const handleQuickPresetDelete = async (preset) => {
   }
 }
 
-onMounted(() => {
-  loadPrompt()
+watch(activeAgentKey, (newKey) => {
+  loadPrompt(newKey)
 })
 
 watch(
   () => props.isAdmin,
   (isAdmin) => {
+    promptCache.value = {}
+    loadPrompt(activeAgentKey.value)
+    loadReportTemplates()
     if (isAdmin) {
       loadQuickPresets()
     } else {

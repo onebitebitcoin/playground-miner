@@ -7,6 +7,9 @@ from decouple import Config, RepositoryEnv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Ensure bitcoinlib stores data inside the project (workspace is read-only outside).
+os.environ.setdefault('BCL_DATA_DIR', str(BASE_DIR.parent / 'tmp' / 'bitcoinlib'))
+
 # Load .env from project root (two levels up from settings.py)
 env_path = BASE_DIR.parent / '.env'
 # Decouple Config always requires a repository; fall back to an empty mapping

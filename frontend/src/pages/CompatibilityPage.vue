@@ -1,39 +1,118 @@
 <template>
   <div class="space-y-6">
-    <section class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-6">
+<section class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-6">
       <div class="flex flex-col gap-3">
         <div class="flex items-start justify-between gap-4">
           <div class="flex-1">
             <p class="text-sm font-semibold text-slate-500 uppercase tracking-wider">비트코인의 사주는?</p>
             <h2 class="text-xl font-bold text-slate-900 mt-1">금(金)이 주력인 디지털 금, 수·화가 극단을 이루는 에너지</h2>
-            <p class="text-sm text-slate-500 mt-2">
-              고정 공급과 변동성, 네트워크 속성을 오행으로 환산해 구성한 비트코인의 기준선입니다.
-            </p>
           </div>
         </div>
       </div>
-      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <div
-          v-for="trait in bitcoinHighlights"
-          :key="trait.label"
-          class="rounded-2xl border border-slate-200 bg-slate-50 p-4 flex flex-col gap-3"
-        >
-          <div class="flex items-center justify-between gap-2">
-            <div class="flex items-center gap-2">
-              <span class="text-2xl">{{ trait.icon }}</span>
-              <p class="text-sm font-bold text-slate-900">{{ trait.label }}</p>
+      <div class="grid gap-6 lg:grid-cols-2 items-center">
+        <div class="space-y-4">
+          <div class="rounded-2xl bg-slate-50 p-5 space-y-3 min-h-[220px]">
+            <div v-if="selectedBitcoinHighlight" class="space-y-3">
+              <div class="flex items-center gap-3">
+                <span class="text-3xl">{{ selectedBitcoinHighlight.icon }}</span>
+                <div>
+                  <p class="text-lg font-bold text-slate-900">{{ selectedBitcoinHighlight.label }}</p>
+                  <p class="text-sm text-slate-500">{{ selectedBitcoinHighlight.value }}</p>
+                </div>
+                <span class="ml-auto text-lg font-black text-slate-900">{{ selectedBitcoinHighlight.ratio }}%</span>
+              </div>
+              <div class="w-full bg-slate-200 rounded-full h-2">
+                <div
+                  class="h-2 rounded-full transition-all duration-300"
+                  :class="selectedBitcoinHighlight.colorClass"
+                  :style="{ width: `${selectedBitcoinHighlight.ratio}%` }"
+                ></div>
+              </div>
+              <p class="text-sm text-slate-600 leading-relaxed">
+                {{ selectedBitcoinHighlight.description }}
+              </p>
             </div>
-            <span class="text-lg font-black text-slate-900">{{ trait.ratio }}%</span>
+            <div v-else class="text-sm text-slate-500">표시할 앵커가 없습니다.</div>
           </div>
-          <div class="w-full bg-slate-200 rounded-full h-2">
-            <div
-              class="h-2 rounded-full transition-all duration-300"
-              :class="trait.colorClass"
-              :style="{ width: `${trait.ratio}%` }"
-            ></div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="trait in bitcoinHighlights"
+              :key="trait.elementKey"
+              type="button"
+              class="px-3 py-1.5 rounded-full border text-xs font-semibold transition-all"
+              :class="{
+                'bg-slate-900 text-white border-slate-900 shadow-sm': trait.elementKey === selectedBitcoinHighlightKey,
+                'bg-white text-slate-600 border-slate-200 hover:border-slate-400': trait.elementKey !== selectedBitcoinHighlightKey
+              }"
+              @click="handleBitcoinHighlightSelect(trait.elementKey)"
+            >
+              {{ trait.label }}
+            </button>
           </div>
-          <p class="text-xs font-semibold text-slate-700">{{ trait.value }}</p>
-          <p class="text-xs text-slate-600 leading-relaxed">{{ trait.description }}</p>
+        </div>
+        <div class="rounded-2xl bg-white p-4 flex items-center justify-center">
+          <svg
+            v-if="bitcoinRadarChart.markers.length"
+            :viewBox="`0 0 ${bitcoinRadarChart.size} ${bitcoinRadarChart.size}`"
+            :width="bitcoinRadarChart.size"
+            :height="bitcoinRadarChart.size"
+            class="max-w-full"
+          >
+            <circle
+              :cx="bitcoinRadarChart.center"
+              :cy="bitcoinRadarChart.center"
+              :r="bitcoinRadarChart.maxRadius"
+              class="fill-slate-50 stroke-slate-200"
+            ></circle>
+            <line
+              v-for="(axis, index) in bitcoinRadarChart.axes"
+              :key="`axis-${index}`"
+              :x1="bitcoinRadarChart.center"
+              :y1="bitcoinRadarChart.center"
+              :x2="axis.x2"
+              :y2="axis.y2"
+              class="stroke-slate-200"
+              stroke-width="1"
+            ></line>
+            <polygon
+              :points="bitcoinRadarChart.polygonPoints"
+              class="fill-indigo-400/20 stroke-indigo-500 radar-polygon"
+              stroke-width="2"
+            ></polygon>
+            <circle
+              v-for="marker in bitcoinRadarChart.markers"
+              :key="marker.key"
+              :cx="marker.x"
+              :cy="marker.y"
+              :r="marker.active ? 8 : 6"
+              :class="marker.active ? 'fill-indigo-500' : 'fill-white stroke-indigo-400'"
+              :stroke-width="marker.active ? 3 : 2"
+              @click="handleBitcoinHighlightSelect(marker.key)"
+              class="cursor-pointer transition-all duration-200 radar-point"
+            ></circle>
+            <text
+              v-for="marker in bitcoinRadarChart.markers"
+              :key="`percent-${marker.key}`"
+              :x="marker.x"
+              :y="marker.y - 14"
+              class="text-[11px] fill-indigo-500 font-bold pointer-events-none"
+              text-anchor="middle"
+            >
+              {{ marker.ratio }}%
+            </text>
+            <text
+              v-for="axis in bitcoinRadarChart.axes"
+              :key="`label-${axis.key}`"
+              :x="axis.labelX"
+              :y="axis.labelY"
+              class="text-sm fill-slate-700 font-bold"
+              text-anchor="middle"
+              dominant-baseline="middle"
+            >
+              {{ axis.label }}
+            </text>
+          </svg>
+          <p v-else class="text-sm text-slate-500">표시할 데이터가 없습니다.</p>
         </div>
       </div>
     </section>
@@ -77,7 +156,6 @@
                       </div>
                       <div class="card-info">
                         <div v-if="preset.birthdate" class="card-birthdate">{{ formatCardDate(preset.birthdate) }}</div>
-                        <div v-if="preset.description" class="card-description">{{ preset.description }}</div>
                         <div v-if="selectedPresetId === preset.id" class="card-selected-badge">
                           <svg class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
                             <path
@@ -213,7 +291,6 @@
                       </div>
                       <div class="card-info">
                         <div v-if="preset.birthdate" class="card-birthdate">{{ formatCardDate(preset.birthdate) }}</div>
-                        <div v-if="preset.description" class="card-description">{{ preset.description }}</div>
                         <div v-if="selectedTargetPresetId === preset.id" class="card-selected-badge">
                           <svg class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
                             <path
@@ -355,39 +432,72 @@
           :disabled="loading"
           @click="handleCompatibility"
         >
-          <svg v-if="loading" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg v-if="!loading" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
           </svg>
-          <span>{{ loading ? loadingMessage : analyzeButtonLabel }}</span>
+          <span>{{ loading ? '분석 중...' : analyzeButtonLabel }}</span>
         </button>
         <div v-if="loading" class="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner mt-1 relative">
           <div
             class="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-500 ease-out relative"
-            :style="{ width: `${(analysisStep / totalSteps) * 100}%` }"
+            :style="{ width: `${Math.max(4, loadingProgressRatio * 100)}%` }"
           >
             <div class="absolute inset-0 w-full h-full bg-white/30 animate-shimmer"></div>
           </div>
         </div>
+        <div v-if="loading" class="w-full rounded-2xl border border-slate-200 bg-white/90 p-4 space-y-3">
+          <div class="text-xs font-semibold text-slate-600 flex items-center gap-2">
+            <span>진행 단계</span>
+            <span class="text-slate-400">({{ loadingStepStats.completed }}/{{ loadingStepStats.total }})</span>
+          </div>
+          <ol class="space-y-2 text-xs text-slate-600">
+            <li v-for="step in loadingSteps" :key="step.key" class="flex flex-col gap-1">
+              <div class="flex items-center gap-2">
+                <div
+                  class="w-6 h-6 inline-flex items-center justify-center rounded-full text-[10px] font-bold border"
+                  :class="{
+                    'bg-emerald-100 text-emerald-600 border-emerald-200': step.status === 'done',
+                    'bg-indigo-50 text-indigo-600 border-indigo-200': step.status === 'running',
+                    'bg-slate-100 text-slate-400 border-slate-200': step.status === 'pending',
+                    'bg-rose-100 text-rose-600 border-rose-200': step.status === 'error'
+                  }"
+                >
+                  <svg
+                    v-if="step.status === 'running'"
+                    class="w-3.5 h-3.5 animate-spin text-indigo-600"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                  >
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke-width="4" stroke="currentColor" />
+                    <path class="opacity-75" d="M4 12a8 8 0 018-8" stroke-width="4" stroke-linecap="round" stroke="currentColor" />
+                  </svg>
+                  <span v-else>
+                    {{ step.status === 'done' ? '✔' : step.status === 'error' ? '!' : '•' }}
+                  </span>
+                </div>
+                <span class="font-medium text-slate-800">{{ step.label }}</span>
+              </div>
+              <p v-if="step.detail" class="pl-7 text-[11px] text-slate-500 leading-snug">
+                {{ step.detail }}
+              </p>
+            </li>
+          </ol>
+        </div>
         <p v-if="errorMessage" class="text-xs text-rose-500">{{ errorMessage }}</p>
       </div>
       <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-6">
-                  <div>
-                    <h3 class="text-base font-semibold text-slate-900">궁합 리포트</h3>
-                                <p class="text-sm text-slate-500 mt-1 flex items-center gap-2">
-                                  <span>세 가지 관점에서 궁합을 분석합니다</span>
-                                  <span 
-                                    v-if="userVsBitcoinResult?.agentProvider" 
-                                    class="text-xs text-slate-400 cursor-pointer hover:text-slate-600 hover:underline"
-                                    @click="openPromptDebug"
-                                    title="프롬프트 보기"
-                                  >
-                                    (Powered by {{ userVsBitcoinResult.agentProvider }})
-                                  </span>
-                                </p>                  </div>
+        <div>
+          <h3 class="text-base font-semibold text-slate-900">사주 분석 결과</h3>
+          <span 
+            v-if="userVsBitcoinResult?.agentProvider" 
+            class="text-xs text-slate-400 cursor-pointer hover:text-slate-600 hover:underline"
+            @click="openPromptDebug"
+            title="프롬프트 보기"
+          >
+            (Powered by {{ userVsBitcoinResult.agentProvider }})
+          </span>
+        </div>
         <div v-if="!userVsBitcoinResult && !targetVsBitcoinResult && !userVsTargetResult" class="text-center py-12">
           <p class="text-sm text-slate-500">{{ analyzeButtonLabel }}를 눌러 궁합을 확인하세요.</p>
         </div>
@@ -397,43 +507,117 @@
           <h4 class="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
             <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-500 text-white text-xs font-bold">1</span>
             <span>{{ userVsBitcoinResult.personName }} × 비트코인 궁합</span>
-            <span class="ml-auto text-4xl font-black text-orange-600">{{ userVsBitcoinResult.score }}점</span>
           </h4>
 
           <div class="rounded-2xl border border-slate-200 bg-white p-5">
-            <div class="flex gap-6 items-start">
+            <div class="flex gap-8 items-start flex-wrap md:flex-nowrap">
               <div class="flex-shrink-0">
-                <div class="w-24 h-24 rounded-xl overflow-hidden border-2 border-slate-200 bg-slate-100 flex items-center justify-center">
+                <div class="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden border-2 border-slate-200 bg-slate-100 flex items-center justify-center shadow-sm">
                   <img v-if="userVsBitcoinResult.personImageUrl" :src="userVsBitcoinResult.personImageUrl" :alt="userVsBitcoinResult.personName" class="w-full h-full object-cover" />
                   <span v-else class="text-4xl">👤</span>
                 </div>
               </div>
-              <div class="flex-1 space-y-3">
-                <div v-for="highlight in userVsBitcoinResult.user.highlights" :key="highlight.label" class="space-y-1">
-                  <div class="flex items-center justify-between text-sm">
-                    <div class="flex items-center gap-2">
-                      <span class="text-base">{{ highlight.icon }}</span>
-                      <span class="font-semibold text-slate-900">{{ highlight.label }}</span>
-                    </div>
-                    <span class="text-sm font-bold text-slate-700">{{ highlight.ratio }}%</span>
-                  </div>
-                  <div class="w-full bg-slate-200 rounded-full h-1.5">
-                    <div class="h-1.5 rounded-full transition-all duration-500" :class="highlight.colorClass" :style="{ width: `${highlight.ratio}%` }"></div>
-                  </div>
+              <div class="flex-1 space-y-2">
+                <p class="text-lg font-bold text-slate-900">{{ userVsBitcoinResult.personName }}</p>
+                <ul class="text-base text-slate-700 space-y-1.5 leading-relaxed select-text">
+                  <li v-for="fact in userVsBitcoinResult.profileFacts" :key="fact">{{ fact }}</li>
+                </ul>
+                <div
+                  v-if="userVsBitcoinResult.personStory"
+                  class="text-base text-slate-700 leading-relaxed mt-3 select-text"
+                >
+                  {{ userVsBitcoinResult.personStory }}
                 </div>
+              </div>
+              <div v-if="userProfileRadar" class="profile-radar hidden md:flex items-center justify-center">
+                <svg
+                  :viewBox="`0 0 ${userProfileRadar.size} ${userProfileRadar.size}`"
+                  :width="userProfileRadar.size"
+                  :height="userProfileRadar.size"
+                  class="profile-radar-svg"
+                >
+                  <circle
+                    :cx="userProfileRadar.center"
+                    :cy="userProfileRadar.center"
+                    :r="userProfileRadar.maxRadius"
+                    class="fill-slate-50 stroke-slate-200"
+                  ></circle>
+                  <line
+                    v-for="axis in userProfileRadar.axes"
+                    :key="`user-axis-${axis.key}`"
+                    :x1="userProfileRadar.center"
+                    :y1="userProfileRadar.center"
+                    :x2="axis.x2"
+                    :y2="axis.y2"
+                    class="stroke-slate-200"
+                    stroke-width="1"
+                  ></line>
+                  <polygon
+                    :points="userProfileRadar.polygonPoints"
+                    class="fill-blue-100/40 stroke-blue-500 radar-polygon"
+                    stroke-width="2"
+                  ></polygon>
+                  <circle
+                    v-for="marker in userProfileRadar.markers"
+                    :key="`user-marker-${marker.key}`"
+                    :cx="marker.x"
+                    :cy="marker.y"
+                    r="5"
+                    class="fill-blue-500"
+                  ></circle>
+                  <text
+                    v-for="marker in userProfileRadar.markers"
+                    :key="`user-percent-${marker.key}`"
+                    :x="marker.x"
+                    :y="marker.y - 10"
+                    class="text-[10px] fill-blue-600 font-semibold pointer-events-none"
+                    text-anchor="middle"
+                  >
+                    {{ marker.ratio }}%
+                  </text>
+                  <text
+                    v-for="axis in userProfileRadar.axes"
+                    :key="`user-label-${axis.key}`"
+                    :x="axis.labelX"
+                    :y="axis.labelY"
+                    class="text-xs fill-slate-700 font-bold"
+                    text-anchor="middle"
+                    dominant-baseline="middle"
+                  >
+                    {{ axis.label }}
+                  </text>
+                </svg>
               </div>
             </div>
           </div>
 
-          <div class="rounded-2xl border border-slate-200 p-5 bg-slate-50">
-            <div class="prose prose-slate max-w-none prose-headings:text-slate-900 prose-h2:text-lg prose-h2:font-bold prose-h2:mt-6 prose-h2:mb-3 prose-h2:first:mt-0 prose-p:text-sm prose-p:text-slate-700 prose-p:leading-relaxed prose-p:mb-3 prose-strong:text-slate-900 prose-strong:font-semibold compatibility-content select-text">
-              <div v-html="renderMarkdown(userVsBitcoinResult.narrative)"></div>
+          <div
+            v-if="userVsBitcoinResult"
+            class="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 space-y-3 highlight-panel"
+          >
+            <div class="text-[11px] font-semibold text-amber-700 uppercase tracking-wide flex items-center gap-2">
+              <span class="inline-flex w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              핵심 하이라이트
             </div>
-          </div>
-
-          <div class="rounded-xl border border-amber-200 p-3 bg-amber-50">
-            <p class="text-xs font-semibold text-amber-900 mb-1">⚠️ 리스크 메모</p>
-            <p class="text-xs text-amber-800 leading-relaxed">{{ userVsBitcoinResult.riskNote }}</p>
+            <div
+              v-if="userVsBitcoinResult.highlightLoading"
+              class="flex items-center gap-2 text-xs text-amber-700"
+            >
+              <svg class="w-4 h-4 animate-spin text-amber-500" viewBox="0 0 24 24" fill="none">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="4" stroke-linecap="round" />
+              </svg>
+              <span>하이라이트 생성 중입니다...</span>
+            </div>
+            <div
+              v-else-if="userVsBitcoinResult.highlightedNarrative"
+              class="prose prose-slate prose-sm max-w-none markdown-highlight select-text"
+            >
+              <div v-html="renderMarkdown(userVsBitcoinResult.highlightedNarrative)"></div>
+            </div>
+            <p v-else class="text-xs text-amber-800 bg-white/70 rounded-lg px-3 py-2">
+              하이라이트를 불러오지 못했습니다.
+            </p>
           </div>
         </div>
 
@@ -442,44 +626,119 @@
           <h4 class="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
             <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-500 text-white text-xs font-bold">2</span>
             <span>{{ targetVsBitcoinResult.personName }} × 비트코인 궁합</span>
-            <span class="ml-auto text-4xl font-black text-orange-600">{{ targetVsBitcoinResult.score }}점</span>
           </h4>
 
           <div class="rounded-2xl border border-slate-200 bg-white p-5">
-            <div class="flex gap-6 items-start">
+            <div class="flex gap-8 items-start flex-wrap md:flex-nowrap">
               <div class="flex-shrink-0">
-                <div class="w-24 h-24 rounded-xl overflow-hidden border-2 border-slate-200 bg-slate-100 flex items-center justify-center">
+                <div class="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden border-2 border-slate-200 bg-slate-100 flex items-center justify-center shadow-sm">
                   <img v-if="targetVsBitcoinResult.personImageUrl" :src="targetVsBitcoinResult.personImageUrl" :alt="targetVsBitcoinResult.personName" class="w-full h-full object-cover" />
                   <span v-else class="text-4xl">👤</span>
                 </div>
               </div>
-              <div class="flex-1 space-y-3">
-                <div v-for="highlight in targetVsBitcoinResult.user.highlights" :key="highlight.label" class="space-y-1">
-                  <div class="flex items-center justify-between text-sm">
-                    <div class="flex items-center gap-2">
-                      <span class="text-base">{{ highlight.icon }}</span>
-                      <span class="font-semibold text-slate-900">{{ highlight.label }}</span>
-                    </div>
-                    <span class="text-sm font-bold text-slate-700">{{ highlight.ratio }}%</span>
-                  </div>
-                  <div class="w-full bg-slate-200 rounded-full h-1.5">
-                    <div class="h-1.5 rounded-full transition-all duration-500" :class="highlight.colorClass" :style="{ width: `${highlight.ratio}%` }"></div>
-                  </div>
+              <div class="flex-1 space-y-2">
+                <p class="text-lg font-bold text-slate-900">{{ targetVsBitcoinResult.personName }}</p>
+                <ul class="text-base text-slate-700 space-y-1.5 leading-relaxed select-text">
+                  <li v-for="fact in targetVsBitcoinResult.profileFacts" :key="fact">{{ fact }}</li>
+                </ul>
+                <div
+                  v-if="targetVsBitcoinResult.personStory"
+                  class="text-base text-slate-700 leading-relaxed mt-3 select-text"
+                >
+                  {{ targetVsBitcoinResult.personStory }}
                 </div>
+              </div>
+              <div v-if="targetProfileRadar" class="profile-radar hidden md:flex items-center justify-center">
+                <svg
+                  :viewBox="`0 0 ${targetProfileRadar.size} ${targetProfileRadar.size}`"
+                  :width="targetProfileRadar.size"
+                  :height="targetProfileRadar.size"
+                  class="profile-radar-svg"
+                >
+                  <circle
+                    :cx="targetProfileRadar.center"
+                    :cy="targetProfileRadar.center"
+                    :r="targetProfileRadar.maxRadius"
+                    class="fill-slate-50 stroke-slate-200"
+                  ></circle>
+                  <line
+                    v-for="axis in targetProfileRadar.axes"
+                    :key="`target-axis-${axis.key}`"
+                    :x1="targetProfileRadar.center"
+                    :y1="targetProfileRadar.center"
+                    :x2="axis.x2"
+                    :y2="axis.y2"
+                    class="stroke-slate-200"
+                    stroke-width="1"
+                  ></line>
+                  <polygon
+                    :points="targetProfileRadar.polygonPoints"
+                    class="fill-purple-100/40 stroke-purple-500 radar-polygon"
+                    stroke-width="2"
+                  ></polygon>
+                  <circle
+                    v-for="marker in targetProfileRadar.markers"
+                    :key="`target-marker-${marker.key}`"
+                    :cx="marker.x"
+                    :cy="marker.y"
+                    r="5"
+                    class="fill-purple-500"
+                  ></circle>
+                  <text
+                    v-for="marker in targetProfileRadar.markers"
+                    :key="`target-percent-${marker.key}`"
+                    :x="marker.x"
+                    :y="marker.y - 10"
+                    class="text-[10px] fill-purple-600 font-semibold pointer-events-none"
+                    text-anchor="middle"
+                  >
+                    {{ marker.ratio }}%
+                  </text>
+                  <text
+                    v-for="axis in targetProfileRadar.axes"
+                    :key="`target-label-${axis.key}`"
+                    :x="axis.labelX"
+                    :y="axis.labelY"
+                    class="text-xs fill-slate-700 font-bold"
+                    text-anchor="middle"
+                    dominant-baseline="middle"
+                  >
+                    {{ axis.label }}
+                  </text>
+                </svg>
               </div>
             </div>
           </div>
 
-          <div class="rounded-2xl border border-slate-200 p-5 bg-slate-50">
-            <div class="prose prose-slate max-w-none prose-headings:text-slate-900 prose-h2:text-lg prose-h2:font-bold prose-h2:mt-6 prose-h2:mb-3 prose-h2:first:mt-0 prose-p:text-sm prose-p:text-slate-700 prose-p:leading-relaxed prose-p:mb-3 prose-strong:text-slate-900 prose-strong:font-semibold compatibility-content select-text">
-              <div v-html="renderMarkdown(targetVsBitcoinResult.narrative)"></div>
+          <div
+            v-if="targetVsBitcoinResult"
+            class="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 space-y-3 highlight-panel"
+          >
+            <div class="text-[11px] font-semibold text-amber-700 uppercase tracking-wide flex items-center gap-2">
+              <span class="inline-flex w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              핵심 하이라이트
             </div>
+            <div
+              v-if="targetVsBitcoinResult.highlightLoading"
+              class="flex items-center gap-2 text-xs text-amber-700"
+            >
+              <svg class="w-4 h-4 animate-spin text-amber-500" viewBox="0 0 24 24" fill="none">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="4" stroke-linecap="round" />
+              </svg>
+              <span>하이라이트 생성 중입니다...</span>
+            </div>
+            <div
+              v-else-if="targetVsBitcoinResult.highlightedNarrative"
+              class="prose prose-slate prose-sm max-w-none markdown-highlight select-text"
+            >
+              <div v-html="renderMarkdown(targetVsBitcoinResult.highlightedNarrative)"></div>
+            </div>
+            <p v-else class="text-xs text-amber-800 bg-white/70 rounded-lg px-3 py-2">
+              하이라이트를 불러오지 못했습니다.
+            </p>
           </div>
 
-          <div class="rounded-xl border border-amber-200 p-3 bg-amber-50">
-            <p class="text-xs font-semibold text-amber-900 mb-1">⚠️ 리스크 메모</p>
-            <p class="text-xs text-amber-800 leading-relaxed">{{ targetVsBitcoinResult.riskNote }}</p>
-          </div>
         </div>
 
         <!-- 3. 사용자 vs 비교대상 -->
@@ -487,79 +746,241 @@
           <h4 class="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
             <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-purple-500 text-white text-xs font-bold">3</span>
             <span>{{ userVsTargetResult.personName }} × {{ userVsTargetResult.targetPersonName }} × 비트코인 궁합</span>
-            <span class="ml-auto text-4xl font-black text-purple-600">{{ userVsTargetResult.score }}점</span>
           </h4>
 
           <div class="grid gap-4 md:grid-cols-2">
             <div class="rounded-2xl border border-slate-200 bg-white p-4">
-              <div class="flex gap-4 items-start mb-3">
+              <div class="flex gap-5 items-start mb-3 flex-wrap">
                 <div class="flex-shrink-0">
-                  <div class="w-16 h-16 rounded-lg overflow-hidden border-2 border-slate-200 bg-slate-100 flex items-center justify-center">
+                  <div class="w-20 h-20 rounded-xl overflow-hidden border-2 border-slate-200 bg-slate-100 flex items-center justify-center shadow-sm">
                     <img v-if="userVsTargetResult.personImageUrl" :src="userVsTargetResult.personImageUrl" :alt="userVsTargetResult.personName" class="w-full h-full object-cover" />
                     <span v-else class="text-2xl">👤</span>
                   </div>
                 </div>
                 <div class="flex-1">
-                  <p class="text-sm font-bold text-slate-900 mb-1">{{ userVsTargetResult.personName }}</p>
-                  <p class="text-xs text-slate-500">오행 구성</p>
+                  <p class="text-base font-bold text-slate-900 mb-1">{{ userVsTargetResult.personName }}</p>
+                  <ul class="text-base text-slate-700 space-y-1.5 select-text">
+                    <li v-for="fact in userVsTargetResult.personFacts" :key="fact">{{ fact }}</li>
+                  </ul>
+                  <div
+                    v-if="userVsTargetResult.personStory"
+                    class="text-base text-slate-700 leading-relaxed mt-2 select-text"
+                  >
+                    {{ userVsTargetResult.personStory }}
+                  </div>
                 </div>
-              </div>
-              <div class="space-y-2">
-                <div v-for="highlight in userVsTargetResult.user.highlights" :key="highlight.label" class="space-y-1">
-                  <div class="flex items-center justify-between text-xs">
-                    <div class="flex items-center gap-1">
-                      <span class="text-sm">{{ highlight.icon }}</span>
-                      <span class="font-semibold text-slate-900">{{ highlight.label }}</span>
-                    </div>
-                    <span class="text-xs font-bold text-slate-700">{{ highlight.ratio }}%</span>
-                  </div>
-                  <div class="w-full bg-slate-200 rounded-full h-1">
-                    <div class="h-1 rounded-full transition-all duration-500" :class="highlight.colorClass" :style="{ width: `${highlight.ratio}%` }"></div>
-                  </div>
+                <div v-if="teamUserProfileRadar" class="profile-radar mt-3 md:mt-0 flex items-center justify-center">
+                  <svg
+                    :viewBox="`0 0 ${teamUserProfileRadar.size} ${teamUserProfileRadar.size}`"
+                    :width="teamUserProfileRadar.size"
+                    :height="teamUserProfileRadar.size"
+                    class="profile-radar-svg"
+                  >
+                    <circle
+                      :cx="teamUserProfileRadar.center"
+                      :cy="teamUserProfileRadar.center"
+                      :r="teamUserProfileRadar.maxRadius"
+                      class="fill-slate-50 stroke-slate-200"
+                    ></circle>
+                    <line
+                      v-for="axis in teamUserProfileRadar.axes"
+                      :key="`team-user-axis-${axis.key}`"
+                      :x1="teamUserProfileRadar.center"
+                      :y1="teamUserProfileRadar.center"
+                      :x2="axis.x2"
+                      :y2="axis.y2"
+                      class="stroke-slate-200"
+                      stroke-width="1"
+                    ></line>
+                    <polygon
+                      :points="teamUserProfileRadar.polygonPoints"
+                      class="fill-green-100/40 stroke-green-500 radar-polygon"
+                      stroke-width="2"
+                    ></polygon>
+                    <circle
+                      v-for="marker in teamUserProfileRadar.markers"
+                      :key="`team-user-marker-${marker.key}`"
+                      :cx="marker.x"
+                      :cy="marker.y"
+                      r="4.5"
+                      class="fill-green-500"
+                    ></circle>
+                    <text
+                      v-for="marker in teamUserProfileRadar.markers"
+                      :key="`team-user-percent-${marker.key}`"
+                      :x="marker.x"
+                      :y="marker.y - 8"
+                      class="text-[9px] fill-green-600 font-semibold pointer-events-none"
+                      text-anchor="middle"
+                    >
+                      {{ marker.ratio }}%
+                    </text>
+                    <text
+                      v-for="axis in teamUserProfileRadar.axes"
+                      :key="`team-user-label-${axis.key}`"
+                      :x="axis.labelX"
+                      :y="axis.labelY"
+                      class="text-[11px] fill-slate-700 font-bold"
+                      text-anchor="middle"
+                      dominant-baseline="middle"
+                    >
+                      {{ axis.label }}
+                    </text>
+                  </svg>
                 </div>
               </div>
             </div>
 
             <div class="rounded-2xl border border-slate-200 bg-white p-4">
-              <div class="flex gap-4 items-start mb-3">
+              <div class="flex gap-5 items-start mb-3 flex-wrap">
                 <div class="flex-shrink-0">
-                  <div class="w-16 h-16 rounded-lg overflow-hidden border-2 border-slate-200 bg-slate-100 flex items-center justify-center">
+                  <div class="w-20 h-20 rounded-xl overflow-hidden border-2 border-slate-200 bg-slate-100 flex items-center justify-center shadow-sm">
                     <img v-if="userVsTargetResult.targetPersonImageUrl" :src="userVsTargetResult.targetPersonImageUrl" :alt="userVsTargetResult.targetPersonName" class="w-full h-full object-cover" />
                     <span v-else class="text-2xl">👤</span>
                   </div>
                 </div>
                 <div class="flex-1">
-                  <p class="text-sm font-bold text-slate-900 mb-1">{{ userVsTargetResult.targetPersonName }}</p>
-                  <p class="text-xs text-slate-500">오행 구성</p>
-                </div>
-              </div>
-              <div v-if="userVsTargetResult.target.highlights && userVsTargetResult.target.highlights.length" class="space-y-2">
-                <div v-for="highlight in userVsTargetResult.target.highlights" :key="highlight.label" class="space-y-1">
-                  <div class="flex items-center justify-between text-xs">
-                    <div class="flex items-center gap-1">
-                      <span class="text-sm">{{ highlight.icon }}</span>
-                      <span class="font-semibold text-slate-900">{{ highlight.label }}</span>
-                    </div>
-                    <span class="text-xs font-bold text-slate-700">{{ highlight.ratio }}%</span>
-                  </div>
-                  <div class="w-full bg-slate-200 rounded-full h-1">
-                    <div class="h-1 rounded-full transition-all duration-500" :class="highlight.colorClass" :style="{ width: `${highlight.ratio}%` }"></div>
+                  <p class="text-base font-bold text-slate-900 mb-1">{{ userVsTargetResult.targetPersonName }}</p>
+                  <ul class="text-base text-slate-700 space-y-1.5 select-text">
+                    <li v-for="fact in userVsTargetResult.targetFacts" :key="fact">{{ fact }}</li>
+                  </ul>
+                  <div
+                    v-if="userVsTargetResult.targetStory"
+                    class="text-base text-slate-700 leading-relaxed mt-2 select-text"
+                  >
+                    {{ userVsTargetResult.targetStory }}
                   </div>
                 </div>
+                <div v-if="teamTargetProfileRadar" class="profile-radar mt-3 md:mt-0 flex items-center justify-center">
+                  <svg
+                    :viewBox="`0 0 ${teamTargetProfileRadar.size} ${teamTargetProfileRadar.size}`"
+                    :width="teamTargetProfileRadar.size"
+                    :height="teamTargetProfileRadar.size"
+                    class="profile-radar-svg"
+                  >
+                    <circle
+                      :cx="teamTargetProfileRadar.center"
+                      :cy="teamTargetProfileRadar.center"
+                      :r="teamTargetProfileRadar.maxRadius"
+                      class="fill-slate-50 stroke-slate-200"
+                    ></circle>
+                    <line
+                      v-for="axis in teamTargetProfileRadar.axes"
+                      :key="`team-target-axis-${axis.key}`"
+                      :x1="teamTargetProfileRadar.center"
+                      :y1="teamTargetProfileRadar.center"
+                      :x2="axis.x2"
+                      :y2="axis.y2"
+                      class="stroke-slate-200"
+                      stroke-width="1"
+                    ></line>
+                    <polygon
+                      :points="teamTargetProfileRadar.polygonPoints"
+                      class="fill-amber-100/40 stroke-amber-500 radar-polygon"
+                      stroke-width="2"
+                    ></polygon>
+                    <circle
+                      v-for="marker in teamTargetProfileRadar.markers"
+                      :key="`team-target-marker-${marker.key}`"
+                      :cx="marker.x"
+                      :cy="marker.y"
+                      r="4.5"
+                      class="fill-amber-500"
+                    ></circle>
+                    <text
+                      v-for="marker in teamTargetProfileRadar.markers"
+                      :key="`team-target-percent-${marker.key}`"
+                      :x="marker.x"
+                      :y="marker.y - 8"
+                      class="text-[9px] fill-amber-600 font-semibold pointer-events-none"
+                      text-anchor="middle"
+                    >
+                      {{ marker.ratio }}%
+                    </text>
+                    <text
+                      v-for="axis in teamTargetProfileRadar.axes"
+                      :key="`team-target-label-${axis.key}`"
+                      :x="axis.labelX"
+                      :y="axis.labelY"
+                      class="text-[11px] fill-slate-700 font-bold"
+                      text-anchor="middle"
+                      dominant-baseline="middle"
+                    >
+                      {{ axis.label }}
+                    </text>
+                  </svg>
+                </div>
               </div>
-              <div v-else class="text-xs text-slate-500">오행 정보 없음</div>
             </div>
           </div>
 
-          <div class="rounded-2xl border border-slate-200 p-5 bg-slate-50">
-            <div class="prose prose-slate max-w-none prose-headings:text-slate-900 prose-h2:text-lg prose-h2:font-bold prose-h2:mt-6 prose-h2:mb-3 prose-h2:first:mt-0 prose-p:text-sm prose-p:text-slate-700 prose-p:leading-relaxed prose-p:mb-3 prose-strong:text-slate-900 prose-strong:font-semibold compatibility-content select-text">
-              <div v-html="renderMarkdown(userVsTargetResult.narrative)"></div>
+          <div
+            v-if="userVsTargetResult"
+            class="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 space-y-3 highlight-panel"
+          >
+            <div class="text-[11px] font-semibold text-amber-700 uppercase tracking-wide flex items-center gap-2">
+              <span class="inline-flex w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              핵심 하이라이트
             </div>
+            <div
+              v-if="userVsTargetResult.highlightLoading"
+              class="flex items-center gap-2 text-xs text-amber-700"
+            >
+              <svg class="w-4 h-4 animate-spin text-amber-500" viewBox="0 0 24 24" fill="none">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="4" stroke-linecap="round" />
+              </svg>
+              <span>하이라이트 생성 중입니다...</span>
+            </div>
+            <div
+              v-else-if="userVsTargetResult.highlightedNarrative"
+              class="prose prose-slate prose-sm max-w-none markdown-highlight select-text"
+            >
+              <div v-html="renderMarkdown(userVsTargetResult.highlightedNarrative)"></div>
+            </div>
+            <p v-else class="text-xs text-amber-800 bg-white/70 rounded-lg px-3 py-2">
+              하이라이트를 불러오지 못했습니다.
+            </p>
           </div>
 
-          <div class="rounded-xl border border-purple-200 p-3 bg-purple-50">
-            <p class="text-xs font-semibold text-purple-900 mb-1">⚠️ 리스크 메모</p>
-            <p class="text-xs text-purple-800 leading-relaxed">{{ userVsTargetResult.riskNote }}</p>
+        </div>
+
+        <div v-if="pairCompatibilityResult" class="border-t border-slate-200 pt-6 space-y-4">
+          <div class="rounded-2xl border border-purple-200 bg-purple-50/60 p-5 space-y-3">
+            <div class="flex items-center gap-2">
+              <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-purple-600 text-white text-xs font-bold">◎</span>
+              <p class="text-base font-bold text-purple-900">두 사람 궁합 리포트</p>
+              <span
+                v-if="pairCompatibilityResult.agentProvider"
+                class="ml-auto text-xs text-purple-600"
+              >
+                ({{ pairCompatibilityResult.agentProvider }})
+              </span>
+            </div>
+            <div class="rounded-2xl border border-amber-200 bg-white/70 p-4 space-y-3 highlight-panel">
+              <div class="text-[11px] font-semibold text-amber-700 uppercase tracking-wide flex items-center gap-2">
+                <span class="inline-flex w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                핵심 하이라이트
+              </div>
+              <div
+                v-if="pairCompatibilityResult.highlightLoading"
+                class="flex items-center gap-2 text-xs text-amber-700"
+              >
+                <svg class="w-4 h-4 animate-spin text-amber-500" viewBox="0 0 24 24" fill="none">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                  <path class="opacity-75" d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="4" stroke-linecap="round" />
+                </svg>
+                <span>하이라이트 생성 중입니다...</span>
+              </div>
+              <div
+                v-else-if="pairCompatibilityResult.highlightedNarrative"
+                class="prose prose-slate prose-sm max-w-none markdown-highlight select-text"
+                v-html="renderMarkdown(pairCompatibilityResult.highlightedNarrative)"
+              ></div>
+              <p v-else class="text-xs text-amber-800 bg-white/70 rounded-lg px-3 py-2">
+                하이라이트를 불러오지 못했습니다.
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -600,15 +1021,15 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
-import { fetchCompatibilityQuickPresets, generateCompatibilityNarrative, saveCompatibilityAnalysis, processSajuWithAgent } from '@/services/compatibilityService'
+import { computed, nextTick, onMounted, reactive, ref, watchEffect } from 'vue'
+import { fetchCompatibilityQuickPresets, fetchCompatibilityReportTemplates, runCompatibilityAgent, saveCompatibilityAnalysis } from '@/services/compatibilityService'
 
 const BITCOIN_HIGHLIGHTS = [
   {
     label: '목(木)',
     elementKey: 'wood',
     value: '성장과 개발 생태계',
-    description: '라이트닝, 탭루트 등 점진적 진화를 이끄는 확장 에너지.',
+    description: '새로운 확장 제안과 구축자 생태계를 키우는 힘. 라이트닝·탭루트 같은 실험을 밀어 올리고, 지속적인 코드 리뷰·테스트 문화가 뿌리처럼 비트코인을 지탱한다.',
     icon: '🌱',
     ratio: 10,
     colorClass: 'bg-green-500'
@@ -616,8 +1037,8 @@ const BITCOIN_HIGHLIGHTS = [
   {
     label: '화(火)',
     elementKey: 'fire',
-    value: '관심, 서사, 과열',
-    description: '들불처럼 번지는 화. 환호와 공포가 반복되는 극단의 에너지.',
+    value: '관심, 서사, 과열 모멘텀',
+    description: '가격 급등락과 서사가 촉발하는 열기. 밈과 미디어, 정치 발언이 불꽃처럼 튀며, 한 번 붙은 불길이 글로벌 유동성을 빨아들여 단기간 폭증을 만든다.',
     icon: '🔥',
     ratio: 20,
     colorClass: 'bg-red-500'
@@ -625,8 +1046,8 @@ const BITCOIN_HIGHLIGHTS = [
   {
     label: '토(土)',
     elementKey: 'earth',
-    value: '완충, 신뢰 인프라',
-    description: '전 세계 노드·채굴자의 분산 네트워크가 흔들림을 버텨낸다.',
+    value: '완충, 신뢰 인프라, 거버넌스',
+    description: '채굴자·노드·풀 운영자가 만든 방호벽. 전 세계에 흩어진 노드가 규칙을 검증하고, 채굴 난이도·반감기 구조가 충격을 흡수하는 버팀목이 된다.',
     icon: '🏔️',
     ratio: 10,
     colorClass: 'bg-yellow-600'
@@ -635,27 +1056,76 @@ const BITCOIN_HIGHLIGHTS = [
     label: '금(金)',
     elementKey: 'metal',
     value: '규칙, 고정 공급, 불변성',
-    description: '비트코인의 핵심 본체. 2,100만 개 고정 공급량, 변경 불가능한 규칙.',
-    icon: '⚙️',
+    description: '비트코인의 핵심 본체. 2,100만 개 고정 공급과 검증 가능한 합의 규칙이 디지털 금의 품격을 부여하고, 누구도 임의 발행·검열을 할 수 없도록 만든다.',
+    icon: '🥇',
     ratio: 35,
     colorClass: 'bg-amber-500'
   },
   {
     label: '수(水)',
     elementKey: 'water',
-    value: '유동성, 글로벌 자본의 흐름',
-    description: '홍수·급류에 가까운 수. 상승장에서는 폭발적, 회수 국면에서는 급락.',
+    value: '유동성, 글로벌 자본 흐름',
+    description: '거대한 자본·거래소·파생상품 시장이 만들어내는 파도. 상승장에서는 폭발적 흡인력을, 조정기에는 급랭을 유발하며 온체인 자금 이동이 실시간으로 흐른다.',
     icon: '💧',
     ratio: 25,
     colorClass: 'bg-blue-500'
   }
 ]
 
+const REPORT_TEMPLATE_DEFAULTS = {
+  user_vs_bitcoin: `{{SUBJECT_NAME}}의 사주와 비트코인 궁합을 분석하세요.{{SUBJECT_EXTRA}}
+
+**작성 지침 (반드시 준수):**
+
+1. **분량**: 800~1000자. 시스템 프롬프트의 요구(비트코인 커리어·재물·인간관계·전략)를 빠짐없이 반영하고, 문단 사이 공백 없이 촘촘히 작성하세요.
+2. **문체**: 모든 문장은 ‘~입니다’ 체로 작성하고, 각 항목의 핵심 문장은 **제목: 내용** 형태의 문장으로 시작하세요.
+
+3. **출력 템플릿(순서 고정, 마크다운 엄수)**:
+   - ## 프로필 브리핑
+     - 일간: …
+     - 오행 앵커: …
+     - 직업/역할: …
+   - ## 커리어 & 재물
+     - 불릿 2~3개로 비트코인 커리어와 재물 흐름 서술
+   - ## 인간관계
+     - 협업/대인관계 리듬과 리스크를 불릿 2개로 정리
+   - ## 비트코인 전략 체크리스트
+     - 1. …
+     - 2. …
+     - 3. …
+
+4. **근거 & 어휘**: 저장된 사주·스토리·오행 분포에서 최소 2가지 근거를 명시하고, 한자 대신 풀이형 표현을 사용하세요.
+
+5. **금지 사항**: 인사말, 잡담, “모르겠다” 류 표현, 표 생략, 섹션 누락 금지.`,
+  team_vs_bitcoin: `{{USER_NAME}}와(과) {{TARGET_NAME}}가 함께 비트코인 투자할 때의 팀 궁합을 분석하세요.{{TEAM_EXTRA}}
+
+**작성 지침 (반드시 준수):**
+
+1. **분량**: 700~950자. 두 사람의 사주 앵커, 투자 습관, 협업 리듬, 전략 포지셔닝을 모두 다루세요.
+2. **문체**: 모든 문장을 ‘~입니다’ 체로 작성하고, 각 문단의 첫 문장은 '제목: 내용' 구조로 요약하세요.
+
+3. **출력 템플릿(순서 고정, 마크다운 엄수)**:
+   - ## 팀 특성 & 호흡
+     - 사용자 이름과 비교 대상 이름을 모두 언급하는 불릿 2~3개
+   - ## 커리어 & 재물 시너지
+     - 불릿 2개, 각 문장에 어느 사람이 어떤 역할을 맡는지 명시
+   - ## 인간관계/커뮤니케이션
+     - 불릿 2개, 갈등 방지법 포함
+   - ## 팀 비트코인 전략 체크리스트
+     - 1. 역할 분담 규칙
+     - 2. 의사결정 루틴
+     - 3. 리스크 통제법
+
+4. **근거**: 각 섹션에서 최소 한 번씩 두 사람의 사주 요약 또는 스토리에서 직접 언급한 특징을 인용하세요.
+
+5. **금지 사항**: 인사말, 모호한 표현, 생략표, 섹션 누락 금지.`
+}
+
 const BITCOIN_CANVAS_PROFILE = {
   entityName: '비트코인',
   label: '비트코인 사주 캔버스',
   summaryHighlight: '금(金)이 주력인 디지털 금, 수·화가 극단을 이루는 에너지',
-  description: '고정 공급과 변동성, 네트워크 속성을 오행으로 환산해 구성한 비트코인의 기준선입니다.',
+  description: '',
   highlights: BITCOIN_HIGHLIGHTS
 }
 
@@ -671,7 +1141,7 @@ const ELEMENT_ICON_MAP = {
   wood: '🌱',
   fire: '🔥',
   earth: '🏔️',
-  metal: '⚙️',
+  metal: '🥇',
   water: '💧'
 }
 
@@ -767,7 +1237,6 @@ const FALLBACK_QUICK_PRESETS = [
   {
     id: 'user-self',
     label: '사용자',
-    description: '나만의 정보를 직접 입력해 궁합을 계산하세요.',
     gender: '',
     birthdate: '',
     birthtime: '',
@@ -779,7 +1248,6 @@ const FALLBACK_QUICK_PRESETS = [
     label: '마이클 세일러',
     birthdate: '1965-02-04',
     gender: 'male',
-    description: 'MicroStrategy CEO이자 비트코인 트리플 맥시.',
     image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Michael_Saylor_2016.jpg/640px-Michael_Saylor_2016.jpg'
   },
   {
@@ -787,7 +1255,6 @@ const FALLBACK_QUICK_PRESETS = [
     label: '도널드 트럼프',
     birthdate: '1946-06-14',
     gender: 'male',
-    description: '전 미 대통령으로 친비트코인 행보를 강화 중.',
     image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/56/Donald_Trump_official_portrait.jpg/640px-Donald_Trump_official_portrait.jpg'
   },
   {
@@ -795,7 +1262,6 @@ const FALLBACK_QUICK_PRESETS = [
     label: '래리 핑크',
     birthdate: '1952-11-02',
     gender: 'male',
-    description: '블랙록 CEO, 기관 비트코인 수요를 이끄는 인물.',
     image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Laurence_D._Fink.jpg/640px-Laurence_D._Fink.jpg'
   },
   {
@@ -803,7 +1269,6 @@ const FALLBACK_QUICK_PRESETS = [
     label: '제이미 다이먼',
     birthdate: '1956-03-13',
     gender: 'male',
-    description: 'JP모건 CEO, 비판과 도입을 오가는 상징적 인물.',
     image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/Jamie_Dimon_2018.jpg/640px-Jamie_Dimon_2018.jpg'
   },
   {
@@ -811,7 +1276,6 @@ const FALLBACK_QUICK_PRESETS = [
     label: '비탈릭 부테린',
     birthdate: '1994-01-31',
     gender: 'male',
-    description: '이더리움 창시자이자 크립토 철학자.',
     image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1c/Vitalik_Buterin_TechCrunch_London_2015_%28cropped%29.jpg/640px-Vitalik_Buterin_TechCrunch_London_2015_%28cropped%29.jpg'
   }
 ]
@@ -838,6 +1302,8 @@ const timeUnknown = ref(false)
 const userName = ref(DEFAULT_USER_NAME)
 const userImageUrl = ref('')
 const userDescription = ref('')
+const userStory = ref('')
+const userSajuSummary = ref('')
 const targetName = ref(DEFAULT_TARGET_NAME)
 const targetBirthdate = ref('')
 const targetBirthtime = ref('')
@@ -845,6 +1311,8 @@ const targetGender = ref('')
 const targetTimeUnknown = ref(false)
 const targetImageUrl = ref('')
 const targetDescription = ref('')
+const targetStory = ref('')
+const targetSajuSummary = ref('')
 const targetProfileEnabled = ref(false)
 const loading = ref(false)
 const analysisStep = ref(0)
@@ -852,6 +1320,23 @@ const totalSteps = ref(3)
 const errorMessage = ref('')
 const showDebugModal = ref(false)
 const debugPrompts = ref([])
+const loadingSteps = ref([])
+const loadingStepStats = computed(() => {
+  const total = loadingSteps.value.length
+  const completed = loadingSteps.value.filter((step) => step.status === 'done').length
+  return { total, completed }
+})
+const loadingProgressRatio = computed(() => {
+  const total = loadingSteps.value.length
+  if (!total) {
+    return Math.min(1, analysisStep.value / Math.max(totalSteps.value, 1))
+  }
+  const completed = loadingSteps.value.filter((step) => step.status === 'done').length
+  const running = loadingSteps.value.some((step) => step.status === 'running')
+  const partial = running ? 0.35 : 0
+  return Math.min(1, (completed + partial) / total)
+})
+const pairCompatibilityResult = ref(null)
 
 function openPromptDebug() {
   const prompts = []
@@ -864,27 +1349,126 @@ function openPromptDebug() {
   if (userVsTargetResult.value?.debugPrompt) {
     prompts.push({ title: '3. 팀 궁합 vs 비트코인', content: userVsTargetResult.value.debugPrompt })
   }
+  if (pairCompatibilityResult.value?.debugPrompt) {
+    prompts.push({ title: '4. 두 사람 직접 궁합', content: pairCompatibilityResult.value.debugPrompt })
+  }
   debugPrompts.value = prompts
   showDebugModal.value = true
 }
 
-const compatibilityResult = ref(null)
 const userVsBitcoinResult = ref(null)
 const targetVsBitcoinResult = ref(null)
 const userVsTargetResult = ref(null)
 const selectedTargetPresetId = ref(null)
 const personTargetMeta = computed(() => buildPersonTargetMeta())
 const activeTargetProfile = computed(() => personTargetMeta.value)
-const scoreProgress = ref(0)
 const quickPresetOptions = ref(
   FALLBACK_QUICK_PRESETS.map((preset, index) => normalizeQuickPreset(preset, index)).filter(Boolean)
 )
 const quickPresetLoading = ref(false)
+const reportTemplateMap = ref({})
 const selectedPresetId = ref(null)
 const bitcoinHighlights = computed(() => {
   const highlights = bitcoinCanvasProfile.highlights || []
   return [...highlights].sort((a, b) => b.ratio - a.ratio)
 })
+const selectedBitcoinHighlightKey = ref('')
+watchEffect(() => {
+  const highlights = bitcoinHighlights.value
+  if (!highlights.length) {
+    selectedBitcoinHighlightKey.value = ''
+    return
+  }
+  const exists = highlights.some((item) => item.elementKey === selectedBitcoinHighlightKey.value)
+  if (!exists) {
+    selectedBitcoinHighlightKey.value = highlights[0].elementKey
+  }
+})
+const selectedBitcoinHighlight = computed(() => {
+  const highlights = bitcoinHighlights.value
+  return highlights.find((item) => item.elementKey === selectedBitcoinHighlightKey.value) || highlights[0] || null
+})
+function buildRadarChartData(highlights = [], { size = 320, minRadius = 40, maxRadius = 120 } = {}) {
+  const ordered = ELEMENTS.map((el) => {
+    const found = highlights.find((item) => item.elementKey === el.key)
+    return found || { elementKey: el.key, label: el.label, ratio: 0 }
+  })
+  const center = size / 2
+  const angleStep = (Math.PI * 2) / ordered.length
+  const polygonPoints = []
+  const markers = []
+  const axes = []
+  ordered.forEach((item, index) => {
+    const angle = -Math.PI / 2 + angleStep * index
+    const normalized = Math.max(0.1, Math.min(1, item.ratio / 100))
+    const radius = minRadius + normalized * (maxRadius - minRadius)
+    const x = center + radius * Math.cos(angle)
+    const y = center + radius * Math.sin(angle)
+    polygonPoints.push(`${x},${y}`)
+    markers.push({
+      key: item.elementKey,
+      x,
+      y,
+      label: item.label,
+      ratio: item.ratio
+    })
+    axes.push({
+      key: item.elementKey,
+      label: item.label,
+      x2: center + maxRadius * Math.cos(angle),
+      y2: center + maxRadius * Math.sin(angle),
+      labelX: center + (maxRadius + 24) * Math.cos(angle),
+      labelY: center + (maxRadius + 24) * Math.sin(angle)
+    })
+  })
+  return {
+    size,
+    center,
+    maxRadius,
+    axes,
+    polygonPoints: polygonPoints.join(' '),
+    markers
+  }
+}
+const bitcoinRadarChart = computed(() => {
+  const items = bitcoinHighlights.value
+  if (!items.length) {
+    return {
+      size: 320,
+      center: 160,
+      maxRadius: 120,
+      axes: [],
+      polygonPoints: '',
+      markers: []
+    }
+  }
+  const chart = buildRadarChartData(items, { size: 320, minRadius: 40, maxRadius: 120 })
+  chart.markers = chart.markers.map((marker) => ({
+    ...marker,
+    active: selectedBitcoinHighlightKey.value === marker.key
+  }))
+  return chart
+})
+function handleBitcoinHighlightSelect(key) {
+  if (!key) return
+  selectedBitcoinHighlightKey.value = key
+}
+function getProfileRadarData(profile, options = {}) {
+  if (!profile?.elementHighlights?.length) return null
+  return buildRadarChartData(profile.elementHighlights, options)
+}
+const userProfileRadar = computed(() =>
+  getProfileRadarData(userVsBitcoinResult.value?.profileSnapshot, { size: 280, minRadius: 50, maxRadius: 115 })
+)
+const targetProfileRadar = computed(() =>
+  getProfileRadarData(targetVsBitcoinResult.value?.profileSnapshot, { size: 280, minRadius: 50, maxRadius: 115 })
+)
+const teamUserProfileRadar = computed(() =>
+  getProfileRadarData(userVsTargetResult.value?.personProfile, { size: 240, minRadius: 35, maxRadius: 95 })
+)
+const teamTargetProfileRadar = computed(() =>
+  getProfileRadarData(userVsTargetResult.value?.targetProfile, { size: 240, minRadius: 35, maxRadius: 95 })
+)
 const targetNameDisplay = computed(() => activeTargetProfile.value?.entityName || DEFAULT_TARGET_NAME)
 const analyzeButtonLabel = computed(() => {
   if (birthdate.value && targetBirthdate.value) {
@@ -893,56 +1477,75 @@ const analyzeButtonLabel = computed(() => {
   return '사주 분석하기'
 })
 
-// 새로운 loadingMessage computed 속성 추가
-const loadingMessage = computed(() => {
-  const user = userName.value || DEFAULT_USER_NAME
-  const target = targetName.value || DEFAULT_TARGET_NAME
+let currentRunId = 0
+const stageDebugDetails = reactive({
+  story: [],
+  saju: [],
+  report: []
+})
 
-  if (loading.value) {
-    // 두 명일 때
-    if (birthdate.value && targetBirthdate.value) {
-      switch (analysisStep.value) {
-        case 1: return `1) ${user}의 사주 분석 중...`
-        case 2: return `2) ${target}의 사주 분석 중...`
-        case 3: return `3) ${user}과 ${target} 궁합 사주 분석 중...`
-        default: return `사주 분석 중... (${analysisStep.value}/${totalSteps.value})` // 폴백
-      }
-    } 
-    // 한 명일 때 (user 또는 target 중 한 명만 있을 때)
-    else if (birthdate.value || targetBirthdate.value) {
-      const personName = birthdate.value ? user : target
-      return `${personName}의 사주 분석 중... (${analysisStep.value}/${totalSteps.value})`
+function registerLoadingStep(key, label) {
+  if (!key || !label) return
+  const exists = loadingSteps.value.find((step) => step.key === key)
+  if (!exists) {
+    loadingSteps.value.push({ key, label, status: 'pending', detail: '' })
+  }
+}
+
+function setLoadingStepStatus(key, status, detail = '') {
+  const step = loadingSteps.value.find((item) => item.key === key)
+  if (step) {
+    step.status = status
+    if (detail !== undefined) {
+      step.detail = detail
     }
   }
-  return '' // 로딩 중이 아니면 빈 문자열
-})
+}
 
-let currentRunId = 0
-
-const SCORE_CIRCLE_RADIUS = 60
-const SCORE_CIRCLE_CIRCUMFERENCE = 2 * Math.PI * SCORE_CIRCLE_RADIUS
-
-const userNarrativeHighlights = computed(() => {
-  if (!compatibilityResult.value) return []
-  const result = compatibilityResult.value
-  const elementSentence = `당신의 사주는 ${result.element.label}을 주축으로 하고 있으며, 이는 ${result.elementSummary}를 의미합니다.`
-  const targetNameText = result.target?.entityName || '비교 대상'
-  const matchSentence = `당신의 ${result.element.label} 에너지와 ${targetNameText}의 오행 속성이 만났을 때, ${result.rating}의 궁합(점수 ${result.score}점)이 드러납니다.`
+function getHighlightTargets() {
   return [
-    {
-      id: 'element-narrative',
-      label: '사주 앵커',
-      icon: '🌙',
-      text: elementSentence
-    },
-    {
-      id: 'compat-narrative',
-      label: '궁합 진단',
-      icon: '✨',
-      text: matchSentence
-    }
-  ]
-})
+    userVsBitcoinResult.value,
+    targetVsBitcoinResult.value,
+    userVsTargetResult.value,
+    pairCompatibilityResult.value
+  ].filter((item) => item && item.narrative)
+}
+
+function updateHighlightStageStatus() {
+  const targets = getHighlightTargets()
+  if (!targets.length) {
+    setLoadingStepStatus('highlight_stage', 'pending', '하이라이트 대상 없음')
+    return
+  }
+  const total = targets.length
+  const completed = targets.filter((item) => !item.highlightLoading && item.highlightedNarrative).length
+  const anyRunning = targets.some((item) => item.highlightLoading)
+  const detail = `${completed}/${total} 완료`
+  setLoadingStepStatus('highlight_stage', anyRunning ? 'running' : 'done', detail)
+}
+
+function resetStageDebugDetails() {
+  stageDebugDetails.story = []
+  stageDebugDetails.saju = []
+  stageDebugDetails.report = []
+}
+
+function addStageDebugDetail(stage, detail = {}) {
+  if (!stageDebugDetails[stage]) return
+  const payload = {
+    ...detail,
+    timestamp: detail.timestamp || new Date().toISOString()
+  }
+  stageDebugDetails[stage].push(payload)
+}
+
+function prepareLoadingSteps() {
+  loadingSteps.value = []
+  registerLoadingStep('story_stage', '사용자 정보 가져오기')
+  registerLoadingStep('saju_stage', '사주 분석')
+  registerLoadingStep('report_stage', '리포트 생성')
+  registerLoadingStep('highlight_stage', '하이라이트 생성')
+}
 
 function normalizeQuickPreset(preset, index = 0) {
   if (!preset) return null
@@ -950,13 +1553,217 @@ function normalizeQuickPreset(preset, index = 0) {
   return {
     id,
     label: preset.label || `빠른 설정 ${index + 1}`,
-    description: preset.description || '',
     birthdate: preset.birthdate || '',
     birthtime: preset.birth_time || preset.birthtime || '',
     gender: preset.gender || '',
     imageUrl: preset.image_url || preset.imageUrl || '',
     storedSaju: preset.stored_saju || preset.storedSaju || '',
     assumeTimeUnknown: preset.assume_time_unknown ?? preset.assumeTimeUnknown ?? (!!(preset.birthdate || preset.birth_time || preset.birthtime) && !preset.birth_time && !preset.birthtime)
+  }
+}
+
+async function loadReportTemplates() {
+  try {
+    const templates = await fetchCompatibilityReportTemplates()
+    const map = {}
+    if (Array.isArray(templates)) {
+      templates.forEach((template) => {
+        map[template.key] = template.content || ''
+      })
+    }
+    reportTemplateMap.value = map
+  } catch (error) {
+    console.warn('Failed to load report templates', error)
+    reportTemplateMap.value = {}
+  }
+}
+
+function getReportTemplateContent(key) {
+  return reportTemplateMap.value[key] || REPORT_TEMPLATE_DEFAULTS[key] || ''
+}
+
+function renderReportTemplate(key, replacements = {}) {
+  let content = getReportTemplateContent(key)
+  if (!content) return ''
+
+  Object.entries(replacements).forEach(([placeholder, value]) => {
+    const safeValue = value ?? ''
+    const escapedKey = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const regex = new RegExp(`{{\\s*${escapedKey}\\s*}}`, 'g')
+    content = content.replace(regex, safeValue)
+  })
+
+  return content.replace(/{{\s*[A-Z0-9_]+\s*}}/g, '')
+}
+
+function buildPresetProfileContext(preset, roleLabel) {
+  const name = preset.label || roleLabel || DEFAULT_USER_NAME
+  const lines = [
+    `이름: ${name}`,
+    preset.birthdate ? `생년월일: ${preset.birthdate}` : null,
+    preset.birthtime ? `태어난 시간: ${preset.birthtime}` : null,
+    preset.gender ? `성별: ${preset.gender === 'male' ? '남성' : '여성'}` : null
+  ].filter(Boolean)
+
+  if (preset.storedSaju) {
+    lines.push('참고 기록:')
+    lines.push(preset.storedSaju)
+  }
+
+  return {
+    name,
+    baseContext: `${roleLabel || '인물'} 기본 정보:\n${lines.join('\n')}`
+  }
+}
+
+async function runPresetStoryAgent(preset, roleLabel) {
+  const { name, baseContext } = buildPresetProfileContext(preset, roleLabel)
+  const storyResponse = await runCompatibilityAgent({
+    agentKey: 'story_extractor',
+    context: baseContext,
+    temperature: 0.65
+  })
+  if (!storyResponse?.ok) {
+    throw new Error(storyResponse?.error || '스토리 에이전트 실패')
+  }
+  return {
+    name,
+    baseContext,
+    story: (storyResponse.narrative || '').trim()
+  }
+}
+
+async function runPresetSajuAgent({ name, baseContext, story }) {
+  const sajuContext = [
+    baseContext,
+    '',
+    '## 추출된 서사',
+    story || '별도 서사가 제공되지 않았습니다.',
+    '',
+    '## 요청',
+    `${name}의 사주적 앵커와 비트코인 투자 태도를 분석하세요.`
+  ].join('\n')
+
+  const sajuResponse = await runCompatibilityAgent({
+    agentKey: 'saju_analysis',
+    context: sajuContext,
+    temperature: 0.45
+  })
+  if (!sajuResponse?.ok) {
+    throw new Error(sajuResponse?.error || '사주 요약 에이전트 실패')
+  }
+  return (sajuResponse.narrative || '').trim()
+}
+
+function buildFallbackHighlights(text) {
+  if (!text) return ''
+  const normalized = text.replace(/\r\n?/g, '\n')
+  const lines = normalized
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !/^#+\s/.test(line))
+  if (!lines.length) return ''
+  const keywords = ['전략', '리스크', '주의', '핵심', '시너지', '투자', '궁합', '포인트']
+  const picked = []
+  lines.forEach((line) => {
+    if (picked.length >= 4) return
+    const normalizedLine = line.replace(/^[-*]\s+/, '')
+    if (keywords.some((word) => normalizedLine.includes(word))) {
+      picked.push(normalizedLine)
+    }
+  })
+  if (!picked.length) {
+    picked.push(lines[0])
+  }
+  return picked.map((line) => `- ==${line}==`).join('\n')
+}
+
+async function highlightNarrativeText(originalText) {
+  const trimmed = (originalText || '').trim()
+  if (!trimmed) return ''
+  const highlightGuide = [
+    '## 역할',
+    '당신은 사주/궁합 리포트에서 임팩트 있는 구절을 뽑아내는 전문 에디터입니다.',
+    '## 목표',
+    '원문에서 반드시 기억해야 할 구절만 선택해 <mark> 형광 표시로 감싸세요.',
+    '## 출력 형식',
+    '- 원문 전체를 그대로 출력하되, 강조할 구절만 <mark>...</mark>로 감싸세요.',
+    '- 새로운 문장이나 해설을 추가하지 마세요.',
+    '- 하이라이트는 2~4개 구절로 제한하세요.'
+  ].join('\n')
+  const context = `${highlightGuide}\n\n[원문]\n${trimmed}`
+  const response = await runCompatibilityAgent({
+    agentKey: 'highlight_story',
+    context,
+    temperature: 0.15
+  })
+  if (response?.ok && response?.narrative) {
+    return response.narrative.trim()
+  }
+  return ''
+}
+
+async function applyHighlightToResult(result) {
+  if (!result?.narrative) {
+    if (result) {
+      result.highlightLoading = false
+    }
+    updateHighlightStageStatus()
+    return
+  }
+  result.highlightLoading = true
+  updateHighlightStageStatus()
+  try {
+    const highlighted = await highlightNarrativeText(result.narrative)
+    const hasMarks = typeof highlighted === 'string' && /<mark/i.test(highlighted)
+    const fallback = !hasMarks ? buildFallbackHighlights(result.narrative) : ''
+    if (highlighted && hasMarks) {
+      result.highlightedNarrative = highlighted
+    } else if (fallback) {
+      result.highlightedNarrative = fallback
+    }
+  } catch (error) {
+    console.warn('하이라이트 에이전트 실패', error)
+    const fallback = buildFallbackHighlights(result.narrative)
+    if (fallback) {
+      result.highlightedNarrative = fallback
+    }
+  } finally {
+    result.highlightLoading = false
+    updateHighlightStageStatus()
+  }
+}
+
+async function runStoryAgentForProfile(profile, { roleLabel = '사용자', baseDescription } = {}) {
+  if (!profile) return { story: '', prompt: '', provider: '' }
+  const lines = [
+    `${roleLabel} 기본 정보:`,
+    ...profile.facts.map((fact) => `- ${fact}`)
+  ]
+  if (baseDescription) {
+    lines.push(`- 참고 메모: ${baseDescription}`)
+  }
+  const context = lines.join('\n')
+  let response
+  try {
+    response = await runCompatibilityAgent({
+      agentKey: 'story_extractor',
+      context,
+      temperature: 0.6
+    })
+  } catch (error) {
+    error.agentPrompt = context
+    throw error
+  }
+  if (!response?.ok || !response?.narrative) {
+    const err = new Error(response?.error || `${roleLabel} 스토리 응답이 비어 있습니다`)
+    err.agentPrompt = context
+    throw err
+  }
+  return {
+    story: response.narrative.trim(),
+    prompt: context,
+    provider: response.model || response.provider || 'llm'
   }
 }
 
@@ -1032,6 +1839,169 @@ function buildPersonHighlights(element, zodiac, yinYang, timeLabel) {
   return highlights.sort((a, b) => b.ratio - a.ratio)
 }
 
+function buildSubjectProfile(payload, { fallbackName, assumeTimeUnknown } = {}) {
+  if (!payload) return null
+  const name = payload.userName || payload.name || fallbackName || DEFAULT_USER_NAME
+  const birthdate = `${payload.year}-${String(payload.month).padStart(2, '0')}-${String(payload.day).padStart(2, '0')}`
+  const timeLabel = payload.time ? payload.time : assumeTimeUnknown ? '시간 미상' : '미입력'
+  const sajuData = calculateSajuElement(payload.year, payload.month, payload.day)
+  const element = sajuData.element
+  const zodiac = calculateZodiacSign(payload.year, payload.month, payload.day)
+  const yinYang = calculateYinYang(payload.year, payload.month, payload.day)
+  const genderLabel = payload.gender === 'male' ? '남성' : payload.gender === 'female' ? '여성' : (payload.gender || '미입력')
+  const facts = [
+    `생년월일: ${birthdate}`,
+    `성별: ${genderLabel}`,
+    `띠 / 음양: ${zodiac} / ${yinYang}`,
+    `주력 오행: ${element.label} (${element.summary})`,
+    `태어난 시간: ${timeLabel}`
+  ]
+  const elementHighlights = buildPersonHighlights(element, zodiac, yinYang, timeLabel)
+  return {
+    name,
+    birthdate,
+    genderLabel,
+    zodiac,
+    yinYang,
+    element,
+    elementLabel: element.label,
+    elementSummary: element.summary,
+    timeLabel,
+    facts,
+    elementHighlights
+  }
+}
+
+function buildTargetContext(targetProfileMeta, targetPayload, { targetTimeUnknown } = {}) {
+  const targetName = targetProfileMeta?.entityName || '비교 대상'
+  if (targetPayload) {
+    const profile = buildSubjectProfile(targetPayload, {
+      fallbackName: targetName,
+      assumeTimeUnknown: targetTimeUnknown
+    })
+    return {
+      name: profile.name,
+      title: `${profile.name} 기준선:`,
+      lines: profile.facts
+    }
+  }
+
+  const lines = []
+  if (targetProfileMeta?.summaryHighlight) {
+    lines.push(`요약: ${targetProfileMeta.summaryHighlight}`)
+  }
+  if (targetProfileMeta?.description) {
+    lines.push(`설명: ${targetProfileMeta.description}`)
+  }
+  const highlightSummary = (targetProfileMeta?.highlights || [])
+    .map((trait) => `${trait.label} ${trait.ratio}%`)
+    .join(', ')
+  if (highlightSummary) {
+    lines.push(`오행 비중: ${highlightSummary}`)
+  }
+
+  return {
+    name: targetName,
+    title: `${targetName} 기준선:`,
+    lines
+  }
+}
+
+function buildAgentContextPayload({
+  subjectProfile,
+  targetProfileMeta,
+  targetPayload,
+  subjectDescription,
+  targetDescription,
+  subjectStory,
+  targetStory,
+  targetTimeUnknown
+}) {
+  if (!subjectProfile) return null
+  const contextLines = [
+    '사용자 기본 정보:',
+    ...subjectProfile.facts.map((fact) => `- ${fact}`)
+  ]
+  if (subjectDescription) contextLines.push(`- 추가 설명: ${subjectDescription}`)
+  if (subjectStory) contextLines.push(`- 서사 요약: ${subjectStory}`)
+
+  const targetContext = buildTargetContext(targetProfileMeta, targetPayload, { targetTimeUnknown })
+  contextLines.push('', targetContext.title || `${targetContext.name} 기준선:`)
+  contextLines.push(...targetContext.lines.map((line) => `- ${line}`))
+  if (targetDescription) contextLines.push(`- 대상 설명: ${targetDescription}`)
+  if (targetStory) contextLines.push(`- 대상 서사: ${targetStory}`)
+
+  return {
+    context: contextLines.filter(Boolean).join('\n'),
+    data: {
+      user: {
+        name: subjectProfile.name,
+        birthdate: subjectProfile.birthdate,
+        gender: subjectProfile.genderLabel,
+        zodiac: subjectProfile.zodiac,
+        yinYang: subjectProfile.yinYang,
+        element: subjectProfile.elementLabel,
+        elementSummary: subjectProfile.elementSummary,
+        timeLabel: subjectProfile.timeLabel
+      },
+      targetProfile: {
+        name: targetContext.name,
+        summary: targetProfileMeta?.summaryHighlight || '',
+        highlights: targetProfileMeta?.highlights || []
+      }
+    }
+  }
+}
+
+function buildTeamAgentContextPayload({
+  userProfile,
+  targetProfile,
+  bitcoinProfile,
+  userDescription,
+  targetDescription,
+  userStory,
+  targetStory
+}) {
+  const lines = [
+    '인물 A 정보:',
+    ...userProfile.facts.map((fact) => `- ${fact}`)
+  ]
+  if (userDescription) lines.push(`- 추가 설명: ${userDescription}`)
+  if (userStory) lines.push(`- 서사: ${userStory}`)
+
+  lines.push('', '인물 B 정보:')
+  lines.push(...targetProfile.facts.map((fact) => `- ${fact}`))
+  if (targetDescription) lines.push(`- 추가 설명: ${targetDescription}`)
+  if (targetStory) lines.push(`- 서사: ${targetStory}`)
+
+  lines.push('', '비트코인 기준선:')
+  if (bitcoinProfile.description) lines.push(`- 설명: ${bitcoinProfile.description}`)
+  const highlightSummary = (bitcoinProfile.highlights || [])
+    .map((trait) => `${trait.label} ${trait.ratio}%`)
+    .join(', ')
+  if (highlightSummary) lines.push(`- 오행 비중: ${highlightSummary}`)
+
+  return {
+    context: lines.filter(Boolean).join('\n'),
+    data: {
+      members: [
+        {
+          name: userProfile.name,
+          zodiac: userProfile.zodiac,
+          yinYang: userProfile.yinYang,
+          element: userProfile.elementLabel
+        },
+        {
+          name: targetProfile.name,
+          zodiac: targetProfile.zodiac,
+          yinYang: targetProfile.yinYang,
+          element: targetProfile.elementLabel
+        }
+      ]
+    }
+  }
+}
+
 async function loadQuickPresets() {
   quickPresetLoading.value = true
   try {
@@ -1051,6 +2021,7 @@ async function loadQuickPresets() {
 
 onMounted(() => {
   loadQuickPresets()
+  loadReportTemplates()
 })
 
 async function handleCompatibility() {
@@ -1064,22 +2035,156 @@ async function handleCompatibility() {
   userVsBitcoinResult.value = null
   targetVsBitcoinResult.value = null
   userVsTargetResult.value = null
-  compatibilityResult.value = null
-  scoreProgress.value = 0
+  pairCompatibilityResult.value = null
+  updateHighlightStageStatus()
   const runId = Date.now()
   currentRunId = runId
+  resetStageDebugDetails()
 
   const hasUser = !!birthdate.value
   const hasTarget = !!targetBirthdate.value
   const userPayload = hasUser ? normalizePayload() : null
   const targetPayload = hasTarget ? normalizeTargetPayload() : null
   const targetProfileMeta = activeTargetProfile.value
+  prepareLoadingSteps()
+
+  const highlightTasks = []
+  const storyStageTargets = []
+  if (hasUser) storyStageTargets.push('사용자')
+  if (hasTarget) storyStageTargets.push('비교 대상')
+  const storyStageDetail = storyStageTargets.length ? `${storyStageTargets.join(' · ')} 정보 수집 중` : '분석 대상 없음'
+  setLoadingStepStatus('story_stage', 'running', storyStageDetail)
+  if (storyStageTargets.length) {
+    await nextTick()
+  }
 
   // 분석할 총 단계 수 결정
-  if (hasUser && hasTarget) {
-    totalSteps.value = 3 // 사용자 vs 비트코인, 타겟 vs 비트코인, 두 사람 × 비트코인
+  totalSteps.value = 3
+
+  const userProfile = hasUser && userPayload
+    ? buildSubjectProfile(userPayload, {
+        fallbackName: userPayload.userName || DEFAULT_USER_NAME,
+        assumeTimeUnknown: timeUnknown.value
+      })
+    : null
+  const targetProfile = hasTarget && targetPayload
+    ? buildSubjectProfile(targetPayload, {
+        fallbackName: targetPayload.userName || targetPayload.name || DEFAULT_TARGET_NAME,
+        assumeTimeUnknown: targetTimeUnknown.value
+      })
+    : null
+
+  const storyTasks = []
+  if (hasUser && userProfile) {
+    storyTasks.push({
+      key: 'user',
+      label: '사용자',
+      profile: userProfile,
+      setter: (story) => {
+        userStory.value = story
+      },
+      baseDescription: userDescription.value
+    })
+  }
+  if (hasTarget && targetProfile) {
+    storyTasks.push({
+      key: 'target',
+      label: '비교 대상',
+      profile: targetProfile,
+      setter: (story) => {
+        targetStory.value = story
+      },
+      baseDescription: targetDescription.value
+    })
+  }
+
+  if (storyTasks.length) {
+    const storyNotes = []
+    let completedStories = 0
+    const totalStories = storyTasks.length
+    const updateStoryProgress = (extra = '') => {
+      const base = `${completedStories}/${totalStories}건`
+      const prefix = storyNotes.length ? `${storyNotes.join(' / ')} · ` : ''
+      const suffix = extra ? ` · ${extra}` : ''
+      setLoadingStepStatus('story_stage', 'running', `${prefix}${base}${suffix}`.trim())
+    }
+    try {
+      for (const task of storyTasks) {
+        updateStoryProgress(`${task.label} 처리 중`)
+        let promptContext = ''
+        try {
+          const storyResult = await runStoryAgentForProfile(task.profile, {
+            roleLabel: task.label,
+            baseDescription: task.baseDescription
+          })
+          promptContext = storyResult.prompt
+          task.setter(storyResult.story)
+          storyNotes.push(`${task.profile.name}: 완료`)
+          completedStories += 1
+          updateStoryProgress()
+          addStageDebugDetail('story', {
+            label: `${task.profile.name} 서사`,
+            prompt: storyResult.prompt,
+            response: storyResult.story,
+            provider: storyResult.provider,
+            status: 'ok'
+          })
+        } catch (storyTaskError) {
+          const context = storyTaskError?.agentPrompt || promptContext
+          addStageDebugDetail('story', {
+            label: `${task.profile.name} 서사`,
+            prompt: context,
+            error: storyTaskError?.message || '스토리 추출 실패',
+            status: 'error'
+          })
+          throw storyTaskError
+        }
+      }
+      const storyDetail = storyNotes.length ? `스토리 에이전트 완료 · ${storyNotes.join(' / ')}` : '스토리 에이전트 완료'
+      setLoadingStepStatus('story_stage', 'done', storyDetail)
+    } catch (storyError) {
+      console.error('스토리 에이전트 실패:', storyError)
+      setLoadingStepStatus('story_stage', 'error', storyError?.message || '스토리 추출 실패')
+      setLoadingStepStatus('saju_stage', 'error', '스토리 추출 실패로 중단되었습니다.')
+      setLoadingStepStatus('report_stage', 'error', '스토리 추출 실패로 중단되었습니다.')
+      errorMessage.value = '스토리 에이전트 요청에 실패했습니다. 잠시 후 다시 시도해주세요.'
+      loading.value = false
+      analysisStep.value = 0
+      return
+    }
   } else {
-    totalSteps.value = 1 // 하나만 vs 비트코인
+    setLoadingStepStatus('story_stage', 'done', '분석 대상 없음')
+  }
+
+  const sajuTasks = []
+  if (hasUser && userProfile) sajuTasks.push('사용자')
+  if (hasTarget && targetProfile) sajuTasks.push('비교 대상')
+  if (hasUser && hasTarget && userProfile && targetProfile) sajuTasks.push('팀')
+  const sajuTotal = sajuTasks.length
+  let sajuCompleted = 0
+  const sajuResults = []
+
+  if (sajuTotal) {
+    setLoadingStepStatus('saju_stage', 'running', `${sajuTotal}건 사주 분석 중`)
+  } else {
+    setLoadingStepStatus('saju_stage', 'done', '사주 분석 대상 없음')
+  }
+
+  const updateSajuProgress = () => {
+    if (!sajuTotal) return
+    const baseCount = `${Math.min(sajuCompleted, sajuTotal)}/${sajuTotal}건`
+    const progressLabel = sajuResults.length ? `${sajuResults.join(' / ')} · ${baseCount}` : baseCount
+    setLoadingStepStatus('saju_stage', 'running', progressLabel)
+  }
+
+  const finalizeSajuStage = () => {
+    if (!sajuTotal) {
+      setLoadingStepStatus('saju_stage', 'done', '사주 분석 대상 없음')
+      return
+    }
+    const baseCount = `${sajuCompleted}/${sajuTotal}건`
+    const detail = sajuResults.length ? `${sajuResults.join(' / ')} · ${baseCount}` : `${baseCount} 완료`
+    setLoadingStepStatus('saju_stage', 'done', detail)
   }
 
   // 비트코인 프로필 생성
@@ -1088,7 +2193,7 @@ async function handleCompatibility() {
     entityName: '비트코인',
     label: '금(金)이 주력인 디지털 금, 수·화가 극단을 이루는 에너지',
     summaryHighlight: '',
-    description: '고정 공급과 변동성, 네트워크 속성을 오행으로 환산해 구성한 비트코인의 기준선입니다.',
+    description: '',
     highlights: BITCOIN_HIGHLIGHTS,
     image_url: 'https://upload.wikimedia.org/wikipedia/commons/4/46/Bitcoin.svg',
     dominantElementKey: 'metal',
@@ -1104,200 +2209,334 @@ async function handleCompatibility() {
     gender: ''
   }
 
-  // 1. 사용자 vs 비트코인 (사용자가 있을 때만)
-  let result1 = null
-  if (hasUser) {
-    result1 = buildCompatibility(userPayload, bitcoinProfile, bitcoinPayload)
-    result1.personImageUrl = userImageUrl.value || ''
-    result1.personName = userPayload.userName || DEFAULT_USER_NAME
-  }
-
-  // 2. 비교대상 vs 비트코인 (비교대상이 있을 때만)
-  let result2 = null
-  if (hasTarget) {
-    result2 = buildCompatibility(targetPayload, bitcoinProfile, bitcoinPayload)
-    result2.personImageUrl = targetImageUrl.value || ''
-    result2.personName = targetPayload.name || DEFAULT_TARGET_NAME
-  }
-
-  // 3. 두 사람 × 비트코인 (팀 궁합 - 둘 다 있을 때만)
-  let result3 = null
-  let combinedPayload = null
-  if (hasUser && hasTarget) {
-    combinedPayload = {
-      year: Math.round((userPayload.year + targetPayload.year) / 2),
-      month: Math.round((userPayload.month + targetPayload.month) / 2),
-      day: Math.round((userPayload.day + targetPayload.day) / 2),
-      time: null,
-      userName: `${userPayload.userName || DEFAULT_USER_NAME} × ${targetPayload.name || DEFAULT_TARGET_NAME}`,
-      gender: ''
-    }
-    // 점수 계산은 '두 사람의 평균' vs '비트코인'으로 수행
-    result3 = buildCompatibility(combinedPayload, bitcoinProfile, bitcoinPayload)
-
-    // UI 표시는 '사용자' vs '대상'으로 정보를 덮어씌움
-    result3.personImageUrl = userImageUrl.value || ''
-    result3.personName = userPayload.userName || DEFAULT_USER_NAME
-    result3.user = JSON.parse(JSON.stringify(result1.user)) // 사용자 1 정보 복사
-
-    result3.targetPersonImageUrl = targetImageUrl.value || ''
-    result3.targetPersonName = targetPayload.name || DEFAULT_TARGET_NAME
-    // result2.user가 대상(Target)의 정보를 담고 있음
-    result3.target = {
-      ...JSON.parse(JSON.stringify(result2.user)),
-      profileType: 'person',
-      entityName: targetPayload.name || DEFAULT_TARGET_NAME,
-      label: `${targetPayload.name || DEFAULT_TARGET_NAME} 사주 캔버스`
-    }
-    
-    result3.isTwoPersonComparison = true
-  }
-
   if (currentRunId !== runId) return
 
   // LLM 요청 생성 (조건부)
   try {
     // 1. 사용자 vs 비트코인 (사용자가 있을 때만)
-    if (hasUser && result1) {
+    if (hasUser && userProfile) {
       analysisStep.value = 1
-      const agentPayload1 = buildAgentContextPayload(
-        userPayload,
-        bitcoinPayload,
-        result1,
-        bitcoinProfile,
-        timeUnknown.value,
-        false
-      )
-      agentPayload1.analysisType = 'user_vs_bitcoin'
-      const userInfo = userDescription.value ? `\n\n**${userPayload.userName || DEFAULT_USER_NAME} 정보**: ${userDescription.value}` : ''
-      agentPayload1.customPrompt = `${userPayload.userName || DEFAULT_USER_NAME}의 사주와 비트코인 궁합을 분석하세요.${userInfo}
-
-**작성 지침 (반드시 준수):**
-
-1. **극도의 간결성**: 전체 응답은 150-200자 이내로 작성하세요. 핵심 한두 가지만 전달하세요.
-
-2. **쉬운 언어**:
-   - 사주 전문 용어 절대 사용 금지
-   - "목(木)이 강하다" (X) → "성장 욕구가 강하다" (O)
-
-3. **구조**: 단 2개 섹션만
-   - ## 특징 (1-2문장)
-   - ## 전략 (1-2문장)
-
-4. **문장**: 매우 짧게. 한 문장은 10-15자 이내로.
-
-5. **개인화**: 위에 제공된 인물 정보(직업, 특징)를 고려하여 맞춤형 비트코인 투자 조언을 제공하세요.
-
-6. **제거**: 인사말, 서론, 부연 설명 모두 제거. 핵심만 1-2줄로 요약.`
-
-      const agentResponse1 = await generateCompatibilityNarrative(agentPayload1)
+      const agentPayload1 = buildAgentContextPayload({
+        subjectProfile: userProfile,
+        targetProfileMeta: bitcoinProfile,
+        targetPayload: bitcoinPayload,
+        subjectDescription: userDescription.value,
+        subjectStory: userStory.value
+      })
+      const subjectExtra = userDescription.value ? `\n\n**${userProfile.name} 정보**: ${userDescription.value}` : ''
+      const combinedContext1 = [
+        agentPayload1.context,
+        renderReportTemplate('user_vs_bitcoin', {
+          SUBJECT_NAME: userProfile.name,
+          SUBJECT_EXTRA: subjectExtra
+        })
+      ].filter(Boolean).join('\n\n')
+      let agentResponse1
+      try {
+        agentResponse1 = await runCompatibilityAgent({
+          agentKey: 'saju_bitcoin',
+          context: combinedContext1,
+          data: agentPayload1.data,
+          temperature: 0.55
+        })
+      } catch (error) {
+        addStageDebugDetail('saju', {
+          label: `${userProfile.name} × 비트코인`,
+          prompt: combinedContext1,
+          error: error?.message || '사용자 사주 분석 실패',
+          status: 'error'
+        })
+        throw new Error(error?.message ? `사용자 사주 분석 실패: ${error.message}` : '사용자 사주 분석 실패')
+      }
       if (currentRunId !== runId) return
       if (agentResponse1?.ok && agentResponse1?.narrative) {
-        result1.narrative = agentResponse1.narrative
-        result1.agentProvider = agentResponse1.model || agentResponse1.provider || 'llm'
-        result1.debugPrompt = agentPayload1.customPrompt
+        userVsBitcoinResult.value = {
+          personName: userProfile.name,
+          personImageUrl: userImageUrl.value || '',
+          profileFacts: userProfile.facts,
+          profileSnapshot: userProfile,
+          personStory: userStory.value || '',
+          narrative: agentResponse1.narrative,
+          highlightedNarrative: '',
+          highlightLoading: true,
+          agentProvider: agentResponse1.model || agentResponse1.provider || 'llm',
+          debugPrompt: combinedContext1
+        }
+        sajuCompleted += 1
+        sajuResults.push('사용자: 완료')
+        updateSajuProgress()
+        addStageDebugDetail('saju', {
+          label: `${userProfile.name} × 비트코인`,
+          prompt: combinedContext1,
+          response: agentResponse1.narrative,
+          provider: agentResponse1.model || agentResponse1.provider || 'llm',
+          status: 'ok'
+        })
+        highlightTasks.push(applyHighlightToResult(userVsBitcoinResult.value, 'user_highlight'))
+      } else {
+        sajuCompleted += 1
+        sajuResults.push('사용자: 실패(응답 없음)')
+        updateSajuProgress()
+        addStageDebugDetail('saju', {
+          label: `${userProfile.name} × 비트코인`,
+          prompt: combinedContext1,
+          error: agentResponse1?.error || '응답이 비어 있습니다',
+          status: 'error'
+        })
       }
     }
 
     // 2. 비교대상 vs 비트코인 (비교대상이 있을 때만)
-    if (hasTarget && result2) {
+    if (hasTarget && targetProfile) {
       analysisStep.value = hasUser ? 2 : 1
-      const agentPayload2 = buildAgentContextPayload(
-        targetPayload,
-        bitcoinPayload,
-        result2,
-        bitcoinProfile,
-        targetTimeUnknown.value,
-        false
-      )
-      agentPayload2.analysisType = 'target_vs_bitcoin'
-      const targetInfo = targetDescription.value ? `\n\n**${targetPayload.userName || DEFAULT_TARGET_NAME} 정보**: ${targetDescription.value}` : ''
-      agentPayload2.customPrompt = `${targetPayload.userName || DEFAULT_TARGET_NAME}의 사주와 비트코인 궁합을 분석하세요.${targetInfo}
-
-**작성 지침 (반드시 준수):**
-
-1. **극도의 간결성**: 전체 응답은 150-200자 이내로 작성하세요. 핵심 한두 가지만 전달하세요.
-
-2. **쉬운 언어**:
-   - 사주 전문 용어 절대 사용 금지
-   - "금(金)이 주력이다" (X) → "규칙을 중시한다" (O)
-
-3. **구조**: 단 2개 섹션만
-   - ## 특징 (1-2문장)
-   - ## 전략 (1-2문장)
-
-4. **문장**: 매우 짧게. 한 문장은 10-15자 이내로.
-
-5. **개인화**: 위에 제공된 인물 정보(직업, 특징)를 고려하여 맞춤형 비트코인 투자 조언을 제공하세요.
-
-6. **제거**: 인사말, 서론, 부연 설명 모두 제거. 핵심만 1-2줄로 요약.`
-
-      const agentResponse2 = await generateCompatibilityNarrative(agentPayload2)
+      const agentPayload2 = buildAgentContextPayload({
+        subjectProfile: targetProfile,
+        targetProfileMeta: bitcoinProfile,
+        targetPayload: bitcoinPayload,
+        subjectDescription: targetDescription.value,
+        subjectStory: targetStory.value
+      })
+      const targetExtra = targetDescription.value ? `\n\n**${targetProfile.name} 정보**: ${targetDescription.value}` : ''
+      const combinedContext2 = [
+        agentPayload2.context,
+        renderReportTemplate('user_vs_bitcoin', {
+          SUBJECT_NAME: targetProfile.name,
+          SUBJECT_EXTRA: targetExtra
+        })
+      ].filter(Boolean).join('\n\n')
+      let agentResponse2
+      try {
+        agentResponse2 = await runCompatibilityAgent({
+          agentKey: 'saju_bitcoin',
+          context: combinedContext2,
+          data: agentPayload2.data,
+          temperature: 0.55
+        })
+      } catch (error) {
+        addStageDebugDetail('saju', {
+          label: `${targetProfile.name} × 비트코인`,
+          prompt: combinedContext2,
+          error: error?.message || '비교 대상 사주 분석 실패',
+          status: 'error'
+        })
+        throw new Error(error?.message ? `비교 대상 사주 분석 실패: ${error.message}` : '비교 대상 사주 분석 실패')
+      }
       if (currentRunId !== runId) return
       if (agentResponse2?.ok && agentResponse2?.narrative) {
-        result2.narrative = agentResponse2.narrative
-        result2.agentProvider = agentResponse2.model || agentResponse2.provider || 'llm'
-        result2.debugPrompt = agentPayload2.customPrompt
+        targetVsBitcoinResult.value = {
+          personName: targetProfile.name,
+          personImageUrl: targetImageUrl.value || '',
+          profileFacts: targetProfile.facts,
+          profileSnapshot: targetProfile,
+          personStory: targetStory.value || '',
+          narrative: agentResponse2.narrative,
+          highlightedNarrative: '',
+          highlightLoading: true,
+          agentProvider: agentResponse2.model || agentResponse2.provider || 'llm',
+          debugPrompt: combinedContext2
+        }
+        sajuCompleted += 1
+        sajuResults.push('비교 대상: 완료')
+        updateSajuProgress()
+        addStageDebugDetail('saju', {
+          label: `${targetProfile.name} × 비트코인`,
+          prompt: combinedContext2,
+          response: agentResponse2.narrative,
+          provider: agentResponse2.model || agentResponse2.provider || 'llm',
+          status: 'ok'
+        })
+        highlightTasks.push(applyHighlightToResult(targetVsBitcoinResult.value, 'target_highlight'))
+      } else {
+        sajuCompleted += 1
+        sajuResults.push('비교 대상: 실패(응답 없음)')
+        updateSajuProgress()
+        addStageDebugDetail('saju', {
+          label: `${targetProfile.name} × 비트코인`,
+          prompt: combinedContext2,
+          error: agentResponse2?.error || '응답이 비어 있습니다',
+          status: 'error'
+        })
       }
     }
 
     // 3. 두 사람 × 비트코인 (팀 궁합 - 둘 다 있을 때만)
-    if (hasUser && hasTarget && result3 && combinedPayload) {
+    if (hasUser && hasTarget && userProfile && targetProfile) {
       analysisStep.value = 3
-      const agentPayload3 = buildAgentContextPayload(
-        combinedPayload,
-        bitcoinPayload,
-        result3,
+      const teamPayload = buildTeamAgentContextPayload({
+        userProfile,
+        targetProfile,
         bitcoinProfile,
-        false,
-        false
-      )
-      agentPayload3.analysisType = 'team_vs_bitcoin'
+        userDescription: userDescription.value,
+        targetDescription: targetDescription.value,
+        userStory: userStory.value,
+        targetStory: targetStory.value
+      })
       const teamInfo = []
-      if (userDescription.value) teamInfo.push(`**${userPayload.userName || DEFAULT_USER_NAME}**: ${userDescription.value}`)
-      if (targetDescription.value) teamInfo.push(`**${targetPayload.userName || DEFAULT_TARGET_NAME}**: ${targetDescription.value}`)
-      const teamInfoText = teamInfo.length > 0 ? `\n\n**두 사람의 정보**:\n${teamInfo.join('\n')}` : ''
-      agentPayload3.customPrompt = `${userPayload.userName || DEFAULT_USER_NAME}와(과) ${targetPayload.userName || DEFAULT_TARGET_NAME}가 함께 비트코인 투자할 때의 팀 궁합을 분석하세요.${teamInfoText}
-
-**작성 지침 (반드시 준수):**
-
-1. **극도의 간결성**: 전체 응답은 150-200자 이내로 작성하세요. 핵심 한두 가지만 전달하세요.
-
-2. **쉬운 언어**:
-   - 사주 전문 용어 절대 사용 금지
-   - 두 사람이 팀으로 협력할 때의 시너지에 집중
-
-3. **구조**: 단 2개 섹션만
-   - ## 팀 특성 (1-2문장)
-   - ## 투자 전략 (1-2문장)
-
-4. **문장**: 매우 짧게. 한 문장은 10-15자 이내로.
-
-5. **개인화**: 위에 제공된 두 사람의 직업과 특징을 고려하여 맞춤형 팀 투자 전략을 제공하세요.
-
-6. **제거**: 인사말, 서론, 부연 설명 모두 제거. 핵심만 1-2줄로 요약.`
-
-      const agentResponse3 = await generateCompatibilityNarrative(agentPayload3)
+      if (userDescription.value) teamInfo.push(`**${userProfile.name}**: ${userDescription.value}`)
+      if (targetDescription.value) teamInfo.push(`**${targetProfile.name}**: ${targetDescription.value}`)
+      const teamExtra = teamInfo.length > 0 ? `\n\n**두 사람의 정보**:\n${teamInfo.join('\n')}` : ''
+      const combinedContext3 = [
+        teamPayload.context,
+        renderReportTemplate('team_vs_bitcoin', {
+          USER_NAME: userProfile.name,
+          TARGET_NAME: targetProfile.name,
+          TEAM_EXTRA: teamExtra
+        })
+      ].filter(Boolean).join('\n\n')
+      let agentResponse3
+      try {
+        agentResponse3 = await runCompatibilityAgent({
+          agentKey: 'saju_bitcoin',
+          context: combinedContext3,
+          data: teamPayload.data,
+          temperature: 0.5
+        })
+      } catch (error) {
+        addStageDebugDetail('saju', {
+          label: `${userProfile.name} & ${targetProfile.name} 팀`,
+          prompt: combinedContext3,
+          error: error?.message || '팀 궁합 분석 실패',
+          status: 'error'
+        })
+        throw new Error(error?.message ? `팀 궁합 분석 실패: ${error.message}` : '팀 궁합 분석 실패')
+      }
       if (currentRunId !== runId) return
       if (agentResponse3?.ok && agentResponse3?.narrative) {
-        result3.narrative = agentResponse3.narrative
-        result3.agentProvider = agentResponse3.model || agentResponse3.provider || 'llm'
-        result3.debugPrompt = agentPayload3.customPrompt
+        userVsTargetResult.value = {
+          personName: userProfile.name,
+          targetPersonName: targetProfile.name,
+          personImageUrl: userImageUrl.value || '',
+          targetPersonImageUrl: targetImageUrl.value || '',
+          personFacts: userProfile.facts,
+          targetFacts: targetProfile.facts,
+          personStory: userStory.value || '',
+          targetStory: targetStory.value || '',
+          personProfile: userProfile,
+          targetProfile,
+          narrative: agentResponse3.narrative,
+          highlightedNarrative: '',
+          highlightLoading: true,
+          agentProvider: agentResponse3.model || agentResponse3.provider || 'llm',
+          debugPrompt: combinedContext3
+        }
+        sajuCompleted += 1
+        sajuResults.push('팀: 완료')
+        updateSajuProgress()
+        addStageDebugDetail('saju', {
+          label: `${userProfile.name} & ${targetProfile.name} 팀`,
+          prompt: combinedContext3,
+          response: agentResponse3.narrative,
+          provider: agentResponse3.model || agentResponse3.provider || 'llm',
+          status: 'ok'
+        })
+        highlightTasks.push(applyHighlightToResult(userVsTargetResult.value, 'team_highlight'))
+      } else {
+        sajuCompleted += 1
+        sajuResults.push('팀: 실패(응답 없음)')
+        updateSajuProgress()
+        addStageDebugDetail('saju', {
+          label: `${userProfile.name} & ${targetProfile.name} 팀`,
+          prompt: combinedContext3,
+          error: agentResponse3?.error || '응답이 비어 있습니다',
+          status: 'error'
+        })
       }
     }
 
+    finalizeSajuStage()
   } catch (agentError) {
     console.error('궁합 에이전트 호출 실패:', agentError)
+    setLoadingStepStatus('saju_stage', 'error', agentError?.message || '사주 분석 실패')
+    setLoadingStepStatus('report_stage', 'error', '사주 분석이 끝나지 않아 리포트가 중단되었습니다.')
     errorMessage.value = '궁합 에이전트 요청에 실패했습니다. 잠시 후 다시 시도해주세요.'
     loading.value = false
     analysisStep.value = 0
     return
   }
 
-  userVsBitcoinResult.value = result1
-  targetVsBitcoinResult.value = result2
-  userVsTargetResult.value = result3
+  if (hasUser && hasTarget && userProfile && targetProfile && userVsBitcoinResult.value && targetVsBitcoinResult.value) {
+    try {
+      analysisStep.value = 4
+      setLoadingStepStatus('report_stage', 'running', '직접 궁합 리포트 생성 중')
+      const pairContext = buildPairCompatibilityContext({
+        userProfile,
+        targetProfile,
+        userDescription: userDescription.value,
+        targetDescription: targetDescription.value,
+        userStoryText: userStory.value,
+        targetStoryText: targetStory.value,
+        userNarrative: userVsBitcoinResult.value.narrative,
+        targetNarrative: targetVsBitcoinResult.value.narrative
+      })
+      let pairResponse
+      try {
+        pairResponse = await runCompatibilityAgent({
+          agentKey: 'pair_compatibility',
+          context: pairContext,
+          temperature: 0.5
+        })
+      } catch (error) {
+        addStageDebugDetail('report', {
+          label: `${userProfile.name} & ${targetProfile.name}`,
+          prompt: pairContext,
+          error: error?.message || '직접 궁합 리포트 실패',
+          status: 'error'
+        })
+        const enhancedError = new Error(error?.message ? `직접 궁합 리포트 실패: ${error.message}` : '직접 궁합 리포트 실패')
+        enhancedError.__stageLogged = true
+        throw enhancedError
+      }
+      if (currentRunId !== runId) return
+      if (pairResponse?.ok && pairResponse?.narrative) {
+        const pairResult = {
+          narrative: pairResponse.narrative,
+          highlightLoading: true,
+          agentProvider: pairResponse.model || pairResponse.provider || 'llm',
+          debugPrompt: pairContext,
+          highlightedNarrative: ''
+        }
+        pairCompatibilityResult.value = pairResult
+        highlightTasks.push(applyHighlightToResult(pairCompatibilityResult.value, 'pair_highlight'))
+        setLoadingStepStatus('report_stage', 'done', '직접 궁합 리포트 완료')
+        addStageDebugDetail('report', {
+          label: `${userProfile.name} & ${targetProfile.name}`,
+          prompt: pairContext,
+          response: pairResponse.narrative,
+          provider: pairResponse.model || pairResponse.provider || 'llm',
+          status: 'ok'
+        })
+      } else {
+        setLoadingStepStatus('report_stage', 'error', pairResponse?.error || '직접 궁합 리포트를 생성하지 못했습니다')
+        addStageDebugDetail('report', {
+          label: `${userProfile.name} & ${targetProfile.name}`,
+          prompt: pairContext,
+          error: pairResponse?.error || '응답이 비어 있습니다',
+          status: 'error'
+        })
+        pairCompatibilityResult.value = null
+        updateHighlightStageStatus()
+      }
+    } catch (pairError) {
+      console.warn('두 사람 궁합 에이전트 실패', pairError)
+      setLoadingStepStatus('report_stage', 'error', pairError?.message || '직접 궁합 리포트 생성 실패')
+      if (!pairError?.__stageLogged) {
+        addStageDebugDetail('report', {
+          label: `${userProfile.name} & ${targetProfile.name}`,
+          prompt: pairContext,
+          error: pairError?.message || '직접 궁합 리포트 생성 실패',
+          status: 'error'
+        })
+      }
+      pairCompatibilityResult.value = null
+      updateHighlightStageStatus()
+    }
+  } else {
+    setLoadingStepStatus('report_stage', 'done', hasTarget ? '기본 리포트 정리 완료' : '추가 비교 대상 없음')
+    pairCompatibilityResult.value = null
+    updateHighlightStageStatus()
+  }
 
+  await Promise.allSettled(highlightTasks)
   await nextTick()
   loading.value = false
 }
@@ -1314,7 +2553,7 @@ function normalizeTargetPayload() {
   const [year, month, day] = targetBirthdate.value.split('-').map((v) => Number(v))
   const time = targetTimeUnknown.value || !targetBirthtime.value ? null : targetBirthtime.value
   const name = (targetName.value || '').trim() || DEFAULT_TARGET_NAME
-  return { year, month, day, time, gender: targetGender.value, name }
+  return { year, month, day, time, gender: targetGender.value, userName: name, name }
 }
 
 async function applyQuickPreset(preset) {
@@ -1329,7 +2568,7 @@ async function applyQuickPreset(preset) {
   gender.value = preset.gender || ''
   birthdate.value = preset.birthdate || ''
   userImageUrl.value = preset.imageUrl || ''
-  userDescription.value = preset.description || ''
+  userDescription.value = ''
   if (preset.birthtime) {
     birthtime.value = preset.birthtime
     timeUnknown.value = false
@@ -1352,37 +2591,31 @@ async function applyQuickPreset(preset) {
     console.log('   - 태어난 시간:', preset.birthtime || '미상')
   }
 
-  // Process saju with agent
+  userStory.value = ''
+  userSajuSummary.value = ''
   try {
-    console.log('🤖 Agent 사주 처리 시작...')
-    const startTime = Date.now()
+    console.log('🤖 Story agent 처리 시작...')
+    const storyStart = Date.now()
+    const storyResult = await runPresetStoryAgent(preset, '사용자')
+    const storyDuration = Date.now() - storyStart
+    console.log('✅ Story agent 완료 (' + storyDuration + 'ms)')
+    console.log('   - 스토리 길이:', storyResult.story.length, '자')
+    userStory.value = storyResult.story
 
-    const result = await processSajuWithAgent({
-      storedSaju: preset.storedSaju || '',
-      name: preset.label || DEFAULT_USER_NAME,
-      birthdate: preset.birthdate || '',
-      birthTime: preset.birthtime || ''
-    })
-
-    const duration = Date.now() - startTime
-
-    console.log('✅ Agent 처리 완료 (' + duration + 'ms)')
-    console.log('   - 처리 방식:', result.type === 'summary' ? '📚 DB 요약' : '🔢 신규 계산')
-    console.log('   - 모델:', result.model)
-    console.log('   - 결과 길이:', result.summary.length, '자')
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    console.log('📝 요약 결과:')
-    console.log(result.summary)
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-
-    if (result.summary) {
-      // Update description with agent summary
-      userDescription.value = result.summary
+    console.log('🤖 Saju agent 처리 시작...')
+    const sajuStart = Date.now()
+    const sajuSummary = await runPresetSajuAgent(storyResult)
+    const sajuDuration = Date.now() - sajuStart
+    console.log('✅ Saju agent 완료 (' + sajuDuration + 'ms)')
+    console.log('   - 사주 요약 길이:', sajuSummary.length, '자')
+    userSajuSummary.value = sajuSummary
+    if (sajuSummary) {
+      userDescription.value = sajuSummary
+    } else if (storyResult.story) {
+      userDescription.value = storyResult.story
     }
   } catch (error) {
-    console.error('❌ Agent 사주 처리 실패:', error)
-    console.log('   - 기본 description 사용:', preset.description)
-    // Continue with preset application even if agent fails
+    console.error('❌ Story/Saju agent 실패:', error)
   }
 }
 
@@ -1398,7 +2631,7 @@ async function applyTargetQuickPreset(preset) {
   targetGender.value = preset.gender || ''
   targetBirthdate.value = preset.birthdate || ''
   targetImageUrl.value = preset.imageUrl || ''
-  targetDescription.value = preset.description || ''
+  targetDescription.value = ''
   if (preset.birthtime) {
     targetBirthtime.value = preset.birthtime
     targetTimeUnknown.value = false
@@ -1421,37 +2654,31 @@ async function applyTargetQuickPreset(preset) {
     console.log('   - 태어난 시간:', preset.birthtime || '미상')
   }
 
-  // Process saju with agent
+  targetStory.value = ''
+  targetSajuSummary.value = ''
   try {
-    console.log('🤖 Agent 사주 처리 시작...')
-    const startTime = Date.now()
+    console.log('🤖 Story agent 처리 시작 (비교 대상)...')
+    const storyStart = Date.now()
+    const storyResult = await runPresetStoryAgent(preset, '비교 대상')
+    const storyDuration = Date.now() - storyStart
+    console.log('✅ Story agent 완료 (' + storyDuration + 'ms)')
+    console.log('   - 스토리 길이:', storyResult.story.length, '자')
+    targetStory.value = storyResult.story
 
-    const result = await processSajuWithAgent({
-      storedSaju: preset.storedSaju || '',
-      name: preset.label || DEFAULT_TARGET_NAME,
-      birthdate: preset.birthdate || '',
-      birthTime: preset.birthtime || ''
-    })
-
-    const duration = Date.now() - startTime
-
-    console.log('✅ Agent 처리 완료 (' + duration + 'ms)')
-    console.log('   - 처리 방식:', result.type === 'summary' ? '📚 DB 요약' : '🔢 신규 계산')
-    console.log('   - 모델:', result.model)
-    console.log('   - 결과 길이:', result.summary.length, '자')
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    console.log('📝 요약 결과:')
-    console.log(result.summary)
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-
-    if (result.summary) {
-      // Update description with agent summary
-      targetDescription.value = result.summary
+    console.log('🤖 Saju agent 처리 시작 (비교 대상)...')
+    const sajuStart = Date.now()
+    const sajuSummary = await runPresetSajuAgent(storyResult)
+    const sajuDuration = Date.now() - sajuStart
+    console.log('✅ Saju agent 완료 (' + sajuDuration + 'ms)')
+    console.log('   - 사주 요약 길이:', sajuSummary.length, '자')
+    targetSajuSummary.value = sajuSummary
+    if (sajuSummary) {
+      targetDescription.value = sajuSummary
+    } else if (storyResult.story) {
+      targetDescription.value = storyResult.story
     }
   } catch (error) {
-    console.error('❌ Agent 사주 처리 실패:', error)
-    console.log('   - 기본 description 사용:', preset.description)
-    // Continue with preset application even if agent fails
+    console.error('❌ Story/Saju agent 실패:', error)
   }
 }
 
@@ -1463,6 +2690,9 @@ function resetPresetSelection() {
   gender.value = ''
   timeUnknown.value = false
   userImageUrl.value = ''
+  userDescription.value = ''
+  userStory.value = ''
+  userSajuSummary.value = ''
 }
 
 function resetTargetPresetSelection() {
@@ -1473,6 +2703,9 @@ function resetTargetPresetSelection() {
   targetGender.value = ''
   targetTimeUnknown.value = false
   targetImageUrl.value = ''
+  targetDescription.value = ''
+  targetStory.value = ''
+  targetSajuSummary.value = ''
 }
 
 // ===== 천간·지지 기반 정확한 사주 계산 =====
@@ -1584,445 +2817,44 @@ function calculateYinYang(year, month, day) {
   return zodiacYear % 2 === 0 ? '양' : '음'
 }
 
-function buildCompatibility(payload, targetProfileMeta, targetPayload) {
-  const profileMeta = targetProfileMeta || EMPTY_TARGET_PROFILE
-  // 정확한 천간·지지 기반 사주 계산
-  const sajuData = calculateSajuElement(payload.year, payload.month, payload.day)
-  const element = sajuData.element
-  const zodiac = calculateZodiacSign(payload.year, payload.month, payload.day)
-  const yinYang = calculateYinYang(payload.year, payload.month, payload.day)
-  const targetElementKey = getTargetDominantElementKey(profileMeta, targetPayload)
-  const affinity = ELEMENT_AFFINITY[targetElementKey] || ELEMENT_AFFINITY.metal
-  const targetElementLabel = ELEMENTS.find((item) => item.key === targetElementKey)?.label || ''
-  let targetZodiac = profileMeta.targetZodiac || ''
-  let targetYinYang = profileMeta.targetYinYang || ''
-  if (profileMeta.profileType === 'person' && targetPayload) {
-    targetZodiac = calculateZodiacSign(targetPayload.year, targetPayload.month, targetPayload.day)
-    targetYinYang = calculateYinYang(targetPayload.year, targetPayload.month, targetPayload.day)
+
+
+
+
+function buildPairCompatibilityContext({
+  userProfile,
+  targetProfile,
+  userDescription,
+  targetDescription,
+  userStoryText,
+  targetStoryText,
+  userNarrative,
+  targetNarrative
+}) {
+  const formatPerson = (label, profile, desc, story, narrative) => {
+    const lines = [
+      `# ${label}: ${profile.name}`,
+      ...profile.facts.map((fact) => `- ${fact}`),
+      desc ? `- 사주 요약: ${desc}` : '- 사주 요약: 정보 없음',
+      story ? `- 서사: ${story}` : null,
+      narrative ? `- 비트코인 분석: ${narrative}` : null
+    ]
+    return lines.filter(Boolean).join('\n')
   }
 
-  // 비트코인 맥시멀리스트 점수 계산
-  let score = 58 + (payload.month % 7)
-
-  // 오행 궁합 점수 (모든 상극을 긍정적으로 재해석)
-  if (affinity.allies && affinity.allies.includes(element.key)) {
-    score += 18  // 상생 관계
-  } else if (affinity.tempering && affinity.tempering.includes(element.key)) {
-    score += 15  // 단련 관계 (화→금)
-  } else if (affinity.foundation && affinity.foundation.includes(element.key)) {
-    score += 16  // 기준 제공 관계 (금→목: 규칙 위에서 확장)
-  } else if (affinity.cooling && affinity.cooling.includes(element.key)) {
-    score += 14  // 진정 관계 (수→화)
-  } else if (affinity.utilization && affinity.utilization.includes(element.key)) {
-    score += 14  // 활용 관계 (목→토)
-  } else if (affinity.channeling && affinity.channeling.includes(element.key)) {
-    score += 14  // 조절 관계 (토→수)
-  } else if (affinity.neutral && affinity.neutral.includes(element.key)) {
-    score += 8   // 중립 관계
-  } else if (affinity.challenges && affinity.challenges.includes(element.key)) {
-    score -= 12  // 상극 관계 (이제는 없음)
-  }
-
-  const timeAdvice = deriveTimeAdvice(payload.time)
-  score += timeAdvice.bonus
-  score += payload.day % 2 === 0 ? 3 : -1
-  score = Math.max(35, Math.min(98, Math.round(score)))
-
-  const rating = score >= 85 ? '찰떡궁합' : score >= 70 ? '균형 잡힌 합' : score >= 55 ? '중립형 합' : '주의가 필요한 합'
-  const strategy = STRATEGY_LIBRARY[element.key]
-
-  // Generate narrative story
-  const currentYear = new Date().getFullYear()
-  const nextYear = currentYear + 1
-  const targetContext = {
-    entityName: profileMeta.entityName || '비교 대상',
-    summaryHighlight: profileMeta.summaryHighlight || '',
-    highlights: profileMeta.highlights || [],
-    profileType: profileMeta.profileType || 'person',
-    elementKey: targetElementKey,
-    elementLabel: targetElementLabel,
-    zodiac: targetZodiac,
-    yinYang: targetYinYang,
-    profileNarrative: profileMeta.profileNarrative || ''
-  }
-  const narrative = generateStoryNarrative(
-    payload,
-    element,
-    zodiac,
-    yinYang,
-    rating,
-    score,
-    strategy,
-    timeAdvice,
-    nextYear,
-    profileMeta,
-    targetContext
-  )
-
-  const userHighlights = buildPersonHighlights(element, zodiac, yinYang, payload.time || '시간 미상')
-  const targetHighlights = targetContext.highlights || []
-
-  return {
-    score,
-    rating,
-    element,
-    elementSummary: element.summary,
-    zodiac,
-    yinYang,
-    strategy,
-    timeAdvice,
-    narrative,
-    riskNote: buildRiskNote(element.key, rating),
-    agentPrompt: profileMeta.agentPrompt,
-    user: {
-      name: payload.userName || DEFAULT_USER_NAME,
-      elementKey: element.key,
-      elementLabel: element.label,
-      highlights: userHighlights
-    },
-    target: {
-      profileType: targetContext.profileType,
-      entityName: targetContext.entityName,
-      label: profileMeta.label,
-      summary: targetContext.summaryHighlight,
-      elementKey: targetElementKey,
-      highlights: targetHighlights,
-      zodiac: targetContext.zodiac,
-      yinYang: targetContext.yinYang
-    }
-  }
-}
-
-const scoreCircleDashOffset = computed(() => {
-  const progress = Math.max(0, Math.min(100, scoreProgress.value || 0))
-  return SCORE_CIRCLE_CIRCUMFERENCE * (1 - progress / 100)
-})
-
-function generateStoryNarrative(payload, element, zodiac, yinYang, rating, score, strategy, timeAdvice, nextYear, targetProfileMeta, targetContext) {
-  const genderText = payload.gender === 'male' ? '남성' : payload.gender === 'female' ? '여성' : ''
-  const genderPrefix = genderText ? `${genderText}으로서, ` : ''
-  const targetLabel = targetContext?.entityName || '비교 대상'
-  const isPersonTarget = targetContext?.profileType === 'person'
-  const targetProfileIntro = describeTargetProfile(targetProfileMeta, targetContext)
-  const dominantTrait = getDominantTrait(targetProfileMeta)
-
-  const introHeading = `## 당신과 ${targetLabel}의 ${isPersonTarget ? '시너지' : '만남'}\n\n`
-  let story = introHeading
-  story += `당신은 ${zodiac} 띠${genderText ? `의 ${genderText}` : ''}로, ${yinYang}의 기운을 타고났습니다. `
-  story += `당신의 사주는 ${element.label}을 주축으로 하고 있으며, 이는 ${element.summary.toLowerCase()}를 의미합니다.\n\n`
-
-  story += `${targetProfileIntro}`
-  if (dominantTrait) {
-    story += `그 중에서도 가장 큰 비중을 차지하는 것은 **${dominantTrait.label}**(${dominantTrait.ratio}%)이며, ${dominantTrait.description} `
-  } else if (targetContext?.elementLabel) {
-    story += `${targetLabel}은(는) ${targetContext.elementLabel} 기운을 중심으로 움직입니다. `
-  }
-  story += `당신의 ${element.label} 에너지와 ${targetLabel}의 오행 속성이 만났을 때, ${rating}의 궁합을 보입니다(궁합 점수: ${score}점). `
-
-  if (score >= 85) {
-    story += `이는 매우 조화로운 관계로, ${genderPrefix}당신은 ${targetLabel}의 본질을 직관적으로 이해하고 장기적인 관점에서 접근할 수 있는 천부적인 소질을 갖추고 있습니다.\n\n`
-  } else if (score >= 70) {
-    story += `이는 균형 잡힌 관계로, ${genderPrefix}당신은 ${targetLabel}과 안정적인 리듬을 만들어갈 수 있습니다. 규칙을 세우고 그것을 지키는 것이 성공의 열쇠입니다.\n\n`
-  } else if (score >= 55) {
-    story += `이는 중립적인 관계로, ${genderPrefix}당신은 ${targetLabel}과의 관계에서 의식적인 노력이 필요합니다. 감정보다는 데이터와 명확한 원칙에 기반한 접근이 중요합니다.\n\n`
-  } else {
-    story += `이는 주의가 필요한 관계로, ${genderPrefix}당신은 ${targetLabel}의 급격한 리듬에 쉽게 흔들릴 수 있습니다. 철저한 계획과 규칙이 필수적입니다.\n\n`
-  }
-
-  // Part 2: 내년의 사주에 대한 기본 내용
-  story += `## ${nextYear}년, 당신의 운세\n\n`
-  story += `${nextYear}년은 당신에게 ${getYearlyFortune(element, yinYang, nextYear)}의 해가 될 것입니다. `
-  story += `${element.label} 에너지를 가진 당신에게 ${nextYear}년은 ${getYearElement(nextYear)}의 기운이 흐르는 해로, `
-  story += `${getElementInteraction(element.key, getYearElement(nextYear))}.\n\n`
-
-  if (timeAdvice.key !== 'unknown') {
-    story += `당신은 ${timeAdvice.label}에 태어났기에, ${timeAdvice.description.slice(0, -1)}는 특성이 있습니다. `
-    story += `이는 ${nextYear}년 한 해 동안 ${getTimeBasedAdvice(timeAdvice.key)}에 도움이 될 것입니다.\n\n`
-  }
-
-  // Part 3: 비트코인 저축 및 투자에 대한 서술
-  if (isPersonTarget) {
-    story += `## ${targetLabel}과의 관계 조언\n\n`
-    story += `${targetLabel}은(는) ${targetContext.elementLabel || '특정'} 에너지에 뿌리를 두고 있습니다. `
-    story += `관계를 설계할 때 ${genderPrefix}당신의 ${element.label} 에너지는 ${strategy.focus.toLowerCase()} `
-    story += `리듬을 만들어 서로의 속도를 맞추는 데 도움이 됩니다.\n\n`
-
-    story += `**${strategy.style}** 접근법을 추천합니다. `
-    story += `이 방식은 감정 기복이 커질 때도 서로의 원칙을 지켜주며, ${targetLabel}과의 협업이나 동행을 보다 안정적으로 만들어줍니다.\n\n`
-  } else {
-    story += `## ${nextYear}년, ${targetLabel}과 함께하는 한 해\n\n`
-    story += `${nextYear}년은 ${targetLabel}을 '투자'가 아닌 '저축'의 관점으로 바라보는 것이 중요합니다. `
-    story += `${genderPrefix}당신의 ${element.label} 에너지는 ${strategy.focus.toLowerCase()}\n\n`
-
-    story += `**${strategy.style}**을 추천합니다. `
-    story += `이는 당신의 본성과 가장 잘 맞는 접근법입니다. `
-    story += `포지션 구성은 ${strategy.allocation}을 기본으로 하되, 시장 상황과 당신의 감정 상태를 고려하여 유연하게 조정하세요.\n\n`
-
-    story += getBitcoinYearlyAdvice(element.key, score, nextYear)
-
-    story += `\n\n${targetLabel}은 한정된 공급량을 가진 디지털 금입니다. `
-    story += `${nextYear}년 한 해 동안, 급등과 급락에 흔들리지 말고 꾸준히 저축하는 마음가짐을 유지하세요. `
-    story += `당신의 ${element.label} 에너지가 그 길을 안내할 것입니다.`
-  }
-
-  return story
-}
-
-function describeTargetProfile(profileMeta, targetContext) {
-  const name = profileMeta?.entityName || DEFAULT_TARGET_NAME
-  const parts = []
-  if (targetContext?.zodiac) parts.push(`${targetContext.zodiac}`)
-  if (targetContext?.yinYang) parts.push(`${targetContext.yinYang}의 기운`)
-  if (targetContext?.elementLabel) parts.push(`주력 ${targetContext.elementLabel}`)
-  const summary = parts.join(' · ')
-  const suffix = profileMeta?.profileNarrative ? ` ${profileMeta.profileNarrative}` : ''
-  const baseSentence = `${name}은(는) ${summary || '고유한 오행'} 성향을 지닌 인물입니다.${suffix ? ` ${suffix}` : ''} `
-  if (!profileMeta?.highlights?.length) {
-    return `${baseSentence}사주 정보를 입력하면 더 정밀한 비교가 가능합니다.`
-  }
-  const ratioText = profileMeta.highlights.map((trait) => `${trait.label} ${trait.ratio}%`).join(', ')
-  return `${baseSentence}특히 ${ratioText} 비중이 두드러집니다. `
-}
-
-function getTargetDominantElementKey(profileMeta, targetPayload) {
-  if (profileMeta?.dominantElementKey) return profileMeta.dominantElementKey
-  if (profileMeta?.profileType === 'person' && targetPayload) {
-    const element = ELEMENTS[(targetPayload.year + targetPayload.month + targetPayload.day) % ELEMENTS.length]
-    return element.key
-  }
-  const trait = getDominantTrait(profileMeta)
-  return trait?.elementKey || 'metal'
-}
-
-function getDominantTrait(profileMeta) {
-  if (!profileMeta?.highlights?.length) {
-    return {
-      label: '정보 없음',
-      ratio: 0,
-      description: '비교 대상을 선택하면 주력 오행이 계산됩니다.',
-      elementKey: 'metal'
-    }
-  }
-  return profileMeta.highlights.reduce((max, trait) => {
-    if (!max || Number(trait.ratio) > Number(max.ratio)) return trait
-    return max
-  }, null)
-}
-
-function getYearlyFortune(element, yinYang, year) {
-  const fortunes = ['도약', '안정', '변화', '성장', '정리']
-  return fortunes[year % fortunes.length]
-}
-
-function getYearElement(year) {
-  const elements = ['금(金)', '수(水)', '목(木)', '화(火)', '토(土)']
-  return elements[year % elements.length]
-}
-
-function getElementInteraction(userElement, yearElement) {
-  const interactions = {
-    'wood': {
-      '금(金)': '조심스러운 접근이 필요하지만 구조를 배울 수 있는 해',
-      '수(水)': '생명력을 공급받아 성장할 수 있는 길한 해',
-      '목(木)': '동료를 만나 함께 성장하는 안정된 해',
-      '화(火)': '에너지를 발산하며 성과를 낼 수 있는 활발한 해',
-      '토(土)': '뿌리를 내리고 기반을 다지는 의미 있는 해'
-    },
-    'fire': {
-      '금(金)': '열정을 제어하며 균형을 찾아야 하는 해',
-      '수(水)': '충돌과 조율이 반복되는 배움의 해',
-      '목(木)': '새로운 연료를 얻어 타오를 수 있는 상승의 해',
-      '화(火)': '강렬한 에너지가 폭발하는 주의가 필요한 해',
-      '토(土)': '결과를 안정적으로 정착시키는 수확의 해'
-    },
-    'earth': {
-      '금(金)': '품격 있는 성과를 만들어내는 생산적인 해',
-      '수(水)': '유연함을 배우며 적응력을 키우는 해',
-      '목(木)': '새로운 것을 받아들이되 중심을 지켜야 하는 해',
-      '화(火)': '따뜻한 에너지를 받아 풍요로워지는 해',
-      '토(土)': '같은 에너지끼리 만나 안정과 정체 사이에서 선택하는 해'
-    },
-    'metal': {
-      '금(金)': '날카로움이 더해져 정교함이 극대화되는 해',
-      '수(水)': '흐름을 만들어 새로운 방향으로 나아가는 해',
-      '목(木)': '대립과 절삭이 일어나지만 결과물이 명확한 해',
-      '화(火)': '단련의 고통을 겪지만 더 강해지는 해',
-      '토(土)': '든든한 토대를 얻어 빛을 발하는 길한 해'
-    },
-    'water': {
-      '금(金)': '새로운 원천을 만나 풍부해지는 생성의 해',
-      '수(水)': '같은 흐름끼리 모여 큰 물결을 이루는 해',
-      '목(木)': '에너지를 나누어주며 성장을 돕는 베풂의 해',
-      '화(火)': '증발과 순환을 경험하는 변화의 해',
-      '토(土)': '흐름이 막히거나 고이는 정체를 주의해야 하는 해'
-    }
-  }
-  return interactions[userElement]?.[yearElement] || '새로운 배움의 해'
-}
-
-function getTimeBasedAdvice(timeKey) {
-  const adviceMap = {
-    'dawn': '직관적인 판단과 타이밍 포착',
-    'morning': '규칙적인 루틴 유지와 꾸준한 실행',
-    'afternoon': '균형 잡힌 의사결정과 리밸런싱',
-    'evening': '철저한 복기와 검증을 통한 리스크 관리'
-  }
-  return adviceMap[timeKey] || '계획적인 접근'
-}
-
-function getBitcoinYearlyAdvice(elementKey, score, year) {
-  const adviceMap = {
-    'wood': `${year}년은 비트코인을 꾸준히 축적하기 좋은 해입니다. 당신의 목(木) 에너지는 성장과 확장을 추구하지만, 비트코인 저축에서는 인내심이 더 중요합니다. 매월 또는 매주 일정 금액을 자동 적립하고, 가격이 오르든 내리든 흔들리지 마세요. 상승장에서 '이제 팔아야 하나' 하는 유혹이 올 수 있지만, 최소 4년 이상 보유한다는 원칙을 지키세요. 비트코인은 단기 수익이 아닌 장기 자산입니다.`,
-    'fire': `${year}년 비트코인 저축에서 당신의 화(火) 에너지는 양날의 검입니다. 열정적으로 시작할 수 있지만, 변동성에 쉽게 흔들릴 수 있습니다. 감정적으로 매도하지 마세요. 매주 또는 매월 정해진 날짜에 자동으로 적립되도록 설정하고, 절대 차트를 보고 충동적으로 팔지 마세요. 비트코인은 4년 주기로 움직입니다. 최소 한 사이클(4년)은 보유하겠다는 각오로 시작하세요.`,
-    'earth': `${year}년은 당신의 토(土) 에너지가 빛을 발하는 해입니다. 안정과 꾸준함을 중시하는 당신에게 비트코인 정기 저축은 완벽한 전략입니다. 시장이 폭락해도 당황하지 마세요. 오히려 더 저렴한 가격에 축적할 기회입니다. 매월 정해진 금액을 기계적으로 적립하고, 10년 이상 보유한다는 마음가짐을 가지세요. 비트코인은 인내하는 자에게 보상합니다.`,
-    'metal': `${year}년 비트코인 저축에서 당신의 금(金) 에너지는 큰 강점입니다. 규율과 원칙을 중시하는 당신은 감정에 흔들리지 않고 정기 적립을 이어갈 수 있습니다. 매주 또는 매월 정확히 같은 날, 같은 금액을 적립하세요. 가격이 올라도, 내려도 상관없이 기계적으로 실행하세요. 시장을 예측하려 하지 말고, 시간을 당신의 편으로 만드세요. 비트코인은 규율 있는 저축자에게 가장 큰 보상을 줍니다.`,
-    'water': `${year}년 당신의 수(水) 에너지는 유연함과 적응력을 의미합니다. 비트코인 가격이 급등하거나 급락해도 흔들리지 말고, 흐름에 몸을 맡기세요. 매월 정기 적립을 설정하고, 하락장이 와도 절대 팔지 마세요. 오히려 하락은 더 많은 비트코인을 축적할 기회입니다. 변동성을 두려워하지 말고, 최소 4년 이상의 긴 호흡으로 바라보세요. 비트코인은 물처럼 흐르며 결국 제자리를 찾습니다.`
-  }
-  return adviceMap[elementKey] || ''
-}
-
-function deriveTimeAdvice(time) {
-  if (!time) return TIME_WINDOWS.find((window) => window.key === 'unknown')
-  const [hour] = time.split(':').map((v) => Number(v))
-  if (hour >= 23 || hour < 5) return TIME_WINDOWS[0]
-  if (hour < 11) return TIME_WINDOWS[1]
-  if (hour < 17) return TIME_WINDOWS[2]
-  if (hour < 23) return TIME_WINDOWS[3]
-  return TIME_WINDOWS[4]
-}
-
-function generateNarrative(elementKey, rating) {
-  const snippets = {
-    wood: '확장 국면에서 탄력을 얻으므로 채널 상단에서도 호흡을 길게 가져갈 수 있습니다',
-    fire: '모멘텀을 빠르게 탈 수 있지만 과열 구간에서는 냉정한 룰이 필요합니다',
-    earth: '큰 조정에서도 버틸 수 있는 저력과 방어선을 동시에 지니고 있습니다',
-    metal: '정밀한 룰과 비트코인의 구조가 닮아 안정적인 궁합을 보여줍니다',
-    water: '흐름을 타며 손실을 줄이고 새로운 파동이 올 때 자연스럽게 적응합니다'
-  }
-  return `${rating}으로 분류되며 ${snippets[elementKey]}`
-}
-
-function buildRiskNote(elementKey, rating) {
-  const base = {
-    wood: '충동적으로 시장에 진입하기보다 비중 조절 규칙을 명문화하세요.',
-    fire: '손절 기준을 미리 정하지 않으면 비트코인의 변동성이 감정을 자극할 수 있습니다.',
-    earth: '과도한 방어는 상승 파동을 놓칠 수 있으니 분기별로 위험 한도를 재점검하세요.',
-    metal: '신호가 많아질수록 과최적화 리스크가 생깁니다. 핵심 지표만 남기세요.',
-    water: '많은 시나리오를 동시에 고려하다 보면 실행이 늦어질 수 있습니다. 핵심 시나리오를 2개로 제한하세요.'
-  }
-  return `${base[elementKey]} (${rating} 등급)`
-}
-
-function buildAgentContextPayload(payload, targetPayload, result, targetProfileMeta, isTimeUnknown, isTargetTimeUnknown) {
-  if (!payload || !result) return null
-  const birthdate = `${payload.year}-${String(payload.month).padStart(2, '0')}-${String(payload.day).padStart(2, '0')}`
-  const timeLabel = payload.time ? payload.time : isTimeUnknown ? '시간 미상' : '미입력'
-  const highlightSummary = (targetProfileMeta?.highlights || [])
-    .map((trait) => `${trait.label} ${trait.ratio}%`)
-    .join(', ')
-  const nextYear = new Date().getFullYear() + 1
-  const targetName = targetProfileMeta?.entityName || '비교 대상'
-  const targetInfoLines = []
-  if (targetPayload) {
-    const targetBirthdate = `${targetPayload.year}-${String(targetPayload.month).padStart(2, '0')}-${String(
-      targetPayload.day
-    ).padStart(2, '0')}`
-    const targetTimeLabel = targetPayload.time
-      ? targetPayload.time
-      : isTargetTimeUnknown
-        ? '시간 미상'
-        : '미입력'
-    targetInfoLines.push(`- 이름: ${targetName}`)
-    targetInfoLines.push(`- 생년월일: ${targetBirthdate}`)
-    targetInfoLines.push(`- 성별: ${targetPayload.gender || '미입력'}`)
-    targetInfoLines.push(
-      `- 띠 / 음양: ${result.target?.zodiac || targetProfileMeta?.targetZodiac || '미계산'} / ${result.target?.yinYang || targetProfileMeta?.targetYinYang || '미계산'}`
-    )
-    targetInfoLines.push(`- 태어난 시간: ${targetTimeLabel}`)
-  } else {
-    targetInfoLines.push(`- ${targetProfileMeta?.label || `${targetName} 프로필`}`)
-    if (targetProfileMeta?.summaryHighlight) targetInfoLines.push(`- 설명: ${targetProfileMeta.summaryHighlight}`)
-  }
-  if (highlightSummary) {
-    targetInfoLines.push(`- 오행 비중: ${highlightSummary}`)
-  }
-
-  const contextLines = [
-    '사용자 기본 정보:',
-    `- 이름: ${payload.userName || DEFAULT_USER_NAME}`,
-    `- 생년월일: ${birthdate}`,
-    `- 성별: ${payload.gender || '미입력'}`,
-    `- 띠 / 음양: ${result.zodiac} / ${result.yinYang}`,
-    `- 주력 오행: ${result.element.label} (${result.elementSummary})`,
-    `- 태어난 시간: ${timeLabel}`,
+  return [
+    formatPerson('인물 A', userProfile, userDescription, userStoryText, userNarrative),
     '',
-    `${targetName} 기준선:`,
-    ...targetInfoLines,
+    formatPerson('인물 B', targetProfile, targetDescription, targetStoryText, targetNarrative),
     '',
-    '궁합 지표:',
-    `- 궁합 점수: ${result.score} (${result.rating})`,
-    `- 추천 전략: ${result.strategy.style} / ${result.strategy.focus}`,
-    `- 리스크 메모: ${result.riskNote}`,
-    `- ${nextYear}년 대비 조언: ${result.timeAdvice?.title || result.timeAdvice?.label || '시간 정보 없음'}`
-  ].filter(Boolean)
-
-  return {
-    context: contextLines.join('\n'),
-    data: {
-      user: {
-        name: payload.userName || DEFAULT_USER_NAME,
-        birthdate,
-        gender: payload.gender || '',
-        zodiac: result.zodiac,
-        yinYang: result.yinYang,
-        element: result.element.label,
-        elementSummary: result.elementSummary,
-        timeLabel,
-        timeAdvice: result.timeAdvice?.label || '',
-        score: result.score
-      },
-      targetProfile: {
-        name: targetName,
-        label: targetProfileMeta?.label || '',
-        profileType: targetProfileMeta?.profileType || 'person',
-        summary: targetProfileMeta?.summaryHighlight || '',
-        highlights: targetProfileMeta?.highlights || [],
-        zodiac: result.target?.zodiac || targetProfileMeta?.targetZodiac || '',
-        yinYang: result.target?.yinYang || targetProfileMeta?.targetYinYang || ''
-      },
-      compatibility: {
-        score: result.score,
-        rating: result.rating,
-        strategy: result.strategy,
-        riskNote: result.riskNote,
-        targetElementKey: result.target?.elementKey || ''
-      }
-    }
-  }
-}
-
-async function copyNarrative() {
-  if (!compatibilityResult.value || !compatibilityResult.value.narrative) return
-
-  try {
-    // Remove HTML tags and format for plain text
-    const plainText = compatibilityResult.value.narrative
-      .replace(/## /g, '\n')
-      .replace(/\*\*/g, '')
-      .trim()
-
-    await navigator.clipboard.writeText(plainText)
-
-    // Optional: Show a brief success message
-    const button = event.target.closest('button')
-    const originalText = button.innerHTML
-    button.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> 복사됨!'
-    setTimeout(() => {
-      button.innerHTML = originalText
-    }, 2000)
-  } catch (err) {
-    console.error('복사 실패:', err)
-  }
+    '## 요청',
+    '위 정보를 기반으로 두 사람이 서로에게 미치는 영향과 협업 전략, 주의 신호를 분석하세요.',
+    '',
+    '## 출력 지침',
+    '- 결과는 반드시 마크다운 문법을 사용하고, 각 섹션은 `##` 헤딩으로 시작하세요.',
+    '- 최소 3개 섹션(관계 다이내믹, 투자 전략, 리스크 신호)을 포함하고, 필요 시 표나 불릿을 사용해 상세히 기술하세요.',
+    '- 근거가 되는 사주/스토리 인용 문장은 **굵게** 표시하세요.'
+  ].join('\n')
 }
 
 function formatCardDate(dateStr) {
@@ -2033,18 +2865,41 @@ function formatCardDate(dateStr) {
 
 function renderMarkdown(text) {
   if (!text) return ''
-  const lines = text.split('\n')
+  const normalized = text.replace(/\r\n?/g, '\n')
+  const lines = normalized.split('\n')
   const htmlParts = []
   let paragraphBuffer = []
   let unorderedBuffer = []
   let orderedBuffer = []
+  let blockquoteBuffer = []
+  let codeBuffer = []
+  let tableBuffer = []
+  let inCodeBlock = false
+  let codeLanguage = ''
+
+  const escapeHtml = (value = '') =>
+    value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
   const formatInline = (value) => {
     if (!value) return ''
-    let formatted = value
-    formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>')
+    let formatted = escapeHtml(value)
+    const codePlaceholders = []
+    formatted = formatted.replace(/`([^`]+)`/g, (_, code) => {
+      const placeholder = `__INLINE_CODE_${codePlaceholders.length}__`
+      codePlaceholders.push(`<code>${escapeHtml(code)}</code>`)
+      return placeholder
+    })
     formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    formatted = formatted.replace(/\*(.+?)\*/g, '<em>$1</em>')
+    formatted = formatted.replace(/__(.+?)__/g, '<strong>$1</strong>')
+    formatted = formatted.replace(/\*(?!\*)([^*]+)\*(?!\*)/g, '<em>$1</em>')
+    formatted = formatted.replace(/_(?!_)([^_]+)_(?!_)/g, '<em>$1</em>')
+    formatted = formatted.replace(/==([^=]+)==/g, '<mark class="md-highlight">$1</mark>')
+    formatted = formatted.replace(/&lt;mark&gt;/g, '<mark class="md-highlight">')
+    formatted = formatted.replace(/&lt;\/mark&gt;/g, '</mark>')
+    formatted = formatted.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+    codePlaceholders.forEach((snippet, index) => {
+      formatted = formatted.replace(`__INLINE_CODE_${index}__`, snippet)
+    })
     return formatted
   }
 
@@ -2077,33 +2932,195 @@ function renderMarkdown(text) {
     flushOrdered()
   }
 
+  const flushBlockquote = () => {
+    if (!blockquoteBuffer.length) return
+    const content = blockquoteBuffer.map((line) => formatInline(line)).join('<br />')
+    htmlParts.push(`<blockquote>${content}</blockquote>`)
+    blockquoteBuffer = []
+  }
+
+  const isTableLine = (line) => /^\s*\|.*\|\s*$/.test(line)
+  const isDividerLine = (line) => /^\s*\|?(?:\s*:?-+:?\s*\|)+\s*$/.test(line)
+
+  const parseTableCells = (line) =>
+    line
+      .trim()
+      .replace(/^\||\|$/g, '')
+      .split('|')
+      .map((cell) => cell.trim())
+
+  const flushTable = () => {
+    if (!tableBuffer.length) return
+    const rows = tableBuffer.map((line) => line.trim()).filter(Boolean)
+    if (!rows.length) {
+      tableBuffer = []
+      return
+    }
+
+    if (rows.length < 2 || !isDividerLine(rows[1])) {
+      rows.forEach((line) => {
+        htmlParts.push(`<p>${formatInline(line)}</p>`)
+      })
+      tableBuffer = []
+      return
+    }
+
+    const headerCells = parseTableCells(rows[0]).map((cell) => formatInline(cell))
+    let alignments = []
+    let dataRows = rows.slice(1)
+
+    if (dataRows.length && isDividerLine(dataRows[0])) {
+      const dividerCells = parseTableCells(dataRows[0])
+      alignments = dividerCells.map((cell) => {
+        const raw = cell.trim()
+        if (/^:-+:$/.test(raw)) return 'center'
+        if (/^:-+$/.test(raw)) return 'left'
+        if (/^-+:$/.test(raw)) return 'right'
+        return 'left'
+      })
+      dataRows = dataRows.slice(1)
+    }
+
+    const bodyRows = dataRows.map((line) => parseTableCells(line).map((cell) => formatInline(cell)))
+
+    const buildCell = (tag, content, index) => {
+      const align = alignments[index] || 'left'
+      return `<${tag} style="text-align:${align}">${content}</${tag}>`
+    }
+
+    let tableHtml = '<table>'
+    tableHtml += '<thead><tr>'
+    headerCells.forEach((cell, idx) => {
+      tableHtml += buildCell('th', cell, idx)
+    })
+    tableHtml += '</tr></thead>'
+    if (bodyRows.length) {
+      tableHtml += '<tbody>'
+      bodyRows.forEach((row) => {
+        tableHtml += '<tr>'
+        row.forEach((cell, idx) => {
+          tableHtml += buildCell('td', cell, idx)
+        })
+        tableHtml += '</tr>'
+      })
+      tableHtml += '</tbody>'
+    }
+    tableHtml += '</table>'
+    htmlParts.push(tableHtml)
+    tableBuffer = []
+  }
+
+  const flushCodeBlock = () => {
+    if (!codeBuffer.length) return
+    const langClass = codeLanguage ? ` class="language-${codeLanguage}"` : ''
+    const codeContent = codeBuffer.join('\n')
+    htmlParts.push(`<pre><code${langClass}>${escapeHtml(codeContent)}</code></pre>`)
+    codeBuffer = []
+    codeLanguage = ''
+  }
+
+  const specialHeadingPatterns = [
+    /^프로필\s*브리핑$/i,
+    /^커리어\s*&\s*재물$/i,
+    /^인간관계$/i,
+    /^비트코인\s*전략\s*체크리스트$/i,
+    /.+와\s*비트코인의\s*궁합$/i,
+    /.+×\s*비트코인\s*궁합$/i,
+  ]
+
   for (const rawLine of lines) {
-    const line = rawLine.trim()
-    if (!line) {
+    const trimmedLine = rawLine.trim()
+
+    if (/^```/.test(trimmedLine)) {
+      if (inCodeBlock) {
+        flushCodeBlock()
+        inCodeBlock = false
+      } else {
+        flushParagraph()
+        flushLists()
+        flushBlockquote()
+        flushTable()
+        inCodeBlock = true
+        codeLanguage = trimmedLine.replace(/^```/, '').trim()
+        codeBuffer = []
+      }
+      continue
+    }
+
+    if (inCodeBlock) {
+      codeBuffer.push(rawLine)
+      continue
+    }
+
+    if (!trimmedLine) {
       flushParagraph()
       flushLists()
+      flushBlockquote()
+      flushTable()
       continue
     }
 
-    if (/^[-*+]\s+/.test(line)) {
+    if (/^(-{3,}|_{3,}|\*{3,})$/.test(trimmedLine)) {
+      flushParagraph()
+      flushLists()
+      flushBlockquote()
+      flushTable()
+      htmlParts.push('<hr />')
+      continue
+    }
+
+    if (trimmedLine.startsWith('>')) {
+      flushParagraph()
+      flushLists()
+      flushTable()
+      blockquoteBuffer.push(trimmedLine.replace(/^>\s?/, '').trimStart())
+      continue
+    }
+
+    if (isTableLine(trimmedLine)) {
+      flushParagraph()
+      flushLists()
+      flushBlockquote()
+      tableBuffer.push(trimmedLine)
+      continue
+    } else if (tableBuffer.length) {
+      flushTable()
+    }
+
+    if (/^[-*+]\s+/.test(trimmedLine)) {
       flushParagraph()
       if (orderedBuffer.length) flushOrdered()
-      unorderedBuffer.push(line.replace(/^[-*+]\s+/, ''))
+      if (tableBuffer.length) flushTable()
+      unorderedBuffer.push(trimmedLine.replace(/^[-*+]\s+/, ''))
       continue
     }
 
-    if (/^\d+\.\s+/.test(line)) {
+    if (/^\d+\.\s+/.test(trimmedLine)) {
       flushParagraph()
       if (unorderedBuffer.length) flushUnordered()
-      orderedBuffer.push(line.replace(/^\d+\.\s+/, ''))
+      if (tableBuffer.length) flushTable()
+      orderedBuffer.push(trimmedLine.replace(/^\d+\.\s+/, ''))
       continue
     }
 
     flushLists()
+    if (tableBuffer.length) {
+      flushTable()
+    }
 
-    const headingMatch = line.match(/^(#{1,3})\s+(.*)$/)
+    const specialHeading = specialHeadingPatterns.some((pattern) => pattern.test(trimmedLine))
+    if (specialHeading) {
+      flushParagraph()
+      flushTable()
+      const content = formatInline(trimmedLine)
+      htmlParts.push(`<h3 class="highlight-heading">${content}</h3>`)
+      continue
+    }
+
+    const headingMatch = trimmedLine.match(/^(#{1,3})\s+(.*)$/)
     if (headingMatch) {
       flushParagraph()
+      flushTable()
       const level = headingMatch[1].length
       const content = formatInline(headingMatch[2])
       const tag = level === 1 ? 'h2' : level === 2 ? 'h3' : 'h4'
@@ -2111,11 +3128,22 @@ function renderMarkdown(text) {
       continue
     }
 
-    paragraphBuffer.push(line)
+    if (blockquoteBuffer.length) {
+      flushBlockquote()
+    }
+
+    paragraphBuffer.push(trimmedLine)
   }
 
   flushParagraph()
   flushLists()
+  flushBlockquote()
+  if (inCodeBlock) {
+    flushCodeBlock()
+  }
+  if (tableBuffer.length) {
+    flushTable()
+  }
   return htmlParts.join('')
 }
 </script>
@@ -2138,15 +3166,7 @@ section.space-y-6 {
 }
 
 .scroll-container::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 60px;
-  background: linear-gradient(to left, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 100%);
-  pointer-events: none;
-  z-index: 10;
+  content: none;
 }
 
 /* Scroll hint arrow */
@@ -2164,6 +3184,84 @@ section.space-y-6 {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+.profile-radar {
+  width: 280px;
+  min-width: 220px;
+  max-width: 320px;
+  padding: 0.75rem;
+  overflow: visible;
+}
+
+.profile-radar-svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+@media (max-width: 640px) {
+  .profile-radar {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+.highlight-panel ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style: disc;
+}
+
+.highlight-panel ol {
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style: decimal;
+}
+
+:deep(.highlight-panel h3.highlight-heading) {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #92400e;
+  margin-top: 1.25rem;
+  margin-bottom: 0.4rem;
+}
+
+:deep(.highlight-panel h3.highlight-heading:first-of-type) {
+  margin-top: 0.75rem;
+}
+
+.markdown-highlight p {
+  margin-bottom: 0.5rem;
+}
+
+.markdown-highlight ul,
+.markdown-highlight ol {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.md-highlight {
+  background: linear-gradient(120deg, rgba(254, 240, 138, 0.9) 0%, rgba(253, 232, 138, 0.95) 100%);
+  color: #7c3e0a;
+  padding: 0 0.2em;
+  border-radius: 0.35rem;
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.5);
+}
+
+.radar-polygon {
+  stroke-dasharray: 600;
+  stroke-dashoffset: 600;
+  animation: radarDraw 1.2s ease-out forwards;
+}
+
+.radar-point {
+  transform-origin: center;
+  transition: transform 0.2s ease, fill 0.2s ease;
+}
+
+.radar-point:hover {
+  transform: scale(1.15);
+}
+
 @keyframes scrollBounce {
   0%, 100% {
     transform: translateY(-50%) translateX(0);
@@ -2172,6 +3270,12 @@ section.space-y-6 {
   50% {
     transform: translateY(-50%) translateX(5px);
     opacity: 1;
+  }
+}
+
+@keyframes radarDraw {
+  to {
+    stroke-dashoffset: 0;
   }
 }
 
@@ -2261,34 +3365,24 @@ section.space-y-6 {
 }
 
 .card-info {
-  background: rgba(255, 255, 255, 0.9);
+  background: transparent;
   border-radius: 6px;
-  padding: 8px;
+  padding: 0;
   font-size: 0.75rem;
   text-align: center;
-  border: 1px solid #cbd5e1;
+  border: 0;
   flex-shrink: 0;
-  min-height: 50px;
+  min-height: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
 }
 
 .card-birthdate {
   font-weight: 600;
   color: #1e293b;
-  margin-bottom: 4px;
-  font-size: 0.7rem;
-}
-
-.card-description {
-  font-size: 0.65rem;
-  color: #64748b;
-  margin-top: 4px;
-  line-height: 1.3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  word-break: break-word;
+  font-size: 0.75rem;
 }
 
 .card-time,
@@ -2397,45 +3491,4 @@ section.space-y-6 {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 
-.score-circle-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.score-circle {
-  position: relative;
-  width: 5.25rem;
-  height: 5.25rem;
-}
-
-.score-ring {
-  width: 100%;
-  height: 100%;
-  transform: rotate(-90deg);
-}
-
-.score-ring circle {
-  fill: transparent;
-  stroke-width: 10;
-}
-
-.score-ring-bg {
-  stroke: #e2e8f0;
-}
-
-.score-ring-progress {
-  stroke: #0f172a;
-  stroke-linecap: round;
-  transition: stroke-dashoffset 1s ease;
-}
-
-.score-circle-center {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
 </style>

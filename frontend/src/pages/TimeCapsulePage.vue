@@ -193,7 +193,7 @@
             type="button"
             class="px-5 py-2 rounded-xl text-sm font-semibold text-white shadow-sm transition relative overflow-hidden"
             :class="[
-              computing || sealing ? 'bg-slate-400 cursor-progress' : 'bg-slate-900 hover:bg-slate-800',
+              computing || sealing ? 'bg-emerald-300 cursor-progress' : 'bg-emerald-600 hover:bg-emerald-500',
               sealing ? 'lock-closing' : ''
             ]"
             :disabled="!hasSecret || !hasMessage || computing || sealing"
@@ -250,7 +250,7 @@
             type="button"
             class="px-5 py-2 rounded-xl text-sm font-semibold text-white shadow-sm transition relative overflow-hidden"
             :class="[
-              opening ? 'bg-indigo-400 cursor-progress' : 'bg-indigo-600 hover:bg-indigo-700',
+              opening ? 'bg-rose-300 cursor-progress' : 'bg-rose-500 hover:bg-rose-600',
               opening ? 'unlock-opening' : ''
             ]"
             :disabled="!secretKey.trim() || !encryptedDataInput.trim() || opening"
@@ -543,6 +543,7 @@
               <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 sm:pl-6">생성일</th>
               <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">사용자</th>
               <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">암호화된 메시지</th>
+              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">비트코인 주소</th>
               <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold text-slate-900">쿠폰 사용</th>
               <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold text-slate-900">작업</th>
             </tr>
@@ -557,6 +558,12 @@
               </td>
               <td class="px-3 py-4 text-sm text-slate-500 max-w-xs truncate" :title="capsule.encrypted_message">
                 {{ capsule.encrypted_message }}
+              </td>
+              <td class="px-3 py-4 text-sm text-slate-500">
+                <span v-if="capsule.bitcoin_address" class="break-all select-text">
+                  {{ capsule.bitcoin_address }}
+                </span>
+                <span v-else class="text-xs text-slate-400">주소 할당 대기중</span>
               </td>
               <td class="whitespace-nowrap px-3 py-4 text-sm text-center">
                 <button
@@ -587,7 +594,7 @@
               </td>
             </tr>
             <tr v-if="capsules.length === 0">
-              <td colspan="5" class="px-3 py-8 text-center text-sm text-slate-500">
+              <td colspan="6" class="px-3 py-8 text-center text-sm text-slate-500">
                 저장된 타임캡슐이 없습니다.
               </td>
             </tr>
@@ -1066,7 +1073,6 @@ async function saveTimeCapsule(encryptedMessage) {
       },
       body: JSON.stringify({
         encrypted_message: encryptedMessage,
-        bitcoin_address: publicKey.value,
         user_info: nickname
       }),
     })

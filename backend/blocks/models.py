@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth.hashers import make_password, check_password
-from .encryption import encrypt_mnemonic, decrypt_mnemonic, is_encrypted_mnemonic
+from .encryption import encrypt_mnemonic, decrypt_mnemonic
 import logging
 import uuid
 import random
@@ -40,38 +40,21 @@ class Nickname(models.Model):
 
 class Mnemonic(models.Model):
     username = models.CharField(max_length=64)
-    mnemonic = models.TextField()  # Stores encrypted mnemonic
+    mnemonic = models.TextField()  # Stores plaintext mnemonic
     is_assigned = models.BooleanField(default=False)
     # Username of the user to whom this mnemonic has been assigned (if any)
     assigned_to = models.CharField(max_length=64, blank=True, null=True)
     balance_sats = models.BigIntegerField(default=0)
+    next_address_index = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    def save(self, *args, **kwargs):
-        """Override save to encrypt mnemonic before storing"""
-        if self.mnemonic and not is_encrypted_mnemonic(self.mnemonic):
-            try:
-                self.mnemonic = encrypt_mnemonic(self.mnemonic)
-                logger.info(f"Encrypted mnemonic for user: {self.username}")
-            except Exception as e:
-                logger.error(f"Failed to encrypt mnemonic for user {self.username}: {e}")
-                raise ValueError("Failed to encrypt mnemonic")
-
-        super().save(*args, **kwargs)
-
     def get_mnemonic(self):
-        """Get the decrypted mnemonic"""
-        try:
-            if self.mnemonic and is_encrypted_mnemonic(self.mnemonic):
-                return decrypt_mnemonic(self.mnemonic)
-            return self.mnemonic  # Return as-is if not encrypted (for migration compatibility)
-        except Exception as e:
-            logger.error(f"Failed to decrypt mnemonic for user {self.username}: {e}")
-            raise ValueError("Failed to decrypt mnemonic")
+        """Return the stored mnemonic in plaintext form."""
+        return self.mnemonic or ''
 
     def set_mnemonic(self, plaintext_mnemonic):
-        """Set a new mnemonic (will be encrypted on save)"""
-        self.mnemonic = plaintext_mnemonic
+        """Set a new mnemonic (stored as plaintext)."""
+        self.mnemonic = plaintext_mnemonic or ''
 
     def __str__(self):
         try:
@@ -82,20 +65,14 @@ class Mnemonic(models.Model):
 
     def as_dict(self):
         """Return dictionary representation with decrypted mnemonic"""
-        try:
-            decrypted_mnemonic = self.get_mnemonic()
-        except Exception as e:
-            logger.error(f"Failed to decrypt mnemonic in as_dict for user {self.username}: {e}")
-            # For admin purposes, show that it's encrypted
-            decrypted_mnemonic = "[ENCRYPTION_ERROR]"
-
         return {
             'id': self.id,
             'username': self.username,
-            'mnemonic': decrypted_mnemonic,
+            'mnemonic': self.get_mnemonic(),
             'is_assigned': self.is_assigned,
             'assigned_to': self.assigned_to or '',
             'balance_sats': int(self.balance_sats or 0),
+            'next_address_index': int(self.next_address_index or 0),
             'created_at': self.created_at.isoformat(),
         }
 
@@ -801,12 +778,11 @@ class CompatibilityQuickPreset(models.Model):
     """Preconfigured saju inputs that appear as quick presets on the compatibility page."""
 
     label = models.CharField(max_length=100)
-    description = models.CharField(max_length=255, blank=True, default='')
     birthdate = models.DateField(null=True, blank=True)
     birth_time = models.TimeField(null=True, blank=True)
     gender = models.CharField(max_length=10, blank=True, default='')  # 'male', 'female', etc.
+    description = models.CharField(max_length=255, blank=True, default='')
     image_url = models.URLField(blank=True, default='')
-    stored_saju = models.TextField(blank=True, default='')
     sort_order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -826,16 +802,64 @@ class CompatibilityQuickPreset(models.Model):
         return {
             'id': self.id,
             'label': self.label,
-            'description': self.description,
             'birthdate': self.birthdate.isoformat() if self.birthdate else None,
             'birth_time': self.birth_time.isoformat() if self.birth_time else None,
             'gender': self.gender,
+            'description': self.description,
             'image_url': self.image_url,
-            'stored_saju': self.stored_saju,
             'sort_order': self.sort_order,
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat(),
+        }
+
+
+class CompatibilityReportTemplate(models.Model):
+    """Editable LLM instruction templates for different compatibility contexts."""
+
+    key = models.CharField(max_length=100, unique=True)
+    label = models.CharField(max_length=100)
+    description = models.CharField(max_length=255, blank=True, default='')
+    content = models.TextField()
+    sort_order = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['sort_order', 'id']
+
+    def __str__(self):
+        return f"{self.label} ({self.key})"
+
+    def as_dict(self):
+        return {
+            'id': self.id,
+            'key': self.key,
+            'label': self.label,
+            'description': self.description,
+            'content': self.content,
+            'sort_order': self.sort_order,
+            'updated_at': self.updated_at.isoformat(),
+        }
+
+
+class TimeCapsuleBroadcastSetting(models.Model):
+    """Stores connection info for broadcasting time capsule transactions."""
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    fullnode_host = models.CharField(max_length=255, blank=True, default='')
+    fullnode_port = models.PositiveIntegerField(default=8332)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Time Capsule Broadcast Setting'
+        verbose_name_plural = 'Time Capsule Broadcast Settings'
+
+    def as_dict(self):
+        return {
+            'id': self.id,
+            'fullnode_host': self.fullnode_host,
+            'fullnode_port': self.fullnode_port,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
 
 
@@ -846,6 +870,7 @@ class TimeCapsule(models.Model):
     user_info = models.TextField(blank=True, default='')  # Can store JSON or simple string
     is_coupon_used = models.BooleanField(default=False)
     mnemonic = models.ForeignKey('Mnemonic', on_delete=models.SET_NULL, null=True, blank=True, related_name='time_capsules')
+    address_index = models.PositiveIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -858,9 +883,11 @@ class TimeCapsule(models.Model):
         return {
             'id': self.id,
             'encrypted_message': self.encrypted_message,
+            'bitcoin_address': self.bitcoin_address,
             'user_info': self.user_info,
             'is_coupon_used': self.is_coupon_used,
             'mnemonic_id': self.mnemonic_id,
             'has_mnemonic': self.mnemonic_id is not None,
+            'address_index': self.address_index,
             'created_at': self.created_at.isoformat(),
         }
