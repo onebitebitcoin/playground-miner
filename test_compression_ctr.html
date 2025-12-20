@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>압축+CTR 암호화 테스트</title>
+  <style>
+    body { font-family: monospace; padding: 20px; max-width: 1200px; margin: 0 auto; }
+    .result { margin: 10px 0; padding: 10px; background: #f0f0f0; border-radius: 5px; }
+    .pass { background: #d4edda; border: 1px solid #c3e6cb; }
+    .fail { background: #f8d7da; border: 1px solid #f5c6cb; }
+    .warning { background: #fff3cd; border: 1px solid #ffeeba; }
+    input, button { padding: 8px; margin: 5px; font-family: monospace; }
+    textarea { width: 100%; font-family: monospace; padding: 8px; }
+    .test-group { border: 2px solid #dee2e6; padding: 15px; margin: 20px 0; border-radius: 8px; }
+    h2 { color: #495057; border-bottom: 2px solid #dee2e6; padding-bottom: 10px; }
+    .size-info { font-weight: bold; font-size: 1.1em; }
+  </style>
+</head>
+<body>
+  <h1>🔐 타임캡슐 압축+CTR 암호화 테스트</h1>
+
+  <div class="test-group">
+    <h2>테스트 입력</h2>
+    <label>비밀키: <input type="text" id="secret" value="my-secret-key-2024" style="width: 300px;" /></label><br>
+    <label>메시지 (최대 65자): <input type="text" id="message" value="타임캡슐에 담은 소망입니다" style="width: 500px;" maxlength="65" /></label>
+    <span id="charCount" style="margin-left: 10px; color: #6c757d;">0 / 65자</span><br>
+    <button onclick="testEncryption()" style="background: #007bff; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 5px; font-weight: bold;">🚀 암호화 테스트 실행</button>
+  </div>
+
+  <div id="results"></div>
+
+  <script>
+    const textEncoder = new TextEncoder()
+
+    // Update character count
+    document.getElementById('message').addEventListener('input', (e) => {
+      const count = e.target.value.length
+      const countEl = document.getElementById('charCount')
+      countEl.textContent = `${count} / 65자`
+      countEl.style.color = count > 65 ? '#dc3545' : count > 60 ? '#ffc107' : '#6c757d'
+    })
+
+    function arrayBufferToBase64(buffer) {
+      const bytes = new Uint8Array(buffer)
+      let binary = ''
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i])
+      }
+      return btoa(binary)
+    }
+
+    function base64ToArrayBuffer(base64) {
+      const binary = atob(base64)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i)
+      }
+      return bytes
+    }
+
+    // Compression utilities
+    async function compressData(data) {
+      if (typeof CompressionStream === 'undefined') {
+        console.warn('CompressionStream not supported')
+        return textEncoder.encode(data)
+      }
+
+      try {
+        const stream = new Blob([data]).stream()
+        const compressedStream = stream.pipeThrough(new CompressionStream('gzip'))
+        const blob = await new Response(compressedStream).blob()
+        return new Uint8Array(await blob.arrayBuffer())
+      } catch (error) {
+        console.warn('Compression failed:', error)
+        return textEncoder.encode(data)
+      }
+    }
+
+    async function decompressData(compressedData) {
+      if (typeof DecompressionStream === 'undefined') {
+        return new TextDecoder().decode(compressedData)
+      }
+
+      try {
+        const stream = new Blob([compressedData]).stream()
+        const decompressedStream = stream.pipeThrough(new DecompressionStream('gzip'))
+        const blob = await new Response(decompressedStream).blob()
+        const decompressed = new Uint8Array(await blob.arrayBuffer())
+        return new TextDecoder().decode(decompressed)
+      } catch (error) {
+        try {
+          return new TextDecoder().decode(compressedData)
+        } catch (decodeError) {
+          throw new Error('Failed to decompress data')
+        }
+      }
+    }
+
+    async function deriveEncryptionKey(secret, algorithm = 'AES-CTR') {
+      const keyMaterial = await globalThis.crypto.subtle.importKey(
+        'raw',
+        textEncoder.encode(secret),
+        { name: 'PBKDF2' },
+        false,
+        ['deriveBits', 'deriveKey']
+      )
+
+      const salt = textEncoder.encode('timecapsule-salt-2024')
+      return await globalThis.crypto.subtle.deriveKey(
+        {
+          name: 'PBKDF2',
+          salt,
+          iterations: 100000,
+          hash: 'SHA-256'
+        },
+        keyMaterial,
+        { name: algorithm, length: 256 },
+        false,
+        ['encrypt', 'decrypt']
+      )
+    }
+
+    // NEW: Compression + AES-CTR
+    async function encryptMessageNew(message, secret) {
+      // Compress
+      const compressed = await compressData(message)
+
+      // Encrypt with AES-CTR
+      const key = await deriveEncryptionKey(secret, 'AES-CTR')
+      const iv = globalThis.crypto.getRandomValues(new Uint8Array(16))
+      const counter = new Uint8Array(16)
+      counter.set(iv)
+
+      const encrypted = await globalThis.crypto.subtle.encrypt(
+        { name: 'AES-CTR', counter, length: 128 },
+        key,
+        compressed
+      )
+
+      // Combine IV + encrypted
+      const combined = new Uint8Array(16 + encrypted.byteLength)
+      combined.set(iv, 0)
+      combined.set(new Uint8Array(encrypted), 16)
+
+      return arrayBufferToBase64(combined)
+    }
+
+    async function decryptMessage(encryptedData, secret) {
+      let decrypted
+
+      try {
+        const combined = base64ToArrayBuffer(encryptedData)
+
+        // Check JSON format
+        const possibleJson = new TextDecoder().decode(combined)
+        if (possibleJson.startsWith('{') && possibleJson.includes('"iv"')) {
+          const data = JSON.parse(possibleJson)
+          const key = await deriveEncryptionKey(secret, 'AES-GCM')
+          const iv = base64ToArrayBuffer(data.iv)
+          const ciphertext = base64ToArrayBuffer(data.ciphertext)
+
+          decrypted = await globalThis.crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv },
+            key,
+            ciphertext
+          )
+
+          return new TextDecoder().decode(decrypted)
+        }
+
+        // Try new CTR format (16-byte IV)
+        if (combined.byteLength >= 16) {
+          try {
+            const key = await deriveEncryptionKey(secret, 'AES-CTR')
+            const iv = combined.slice(0, 16)
+            const ciphertext = combined.slice(16)
+
+            const counter = new Uint8Array(16)
+            counter.set(iv)
+
+            decrypted = await globalThis.crypto.subtle.decrypt(
+              { name: 'AES-CTR', counter, length: 128 },
+              key,
+              ciphertext
+            )
+
+            return await decompressData(new Uint8Array(decrypted))
+          } catch (ctrError) {
+            // Try GCM format (12-byte IV)
+            if (combined.byteLength >= 12) {
+              const key = await deriveEncryptionKey(secret, 'AES-GCM')
+              const iv = combined.slice(0, 12)
+              const ciphertext = combined.slice(12)
+
+              decrypted = await globalThis.crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv },
+                key,
+                ciphertext
+              )
+
+              return new TextDecoder().decode(decrypted)
+            }
+            throw ctrError
+          }
+        }
+
+        throw new Error('Invalid format')
+      } catch (error) {
+        throw new Error('복호화 실패: ' + error.message)
+      }
+    }
+
+    async function testEncryption() {
+      const secret = document.getElementById('secret').value
+      const message = document.getElementById('message').value
+      const results = document.getElementById('results')
+
+      if (!message) {
+        results.innerHTML = '<div class="result fail">메시지를 입력해주세요!</div>'
+        return
+      }
+
+      try {
+        // Test compression
+        const messageBytes = new Blob([message]).size
+        const compressed = await compressData(message)
+        const compressionRatio = ((1 - compressed.length / messageBytes) * 100).toFixed(1)
+
+        // Test encryption
+        const encryptedNew = await encryptMessageNew(message, secret)
+        const newSize = encryptedNew.length
+
+        // Test decryption
+        const decryptedNew = await decryptMessage(encryptedNew, secret)
+        const decryptSuccess = decryptedNew === message
+
+        // Calculate OP_RETURN status
+        const opReturnLimit = 80
+        const remaining = opReturnLimit - newSize
+        const isWithinLimit = newSize < opReturnLimit
+
+        results.innerHTML = `
+          <div class="test-group">
+            <h2>📊 테스트 결과</h2>
+
+            <div class="result">
+              <strong>메시지:</strong> "${message}"<br>
+              <strong>길이:</strong> ${message.length}자 / ${messageBytes} 바이트
+            </div>
+
+            <div class="result ${compressionRatio > 0 ? 'pass' : 'warning'}">
+              <strong>압축 결과:</strong><br>
+              원본: ${messageBytes} 바이트 → 압축: ${compressed.length} 바이트<br>
+              압축률: ${compressionRatio}% ${compressionRatio > 0 ? '✅ 압축됨' : '⚠️ 압축 안됨 (너무 짧음)'}
+            </div>
+
+            <div class="result ${isWithinLimit ? 'pass' : 'fail'}">
+              <strong class="size-info">암호화 크기 (압축+CTR):</strong> ${newSize} 바이트
+              ${isWithinLimit ? '✅' : '❌'}<br>
+              <strong>OP_RETURN 제한:</strong> ${opReturnLimit} 바이트<br>
+              <strong>여유 공간:</strong> ${remaining} 바이트 ${isWithinLimit ? '(통과)' : '(초과!)'}
+            </div>
+
+            <div class="result ${decryptSuccess ? 'pass' : 'fail'}">
+              <strong>복호화 테스트:</strong> ${decryptSuccess ? '✅ 성공' : '❌ 실패'}<br>
+              ${decryptSuccess ? `복호화된 메시지: "${decryptedNew}"` : '복호화에 실패했습니다'}
+            </div>
+
+            <div class="result">
+              <strong>암호문 (Base64):</strong><br>
+              <textarea rows="3" readonly>${encryptedNew}</textarea>
+            </div>
+          </div>
+
+          <div class="test-group">
+            <h2>📈 권장 사항</h2>
+            <div class="result ${message.length <= 65 ? 'pass' : 'fail'}">
+              <strong>현재 글자수:</strong> ${message.length} / 65자 ${message.length <= 65 ? '✅' : '❌ 제한 초과'}
+            </div>
+            ${!isWithinLimit ? `
+              <div class="result warning">
+                ⚠️ 메시지가 너무 깁니다! 최대 ${Math.floor(65 * (opReturnLimit / newSize))}자까지 권장합니다.
+              </div>
+            ` : ''}
+            ${isWithinLimit && remaining < 10 ? `
+              <div class="result warning">
+                ⚠️ 여유 공간이 ${remaining}바이트밖에 없습니다. 조금 더 짧게 작성하는 것을 권장합니다.
+              </div>
+            ` : ''}
+          </div>
+        `
+      } catch (error) {
+        results.innerHTML = `<div class="result fail">❌ 오류: ${error.message}</div>`
+        console.error(error)
+      }
+    }
+
+    // Auto-run on load
+    window.addEventListener('load', () => {
+      document.getElementById('charCount').textContent =
+        `${document.getElementById('message').value.length} / 65자`
+      testEncryption()
+    })
+  </script>
+</body>
+</html>

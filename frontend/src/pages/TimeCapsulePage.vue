@@ -835,17 +835,18 @@
     </div>
 
     <!-- Seal & Broadcast Modal -->
-    <div v-if="sealModal.show" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 px-4">
+    <div v-if="sealModal.show" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 p-4">
       <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-        <div class="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-          <div>
-            <h3 class="text-xl font-semibold text-slate-900">타임캡슐 봉인 · 전파</h3>
-            <p class="text-sm text-slate-500">선택된 타임캡슐을 블록체인에 기록합니다.</p>
+        <!-- 헤더 -->
+        <div class="flex items-start justify-between border-b border-slate-200 p-4 sm:px-6 sm:py-4">
+          <div class="flex-1 pr-4">
+            <h3 class="text-lg sm:text-xl font-semibold text-slate-900">타임캡슐 봉인 · 전파</h3>
+            <p class="text-xs sm:text-sm text-slate-500 mt-1">선택된 타임캡슐을 블록체인에 기록합니다.</p>
           </div>
           <button
             type="button"
             @click="closeSealModal"
-            class="inline-flex items-center justify-center rounded-full w-10 h-10 text-slate-500 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300 disabled:opacity-40"
+            class="flex-shrink-0 inline-flex items-center justify-center rounded-full w-8 h-8 sm:w-10 sm:h-10 text-slate-500 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300 disabled:opacity-40"
             :disabled="sealModal.building || sealModal.sending"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -853,22 +854,25 @@
             </svg>
           </button>
         </div>
-        <div class="p-6 space-y-5">
-          <div class="grid gap-4 sm:grid-cols-2">
+
+        <!-- 입력 필드 영역 -->
+        <div class="p-4 sm:p-6 space-y-4">
+          <div class="space-y-4">
             <div>
               <label class="text-xs font-semibold text-slate-500">받는 주소</label>
               <input
                 v-model="sealForm.toAddress"
                 readonly
-                  class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-mono text-slate-700"
-                />
-              </div>
+                class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs sm:text-sm font-mono text-slate-700"
+              />
+            </div>
+            <div class="grid grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label class="text-xs font-semibold text-slate-500">보낼 금액 (sats)</label>
                 <input
                   v-model.number="sealForm.amountSats"
                   readonly
-                  class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                  class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs sm:text-sm text-slate-700"
                 />
               </div>
               <div>
@@ -876,7 +880,7 @@
                 <input
                   v-model.number="sealForm.feeRate"
                   readonly
-                  class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                  class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs sm:text-sm text-slate-700"
                 />
               </div>
             </div>
@@ -885,78 +889,87 @@
               <textarea
                 v-model="sealForm.memo"
                 readonly
-                class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 min-h-[90px]"
+                class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs sm:text-sm text-slate-700 min-h-[80px] sm:min-h-[90px]"
               />
             </div>
           </div>
-          <p v-if="sealBuildError" class="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-sm text-rose-600">
+
+          <p v-if="sealBuildError" class="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs sm:text-sm text-rose-600">
             {{ sealBuildError }}
           </p>
-          <div class="flex flex-wrap gap-3 pt-2 pb-4">
+        </div>
+
+        <!-- 버튼 영역 -->
+        <div class="px-4 pb-4 sm:px-6 sm:pb-6">
+          <div class="flex flex-col sm:flex-row gap-3 sm:gap-4">
             <button
               type="button"
-              class="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-400 disabled:opacity-40 disabled:cursor-not-allowed"
+              class="w-full sm:flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 sm:py-3.5 text-sm sm:text-base font-semibold text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-400 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               @click="buildSealTransaction"
               :disabled="sealModal.building || sealModal.sending"
-              >
-                <svg v-if="sealModal.building" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                {{ sealModal.building ? '생성 중...' : '봉인하기' }}
-              </button>
-              <button
-                type="button"
-                class="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed"
-                @click="broadcastSealTransaction"
-                :disabled="sealModal.sending || !sealTxPreview"
-              >
-                <svg v-if="sealModal.sending" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                {{ sealModal.sending ? '전파 중...' : '타임캡슐 묻기' }}
+            >
+              <svg v-if="sealModal.building" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              {{ sealModal.building ? '생성 중...' : '봉인하기' }}
+            </button>
+            <button
+              type="button"
+              class="w-full sm:flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 sm:py-3.5 text-sm sm:text-base font-semibold text-white bg-emerald-600 hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              @click="broadcastSealTransaction"
+              :disabled="sealModal.sending || !sealTxPreview"
+            >
+              <svg v-if="sealModal.sending" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              {{ sealModal.sending ? '전파 중...' : '타임캡슐 묻기' }}
             </button>
           </div>
+        </div>
+
+        <!-- 결과 영역 -->
+        <div class="px-4 pb-4 sm:px-6 sm:pb-6 space-y-4 sm:space-y-5">
 
           <div
             v-if="sealTxPreview"
-            class="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3 text-sm text-slate-700"
+            class="rounded-2xl border border-slate-100 bg-slate-50 p-3 sm:p-4 space-y-3 text-xs sm:text-sm text-slate-700"
           >
-            <div class="grid gap-3 sm:grid-cols-3">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <p class="text-xs text-slate-500">보낼 금액</p>
-                <p class="font-semibold text-slate-900">{{ formatSats(sealTxPreview.amount_sats) }}</p>
+                <p class="font-semibold text-slate-900 text-sm sm:text-base">{{ formatSats(sealTxPreview.amount_sats) }}</p>
               </div>
               <div>
                 <p class="text-xs text-slate-500">총 수수료</p>
-                <p class="font-semibold text-slate-900">
+                <p class="font-semibold text-slate-900 text-sm sm:text-base">
                   {{ formatSats(sealTxPreview.fee_sats) }}
-                  <span class="text-xs text-slate-500">
+                  <span class="text-xs text-slate-500 block sm:inline">
                     ({{ formatFeeRate(sealTxPreview.fee_rate_sats_vb) }} sats/vB · {{ formatVsize(sealTxPreview.vsize) }})
                   </span>
                 </p>
               </div>
               <div>
                 <p class="text-xs text-slate-500">거스름돈</p>
-                <p class="font-semibold text-slate-900">{{ formatSats(sealTxPreview.change_sats) }}</p>
+                <p class="font-semibold text-slate-900 text-sm sm:text-base">{{ formatSats(sealTxPreview.change_sats) }}</p>
               </div>
             </div>
           </div>
 
           <div
             v-if="sealBroadcastResult.txid"
-            class="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-3 text-sm text-emerald-700 space-y-1"
+            class="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-3 text-xs sm:text-sm text-emerald-700 space-y-1"
           >
             <p class="font-semibold">전파 완료</p>
             <a
               :href="sealBroadcastResult.broadcastUrl || explorerUrlForTx(sealBroadcastResult.txid)"
               target="_blank"
               rel="noopener noreferrer"
-              class="inline-flex items-center gap-1 text-emerald-800 font-semibold underline"
+              class="inline-flex items-center gap-1 text-emerald-800 font-semibold underline break-all"
             >
-              {{ sealBroadcastResult.txid }}
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <span class="break-all">{{ sealBroadcastResult.txid }}</span>
+              <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7m0 0v7m0-7L10 14" />
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10v11h11" />
               </svg>
@@ -964,12 +977,13 @@
           </div>
           <div
             v-if="sealBroadcastResult.error"
-            class="rounded-2xl border border-rose-100 bg-rose-50 px-3 py-3 text-sm text-rose-700"
+            class="rounded-2xl border border-rose-100 bg-rose-50 px-3 py-3 text-xs sm:text-sm text-rose-700"
           >
             {{ sealBroadcastResult.error }}
           </div>
         </div>
       </div>
+    </div>
 
   </section>
 </template>
@@ -1074,7 +1088,7 @@ const displayedPages = computed(() => {
   return pages.sort((a, b) => a - b).filter((page, index, self) => self.indexOf(page) === index) // Unique just in case
 })
 
-const messageLimit = 280
+const messageLimit = 65
 
 const hasSecret = computed(() => secretKey.value.trim().length > 0)
 const hasMessage = computed(() => wishMessage.value.trim().length > 0)
@@ -1860,8 +1874,48 @@ async function generateKeyPairFromSeed(seed) {
   }
 }
 
+// Compression utilities using browser's native CompressionStream API
+async function compressData(data) {
+  if (typeof CompressionStream === 'undefined') {
+    // Fallback for older browsers: return uncompressed
+    return textEncoder.encode(data)
+  }
+
+  try {
+    const stream = new Blob([data]).stream()
+    const compressedStream = stream.pipeThrough(new CompressionStream('gzip'))
+    const blob = await new Response(compressedStream).blob()
+    return new Uint8Array(await blob.arrayBuffer())
+  } catch (error) {
+    console.warn('Compression failed, using uncompressed data:', error)
+    return textEncoder.encode(data)
+  }
+}
+
+async function decompressData(compressedData) {
+  if (typeof DecompressionStream === 'undefined') {
+    // Fallback: assume it's uncompressed text
+    return new TextDecoder().decode(compressedData)
+  }
+
+  try {
+    const stream = new Blob([compressedData]).stream()
+    const decompressedStream = stream.pipeThrough(new DecompressionStream('gzip'))
+    const blob = await new Response(decompressedStream).blob()
+    const decompressed = new Uint8Array(await blob.arrayBuffer())
+    return new TextDecoder().decode(decompressed)
+  } catch (error) {
+    // If decompression fails, try to decode as plain text
+    try {
+      return new TextDecoder().decode(compressedData)
+    } catch (decodeError) {
+      throw new Error('Failed to decompress data')
+    }
+  }
+}
+
 // Derive AES key from secret passphrase (deterministic)
-async function deriveEncryptionKey(secret) {
+async function deriveEncryptionKey(secret, algorithm = 'AES-CTR') {
   // Import the secret as key material
   const keyMaterial = await globalThis.crypto.subtle.importKey(
     'raw',
@@ -1881,64 +1935,123 @@ async function deriveEncryptionKey(secret) {
       hash: 'SHA-256'
     },
     keyMaterial,
-    { name: 'AES-GCM', length: 256 },
+    { name: algorithm, length: 256 },
     false,
     ['encrypt', 'decrypt']
   )
 }
 
-// Encryption using AES-GCM (with key derived from secret)
+// Encryption using Compression + AES-CTR
+// Format: IV(16 bytes) + encrypted compressed data → base64
+// This allows ~65 characters with OP_RETURN 80-byte limit
 async function encryptMessage(message, secret) {
   if (!globalThis.crypto || !globalThis.crypto.subtle) {
     throw new Error('Web Crypto API not supported')
   }
 
-  // Derive encryption key from secret
-  const key = await deriveEncryptionKey(secret)
+  // Step 1: Compress the message
+  const compressed = await compressData(message)
 
-  // Generate random IV
-  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12))
+  // Step 2: Derive encryption key from secret (AES-CTR)
+  const key = await deriveEncryptionKey(secret, 'AES-CTR')
 
-  // Encrypt message
-  const encoded = textEncoder.encode(message)
+  // Step 3: Generate random IV (16 bytes for AES-CTR)
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(16))
+
+  // Step 4: Create counter from IV
+  const counter = new Uint8Array(16)
+  counter.set(iv)
+
+  // Step 5: Encrypt compressed data
   const encrypted = await globalThis.crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
+    { name: 'AES-CTR', counter, length: 128 },
     key,
-    encoded
+    compressed
   )
 
-  // Combine IV + encrypted data
-  const result = {
-    iv: arrayBufferToBase64(iv),
-    ciphertext: arrayBufferToBase64(new Uint8Array(encrypted))
-  }
+  // Step 6: Combine IV + encrypted data directly (no JSON structure)
+  const combined = new Uint8Array(16 + encrypted.byteLength)
+  combined.set(iv, 0)
+  combined.set(new Uint8Array(encrypted), 16)
 
-  return btoa(JSON.stringify(result))
+  return arrayBufferToBase64(combined)
 }
 
-// Decryption using AES-GCM
+// Decryption - supports multiple formats for backward compatibility
+// 1. New format: Compression + AES-CTR (16-byte IV)
+// 2. Previous format: AES-GCM optimized (12-byte IV)
+// 3. Old format: AES-GCM JSON format
 async function decryptMessage(encryptedData, secret) {
   if (!globalThis.crypto || !globalThis.crypto.subtle) {
     throw new Error('Web Crypto API not supported')
   }
 
-  // Parse encrypted data
-  const data = JSON.parse(atob(encryptedData))
+  let decrypted
 
-  // Derive decryption key from secret
-  const key = await deriveEncryptionKey(secret)
+  // Try to detect format and decrypt
+  try {
+    const combined = base64ToArrayBuffer(encryptedData)
 
-  // Decrypt message
-  const iv = base64ToArrayBuffer(data.iv)
-  const ciphertext = base64ToArrayBuffer(data.ciphertext)
+    // Check if it's JSON format (old format)
+    const possibleJson = new TextDecoder().decode(combined)
+    if (possibleJson.startsWith('{') && possibleJson.includes('"iv"')) {
+      // Old JSON format with AES-GCM
+      const data = JSON.parse(possibleJson)
+      const key = await deriveEncryptionKey(secret, 'AES-GCM')
+      const iv = base64ToArrayBuffer(data.iv)
+      const ciphertext = base64ToArrayBuffer(data.ciphertext)
 
-  const decrypted = await globalThis.crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv },
-    key,
-    ciphertext
-  )
+      decrypted = await globalThis.crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        ciphertext
+      )
 
-  return new TextDecoder().decode(decrypted)
+      return new TextDecoder().decode(decrypted)
+    }
+
+    // Try new format: Compression + AES-CTR (16-byte IV)
+    if (combined.byteLength >= 16) {
+      try {
+        const key = await deriveEncryptionKey(secret, 'AES-CTR')
+        const iv = combined.slice(0, 16)
+        const ciphertext = combined.slice(16)
+
+        const counter = new Uint8Array(16)
+        counter.set(iv)
+
+        decrypted = await globalThis.crypto.subtle.decrypt(
+          { name: 'AES-CTR', counter, length: 128 },
+          key,
+          ciphertext
+        )
+
+        // Decompress the decrypted data
+        return await decompressData(new Uint8Array(decrypted))
+      } catch (ctrError) {
+        // If CTR fails, try GCM format (12-byte IV)
+        if (combined.byteLength >= 12) {
+          const key = await deriveEncryptionKey(secret, 'AES-GCM')
+          const iv = combined.slice(0, 12)
+          const ciphertext = combined.slice(12)
+
+          decrypted = await globalThis.crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv },
+            key,
+            ciphertext
+          )
+
+          return new TextDecoder().decode(decrypted)
+        }
+        throw ctrError
+      }
+    }
+
+    throw new Error('Invalid encrypted data format')
+  } catch (error) {
+    console.error('Decryption error:', error)
+    throw new Error('복호화에 실패했습니다. 비밀키를 확인해주세요.')
+  }
 }
 
 async function sha256Hex(input) {

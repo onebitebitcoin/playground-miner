@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>암호화 크기 테스트</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .result { margin: 10px 0; padding: 10px; background: #f0f0f0; }
+    .pass { background: #d4edda; }
+    .fail { background: #f8d7da; }
+    input, button { padding: 5px; margin: 5px; }
+    textarea { width: 100%; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <h1>타임캡슐 암호화 크기 테스트</h1>
+
+  <div>
+    <label>비밀키: <input type="text" id="secret" value="my-secret-key" /></label><br>
+    <label>메시지: <input type="text" id="message" value="Hello World" /></label><br>
+    <button onclick="testEncryption()">암호화 테스트</button>
+  </div>
+
+  <div id="results"></div>
+
+  <script>
+    const textEncoder = new TextEncoder()
+
+    function arrayBufferToBase64(buffer) {
+      const bytes = new Uint8Array(buffer)
+      let binary = ''
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i])
+      }
+      return btoa(binary)
+    }
+
+    function base64ToArrayBuffer(base64) {
+      const binary = atob(base64)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i)
+      }
+      return bytes
+    }
+
+    async function deriveEncryptionKey(secret) {
+      const keyMaterial = await globalThis.crypto.subtle.importKey(
+        'raw',
+        textEncoder.encode(secret),
+        { name: 'PBKDF2' },
+        false,
+        ['deriveBits', 'deriveKey']
+      )
+
+      const salt = textEncoder.encode('timecapsule-salt-2024')
+      return await globalThis.crypto.subtle.deriveKey(
+        {
+          name: 'PBKDF2',
+          salt,
+          iterations: 100000,
+          hash: 'SHA-256'
+        },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt', 'decrypt']
+      )
+    }
+
+    // NEW OPTIMIZED FORMAT
+    async function encryptMessageNew(message, secret) {
+      const key = await deriveEncryptionKey(secret)
+      const iv = globalThis.crypto.getRandomValues(new Uint8Array(12))
+      const encoded = textEncoder.encode(message)
+      const encrypted = await globalThis.crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        encoded
+      )
+
+      // Combine IV + encrypted data directly (no JSON structure)
+      const combined = new Uint8Array(12 + encrypted.byteLength)
+      combined.set(iv, 0)
+      combined.set(new Uint8Array(encrypted), 12)
+
+      return arrayBufferToBase64(combined)
+    }
+
+    // OLD JSON FORMAT
+    async function encryptMessageOld(message, secret) {
+      const key = await deriveEncryptionKey(secret)
+      const iv = globalThis.crypto.getRandomValues(new Uint8Array(12))
+      const encoded = textEncoder.encode(message)
+      const encrypted = await globalThis.crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        encoded
+      )
+
+      const result = {
+        iv: arrayBufferToBase64(iv),
+        ciphertext: arrayBufferToBase64(new Uint8Array(encrypted))
+      }
+
+      return btoa(JSON.stringify(result))
+    }
+
+    async function decryptMessage(encryptedData, secret) {
+      const key = await deriveEncryptionKey(secret)
+      let iv, ciphertext
+
+      try {
+        const combined = base64ToArrayBuffer(encryptedData)
+
+        if (combined.byteLength > 12) {
+          const possibleJson = new TextDecoder().decode(combined)
+          if (possibleJson.startsWith('{') && possibleJson.includes('"iv"')) {
+            throw new Error('JSON format detected')
+          }
+
+          iv = combined.slice(0, 12)
+          ciphertext = combined.slice(12)
+        } else {
+          throw new Error('Invalid format')
+        }
+      } catch (e) {
+        try {
+          const data = JSON.parse(atob(encryptedData))
+          iv = base64ToArrayBuffer(data.iv)
+          ciphertext = base64ToArrayBuffer(data.ciphertext)
+        } catch (jsonError) {
+          throw new Error('Invalid encrypted data format')
+        }
+      }
+
+      const decrypted = await globalThis.crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        ciphertext
+      )
+
+      return new TextDecoder().decode(decrypted)
+    }
+
+    async function testEncryption() {
+      const secret = document.getElementById('secret').value
+      const message = document.getElementById('message').value
+      const results = document.getElementById('results')
+
+      try {
+        // Test old format
+        const encryptedOld = await encryptMessageOld(message, secret)
+        const oldSize = encryptedOld.length
+
+        // Test new format
+        const encryptedNew = await encryptMessageNew(message, secret)
+        const newSize = encryptedNew.length
+
+        // Test decryption
+        const decryptedOld = await decryptMessage(encryptedOld, secret)
+        const decryptedNew = await decryptMessage(encryptedNew, secret)
+
+        const reduction = oldSize - newSize
+        const reductionPercent = ((reduction / oldSize) * 100).toFixed(1)
+
+        results.innerHTML = `
+          <div class="result">
+            <strong>메시지:</strong> "${message}" (${message.length} 문자, ${new Blob([message]).size} 바이트)
+          </div>
+          <div class="result ${oldSize < 80 ? 'pass' : 'fail'}">
+            <strong>구 방식 (JSON):</strong> ${oldSize} bytes ${oldSize >= 80 ? '❌ OP_RETURN 초과!' : '✅'}
+          </div>
+          <div class="result ${newSize < 80 ? 'pass' : 'fail'}">
+            <strong>신 방식 (최적화):</strong> ${newSize} bytes ${newSize >= 80 ? '❌ OP_RETURN 초과!' : '✅'}
+          </div>
+          <div class="result pass">
+            <strong>절약:</strong> ${reduction} bytes (${reductionPercent}% 감소)
+          </div>
+          <div class="result">
+            <strong>복호화 테스트:</strong>
+            ${decryptedOld === message && decryptedNew === message ? '✅ 성공' : '❌ 실패'}
+          </div>
+          <div class="result">
+            <strong>구 방식 암호문:</strong><br>
+            <textarea rows="3" readonly>${encryptedOld}</textarea>
+          </div>
+          <div class="result">
+            <strong>신 방식 암호문:</strong><br>
+            <textarea rows="3" readonly>${encryptedNew}</textarea>
+          </div>
+        `
+      } catch (error) {
+        results.innerHTML = `<div class="result fail">오류: ${error.message}</div>`
+      }
+    }
+
+    // 자동 테스트
+    window.addEventListener('load', () => {
+      testEncryption()
+    })
+  </script>
+</body>
+</html>
