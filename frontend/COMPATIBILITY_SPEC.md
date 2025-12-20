@@ -12,7 +12,7 @@
 
 ## UI Structure (`CompatibilityPage.vue`)
 1. **Bitcoin Highlights section**
-   - `bitcoinHighlights` array renders cards (천간/지지, 사이클 앵커 등).
+   - `bitcoinHighlights` array renders cards (천간/지지, 사이클 기준 등).
    - Accent palette limited to grayscale + orange accent to stay within “≤3 colors” constraint.
 2. **User Input + Report (left column on desktop)**
    - Date input (`birthdate`, required). Browser-native date picker.
@@ -41,7 +41,7 @@
 - `AGENT_STAGES`: 4 stage descriptors with `key`, `label`, `description`, and sample log text (mirrors Finance page terminology so UX feels consistent).
 - `STRATEGY_LIBRARY`: maps 각 오행 → 추천 전략 (style/focus/allocation text).
 - `TIME_WINDOWS`: 5 buckets (dawn/morning/afternoon/evening/unknown) with score bonuses and coaching copy.
-- `ELEMENT_AFFINITY`: currently hard-coded for Bitcoin’s 금(金) anchor (`allies: earth/water`, `neutral: metal/wood`, `challenges: fire`).
+- `ELEMENT_AFFINITY`: currently hard-coded for Bitcoin의 금(金) 중심 기운 (`allies: earth/water`, `neutral: metal/wood`, `challenges: fire`).
 - `buildCompatibility(payload)` steps:
   1. Deterministic element pick: `(year + month + day) % ELEMENTS.length`.
   2. Base score = `58 + (month % 7)`.

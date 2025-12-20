@@ -159,12 +159,83 @@ export async function updateCompatibilityReportTemplate({ username, key, label, 
   return data.template
 }
 
-export async function runCompatibilityAgent({ agentKey = 'saju_bitcoin', context, data, temperature, signal } = {}) {
+export async function fetchCompatibilityAgentCaches({ username, search, category, limit, signal } = {}) {
+  if (!username) {
+    throw new Error('관리자 인증 정보가 필요합니다.')
+  }
+  const params = new URLSearchParams({ username })
+  if (search) params.append('search', search)
+  if (category) params.append('category', category)
+  if (limit) params.append('limit', limit)
+  const qs = params.toString() ? `?${params.toString()}` : ''
+  const response = await fetch(`${BASE_URL}/api/compatibility/admin/cache${qs}`, {
+    method: 'GET',
+    headers: defaultHeaders,
+    signal
+  })
+  const data = await handleResponse(response)
+  if (!data.ok) {
+    throw new Error(data.error || '캐시된 궁합 답변을 불러오지 못했습니다.')
+  }
+  return data.caches || []
+}
+
+export async function updateCompatibilityAgentCache({ username, cacheId, responseText, category, subjectName, targetName, metadata, signal } = {}) {
+  if (!username) throw new Error('관리자 인증 정보가 필요합니다.')
+  if (!cacheId) throw new Error('cacheId가 필요합니다.')
+  const body = { username }
+  if (responseText !== undefined) body.response_text = responseText
+  if (category !== undefined) body.category = category
+  if (subjectName !== undefined) body.subject_name = subjectName
+  if (targetName !== undefined) body.target_name = targetName
+  if (metadata !== undefined) body.metadata = metadata
+
+  const response = await fetch(`${BASE_URL}/api/compatibility/admin/cache/${cacheId}`, {
+    method: 'PATCH',
+    headers: defaultHeaders,
+    body: JSON.stringify(body),
+    signal
+  })
+  const data = await handleResponse(response)
+  if (!data.ok) {
+    throw new Error(data.error || '캐시 엔트리를 업데이트하지 못했습니다.')
+  }
+  return data.cache
+}
+
+export async function deleteCompatibilityAgentCache({ username, cacheId, signal } = {}) {
+  if (!username) throw new Error('관리자 인증 정보가 필요합니다.')
+  if (!cacheId) throw new Error('cacheId가 필요합니다.')
+  const params = new URLSearchParams({ username })
+  const response = await fetch(`${BASE_URL}/api/compatibility/admin/cache/${cacheId}?${params.toString()}`, {
+    method: 'DELETE',
+    headers: defaultHeaders,
+    signal
+  })
+  const data = await handleResponse(response)
+  if (!data.ok) {
+    throw new Error(data.error || '캐시 엔트리를 삭제하지 못했습니다.')
+  }
+  return true
+}
+
+export async function runCompatibilityAgent({ agentKey = 'saju_bitcoin', context, data, temperature, cache, signal } = {}) {
   const body = {}
   if (agentKey) body.agent_key = agentKey
   if (context !== undefined) body.context = context
   if (data !== undefined) body.data = data
   if (temperature !== undefined) body.temperature = temperature
+  if (cache !== undefined) {
+    if (cache && typeof cache === 'object') {
+      try {
+        body.cache = JSON.parse(JSON.stringify(cache))
+      } catch (error) {
+        body.cache = cache
+      }
+    } else {
+      body.cache = cache
+    }
+  }
 
   if (context !== undefined) {
     const contextLength = typeof context === 'string' ? context.length : 0
@@ -208,8 +279,8 @@ export async function runCompatibilityAgent({ agentKey = 'saju_bitcoin', context
       const narrative = payload?.narrative || ''
       const preview = narrative.replace(/\s+/g, ' ').trim().slice(0, 160)
       console.log(
-        `%c[Agent:${agentKey}] ✅ 응답 수신 (${Math.round(duration)}ms)`,
-        'color:#16a34a;font-weight:bold;',
+        `%c[Agent:${agentKey}] ${payload?.cached ? '♻️ 캐시 응답' : '✅ 응답 수신'} (${Math.round(duration)}ms)`,
+        payload?.cached ? 'color:#0ea5e9;font-weight:bold;' : 'color:#16a34a;font-weight:bold;',
         {
           provider: payload.provider || payload.model || 'unknown',
           length: narrative.length,

@@ -842,6 +842,53 @@ class CompatibilityReportTemplate(models.Model):
         }
 
 
+class CompatibilityAgentCache(models.Model):
+    """Stores cached responses for compatibility agents to avoid redundant LLM calls."""
+
+    agent_key = models.CharField(max_length=100)
+    category = models.CharField(max_length=100, blank=True, default='')
+    cache_key = models.CharField(max_length=128, unique=True)
+    subject_name = models.CharField(max_length=120, blank=True, default='')
+    target_name = models.CharField(max_length=120, blank=True, default='')
+    profile_signature = models.CharField(max_length=255, blank=True, default='')
+    target_signature = models.CharField(max_length=255, blank=True, default='')
+    request_payload = models.JSONField(default=dict, blank=True)
+    response_text = models.TextField(blank=True, default='')
+    metadata = models.JSONField(default=dict, blank=True)
+    hit_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at', '-created_at']
+        indexes = [
+            models.Index(fields=['category']),
+            models.Index(fields=['subject_name']),
+            models.Index(fields=['target_name']),
+            models.Index(fields=['updated_at']),
+        ]
+
+    def __str__(self):
+        target_suffix = f" ↔ {self.target_name}" if self.target_name else ''
+        return f"{self.category or self.agent_key}: {self.subject_name}{target_suffix}"
+
+    def as_dict(self):
+        return {
+            'id': self.id,
+            'agent_key': self.agent_key,
+            'category': self.category,
+            'cache_key': self.cache_key,
+            'subject_name': self.subject_name,
+            'target_name': self.target_name,
+            'response_text': self.response_text,
+            'metadata': self.metadata,
+            'request_payload': self.request_payload,
+            'hit_count': self.hit_count,
+            'updated_at': self.updated_at.isoformat(),
+            'created_at': self.created_at.isoformat(),
+        }
+
+
 class TimeCapsuleBroadcastSetting(models.Model):
     """Stores connection info for broadcasting time capsule transactions."""
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
@@ -871,6 +918,8 @@ class TimeCapsule(models.Model):
     is_coupon_used = models.BooleanField(default=False)
     mnemonic = models.ForeignKey('Mnemonic', on_delete=models.SET_NULL, null=True, blank=True, related_name='time_capsules')
     address_index = models.PositiveIntegerField(null=True, blank=True)
+    broadcast_txid = models.CharField(max_length=128, blank=True, default='')
+    broadcasted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -889,5 +938,7 @@ class TimeCapsule(models.Model):
             'mnemonic_id': self.mnemonic_id,
             'has_mnemonic': self.mnemonic_id is not None,
             'address_index': self.address_index,
+            'broadcast_txid': self.broadcast_txid,
+            'broadcasted_at': self.broadcasted_at.isoformat() if self.broadcasted_at else None,
             'created_at': self.created_at.isoformat(),
         }

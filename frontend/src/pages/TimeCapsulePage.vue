@@ -1,70 +1,26 @@
 <template>
-  <section class="space-y-6">
-    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6">
-      <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 class="text-xl font-semibold text-slate-900">타임캡슐</h2>
-          <p class="text-sm text-slate-600 mt-1">
-            나만의 비밀키로 개인키와 공개키를 생성하고, 소망 메시지를 암호화하여 안전하게 봉인합니다.
-            모든 암호화는 브라우저 안에서만 진행되며 서버로 전송되지 않습니다.
-          </p>
-        </div>
-        <div class="flex flex-col items-start md:items-end gap-1">
-          <span
-            class="text-xs font-semibold tracking-wide px-3 py-1 rounded-full"
-            :class="statusBadgeClass"
-          >
-            {{ statusLabel }}
-          </span>
-          <span class="text-xs text-slate-500">
-            {{ lastUpdatedText ? `마지막 갱신: ${lastUpdatedText}` : '아직 봉인되지 않았어요' }}
-          </span>
-        </div>
-      </div>
-      <p class="text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 mt-4 flex items-center gap-2">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-        </svg>
-        입력한 값은 전송되지 않고 이 기기 안에서만 계산됩니다.
-      </p>
+<section class="space-y-6">
+  <div
+    v-if="toastSuccess || toastError"
+    class="fixed top-4 left-1/2 -translate-x-1/2 transform z-[10000] flex flex-col items-center space-y-2 w-full max-w-md px-4"
+  >
+    <div v-if="toastSuccess" class="bg-emerald-600 text-white px-4 py-2 rounded-lg shadow-lg text-center w-full">
+      {{ toastSuccess }}
     </div>
-
+    <div v-if="toastError" class="bg-rose-600 text-white px-4 py-2 rounded-lg shadow-lg text-center w-full">
+      {{ toastError }}
+    </div>
+  </div>
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 flex flex-col gap-5">
         <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h3 class="text-lg font-semibold text-slate-900">
-              {{ mode === 'seal' ? '1. 나만의 키와 소망 입력' : '1. 타임캡슐 열기' }}
+              {{ mode === 'seal' ? '1. 나만의 키와 소망 입력' : '1. 봉인 해제하기' }}
             </h3>
             <p class="text-sm text-slate-500 mt-1">
               {{ mode === 'seal' ? '타임캡슐을 여는 열쇠와 그 안에 담을 메시지를 적어주세요.' : '봉인된 타임캡슐을 나만의 키로 열어보세요.' }}
             </p>
-          </div>
-
-          <!-- Mode Toggle -->
-          <div class="flex items-center gap-2 bg-slate-100 rounded-xl p-1">
-            <button
-              type="button"
-              class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-              :class="mode === 'seal' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'"
-              @click="switchMode('seal')"
-            >
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-              봉인
-            </button>
-            <button
-              type="button"
-              class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-              :class="mode === 'unseal' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'"
-              @click="switchMode('unseal')"
-            >
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-              </svg>
-              해제
-            </button>
           </div>
         </div>
 
@@ -116,7 +72,6 @@
                 </svg>
               </button>
             </div>
-            <p class="text-xs text-slate-500 mt-1">나만의 키는 개인키의 씨앗이 됩니다. 길고 예측하기 어려울수록 좋아요.</p>
           </div>
 
           <!-- Seal Mode: Message Input -->
@@ -155,7 +110,6 @@
                 </div>
               </div>
             </div>
-            <p class="text-xs text-slate-500 mt-1">메시지는 비밀키에서 파생된 암호화 키로 AES-GCM 암호화되어 안전하게 봉인됩니다.</p>
           </div>
 
           <!-- Unseal Mode: Encrypted Data Input -->
@@ -170,36 +124,33 @@
                 :class="opening ? 'opacity-60 pointer-events-none' : ''"
                 placeholder="봉인된 타임캡슐 데이터를 붙여넣으세요"
               ></textarea>
-              <div v-if="opening" class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div class="bg-indigo-900/80 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-                  <svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span class="text-sm font-medium">타임캡슐 복호화 중...</span>
-                </div>
-              </div>
             </div>
-            <p class="text-xs text-slate-500 mt-1">봉인할 때 받은 암호화된 데이터를 입력하고 같은 비밀키로 열어보세요.</p>
           </div>
         </div>
 
-        <div class="flex flex-col gap-3 sm:flex-row sm:justify-end">
+        <div class="flex flex-col gap-3">
           
 
           <!-- Seal Mode Button -->
           <button
             v-if="mode === 'seal' && !sealed"
             type="button"
-            class="px-5 py-2 rounded-xl text-sm font-semibold text-white shadow-sm transition relative overflow-hidden"
+            class="w-full sm:w-auto px-5 py-2 rounded-xl text-sm font-semibold text-white shadow-sm transition relative overflow-hidden text-center"
             :class="[
-              computing || sealing ? 'bg-emerald-300 cursor-progress' : 'bg-emerald-600 hover:bg-emerald-500',
-              sealing ? 'lock-closing' : ''
+              computing
+                ? 'bg-emerald-300 cursor-progress'
+                : hasExistingCapsule
+                  ? 'bg-slate-300 cursor-not-allowed text-slate-600'
+                  : primarySealDisabled
+                    ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                    : 'bg-emerald-600 hover:bg-emerald-500',
+              hasExistingCapsule ? 'opacity-70' : ''
             ]"
-            :disabled="!hasSecret || !hasMessage || computing || sealing"
+            :disabled="primarySealDisabled"
+            :title="hasExistingCapsule ? existingCapsuleWarning : ''"
             @click="triggerImmediateComputation"
           >
-            <span v-if="sealing" class="flex items-center gap-2">
+            <span v-if="sealing" class="flex items-center justify-center gap-2">
               <svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -207,11 +158,11 @@
               봉인 중...
             </span>
             <span v-else-if="computing">계산 중...</span>
-            <span v-else class="flex items-center gap-2">
+            <span v-else class="flex items-center justify-center gap-2">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
-              바로 봉인하기
+              {{ hasExistingCapsule ? '이미 봉인됨' : '바로 봉인하기' }}
             </span>
           </button>
 
@@ -219,24 +170,25 @@
           <button
             v-if="mode === 'seal' && sealed"
             type="button"
-            class="px-5 py-2 rounded-xl text-sm font-semibold text-white bg-emerald-500 hover:bg-emerald-600 shadow-sm transition relative overflow-hidden"
-            :disabled="saving || saved"
+            class="w-full sm:w-auto px-5 py-2 rounded-xl text-sm font-semibold text-white bg-emerald-500 hover:bg-emerald-600 shadow-sm transition relative overflow-hidden text-center"
+            :disabled="saving || saved || hasExistingCapsule"
+            :title="hasExistingCapsule ? existingCapsuleWarning : ''"
             @click="handleSave"
           >
-            <span v-if="saving" class="flex items-center gap-2">
+            <span v-if="saving" class="flex items-center justify-center gap-2">
               <svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
               저장 중...
             </span>
-            <span v-else-if="saved" class="flex items-center gap-2">
+            <span v-else-if="saved" class="flex items-center justify-center gap-2">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
               저장 완료!
             </span>
-            <span v-else class="flex items-center gap-2">
+            <span v-else class="flex items-center justify-center gap-2">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v8m0-12H9.5a1.5 1.5 0 000 3H12" />
               </svg>
@@ -248,54 +200,74 @@
           <button
             v-if="mode === 'unseal'"
             type="button"
-            class="px-5 py-2 rounded-xl text-sm font-semibold text-white shadow-sm transition relative overflow-hidden"
+            class="w-full sm:w-auto px-5 py-2 rounded-xl text-sm font-semibold text-white shadow-sm transition relative overflow-hidden text-center"
             :class="[
-              opening ? 'bg-rose-300 cursor-progress' : 'bg-rose-500 hover:bg-rose-600',
-              opening ? 'unlock-opening' : ''
+              opening ? 'bg-rose-300 cursor-progress' : 'bg-rose-500 hover:bg-rose-600'
             ]"
             :disabled="!secretKey.trim() || !encryptedDataInput.trim() || opening"
             @click="handleUnseal"
           >
-            <span v-if="opening" class="flex items-center gap-2">
+            <span v-if="opening" class="flex items-center justify-center gap-2">
               <svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              복호화 중...
+              봉인 해제 중...
             </span>
-            <span v-else class="flex items-center gap-2">
+            <span v-else class="flex items-center justify-center gap-2">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
               </svg>
-              타임캡슐 열기
+              봉인 해제하기
             </span>
           </button>
+        </div>
+        <div
+          v-if="mode === 'unseal' && decryptedMessage"
+          class="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-sm text-emerald-800 fade-in-up"
+        >
+          <p class="text-xs font-semibold uppercase tracking-wide text-emerald-700 mb-2">봉인 해제된 소망 메시지</p>
+          <p class="whitespace-pre-wrap">{{ decryptedMessage }}</p>
+        </div>
+        <div
+          v-if="mode === 'seal' && existingCapsuleWarning"
+          class="mt-1 text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2"
+        >
+          {{ existingCapsuleWarning }}
         </div>
 
         <div v-if="errorMessage" class="text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-xl px-4 py-2">
           {{ errorMessage }}
         </div>
 
-        <div v-if="sealed" class="text-sm text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2 flex items-center gap-2 fade-in-up">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span class="font-medium">타임캡슐이 성공적으로 봉인되었습니다!</span>
-        </div>
-
-        <div v-if="saved" class="text-sm text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2 flex items-center gap-2 fade-in-up">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-          </svg>
-          <span class="font-medium">데이터가 저장되었습니다</span>
+        <div v-if="sealed" class="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 space-y-2 fade-in-up">
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <p class="text-xs font-semibold text-emerald-700 flex items-center gap-2">
+              <span class="uppercase tracking-wide">암호화된 데이터</span>
+              <span v-if="encryptedHashSizeLabel" class="text-[10px] font-medium text-emerald-500 normal-case tracking-normal">
+                ({{ encryptedHashSizeLabel }})
+              </span>
+            </p>
+            <button
+              type="button"
+              class="text-slate-700 hover:text-slate-900"
+              :aria-label="copiedEncryptedStatus ? '암호화된 메시지 복사됨' : '암호화된 메시지 복사'"
+              @click="copyEncryptedHash"
+            >
+              <svg v-if="!copiedEncryptedStatus" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              <svg v-else class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+            </button>
+          </div>
+          <p class="font-mono text-slate-900 break-all">{{ encryptedHash }}</p>
         </div>
       </div>
 
       <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 flex flex-col gap-5">
-        <div>
-          <h3 class="text-lg font-semibold text-slate-900">2. 타임캡슐</h3>
-          <p class="text-sm text-slate-500 mt-1">타임캡슐에 소망을 담아보세요.</p>
-        </div>
+        <h3 class="text-lg font-semibold text-slate-900">2. 타임캡슐</h3>
 
         <div class="space-y-4">
           <!-- Time Capsule Visualization -->
@@ -303,7 +275,7 @@
             <!-- Background Glow -->
             <div
               class="absolute inset-0 flex items-center justify-center pointer-events-none"
-              :class="capsuleReady ? 'capsule-bg-glow' : ''"
+              :class="capsuleVisualLocked ? 'capsule-bg-glow' : ''"
             >
               <div class="w-48 h-48 rounded-full bg-gradient-to-br from-emerald-100/30 to-indigo-100/30 blur-3xl"></div>
             </div>
@@ -323,9 +295,7 @@
                   <line x1="68" y1="70" x2="132" y2="70" stroke="#f59e0b" stroke-width="1.5"/>
                   <line x1="68" y1="78" x2="132" y2="78" stroke="#fbbf24" stroke-width="1"/>
                   <line x1="68" y1="86" x2="120" y2="86" stroke="#fbbf24" stroke-width="1"/>
-                  <!-- Fold mark -->
                   <line x1="100" y1="60" x2="100" y2="100" stroke="#f59e0b" stroke-width="0.5" opacity="0.3"/>
-                  <!-- Sparkle on paper -->
                   <circle cx="125" cy="68" r="2" fill="#fbbf24" opacity="0.8">
                     <animate attributeName="opacity" values="0.3;1;0.3" dur="1s" repeatCount="indefinite"/>
                   </circle>
@@ -357,8 +327,8 @@
                 <!-- Capsule Lid -->
                 <g :class="
                   opening || opened ? 'lid-opening' :
-                  sealing || sealed ? 'lid-closing' :
-                  capsuleReady && mode === 'seal' ? 'lid-closed' :
+                  sealed ? 'lid-closing' :
+                  shouldShowClosedLid ? 'lid-closed' :
                   'lid-open'
                 ">
                   <ellipse cx="100" cy="120" rx="70" ry="20" fill="url(#lidGradient)" stroke="#334155" stroke-width="2"/>
@@ -367,7 +337,7 @@
                 </g>
 
                 <!-- Lock Icon (appears when sealed) -->
-                <g v-if="capsuleReady" class="lock-icon" :class="sealed ? 'lock-appear' : ''">
+                <g v-if="capsuleVisualLocked" class="lock-icon" :class="sealed ? 'lock-appear' : ''">
                   <circle cx="100" cy="180" r="20" fill="#10b981" opacity="0.2"/>
                   <path d="M 95 175 L 95 170 Q 95 162 100 162 Q 105 162 105 170 L 105 175 M 92 175 L 108 175 Q 110 175 110 177 L 110 188 Q 110 190 108 190 L 92 190 Q 90 190 90 188 L 90 177 Q 90 175 92 175 Z"
                         fill="#10b981" stroke="#059669" stroke-width="1"/>
@@ -416,104 +386,48 @@
                     fontSize: `${18 + Math.random() * 12}px`
                   }"
                 >{{ ['✨', '💫', '⭐', '🌟', '💎', '🎊'][Math.floor(Math.random() * 6)] }}</div>
-              </div>
             </div>
           </div>
+        </div>
 
           <!-- Capsule Status Text -->
-          <div class="text-center mt-4">
-            <p class="text-xl font-bold transition-colors duration-300">
-              <span v-if="opening" class="text-indigo-600 flex items-center justify-center gap-2 animate-pulse">
-                <svg class="w-6 h-6 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                타임캡슐 여는 중...
-              </span>
-              <span v-else-if="opened" class="text-emerald-600 flex items-center justify-center gap-2">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                </svg>
-                열림 (OPEN)
-              </span>
-              <span v-else-if="sealing" class="text-amber-600 flex items-center justify-center gap-2 animate-pulse">
-                <svg class="w-6 h-6 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                봉인 중...
-              </span>
-              <span v-else-if="sealed" class="text-rose-600 flex items-center justify-center gap-2">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                닫힘 (LOCKED)
-              </span>
-              <span v-else class="text-emerald-600 flex items-center justify-center gap-2">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                </svg>
-                열림 (OPEN)
-              </span>
+        <div class="text-center mt-6">
+          <p class="text-2xl font-extrabold transition-colors duration-300 tracking-tight">
+            <span v-if="opening" class="text-indigo-600 flex items-center justify-center gap-3 animate-pulse">
+              <svg class="w-7 h-7 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              타임캡슐 여는 중...
+            </span>
+            <span v-else-if="opened" class="text-emerald-600 flex items-center justify-center gap-3">
+              <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              </svg>
+              열림 (OPEN)
+            </span>
+            <span v-else-if="sealing" class="text-amber-600 flex items-center justify-center gap-3 animate-pulse">
+              <svg class="w-7 h-7 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              봉인 중...
+            </span>
+            <span v-else-if="capsuleVisualLocked" class="text-rose-600 flex items-center justify-center gap-3 bg-rose-50 px-4 py-2 rounded-full border border-rose-200">
+              <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              봉인됨 (LOCKED)
+            </span>
+            <span v-else class="text-emerald-600 flex items-center justify-center gap-3 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-200">
+              <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              </svg>
+              열림 (OPEN)
+            </span>
             </p>
           </div>
 
-          <div v-if="mode === 'unseal' && decryptedMessage" class="text-sm text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2 fade-in-up">
-              <p class="text-xs uppercase tracking-wide text-indigo-600 mb-2 flex items-center gap-1">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                </svg>
-                소망 메시지
-              </p>
-              <p class="text-sm text-slate-900 whitespace-pre-wrap">{{ decryptedMessage }}</p>
-            </div>
-
-          <div
-            v-if="sealed"
-            class="bg-slate-900 rounded-2xl p-4 text-white shadow-inner relative"
-            :class="[
-              sealing ? 'sealing-animation' : '',
-              sealed ? 'sealed-animation' : ''
-            ]"
-          >
-            <!-- Particle effects during sealing -->
-            <div v-if="sealing" class="absolute inset-0 pointer-events-none">
-              <div
-                v-for="i in 8"
-                :key="i"
-                class="particle"
-                :style="{
-                  left: `${Math.random() * 100}%`,
-                  bottom: '20%',
-                  animationDelay: `${i * 0.1}s`
-                }"
-              ></div>
-            </div>
-
-            <div class="flex items-center justify-between mb-3 relative z-10">
-              <div>
-                <p class="text-xs uppercase tracking-wide text-slate-300">타임캡슐 메시지</p>
-              </div>
-              <div class="flex items-center gap-2">
-                <button
-                  v-if="encryptedHash"
-                  type="button"
-                  class="text-xs font-semibold px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 text-white transition"
-                  @click="copyEncryptedData"
-                >
-                  {{ copiedEncrypted ? '복사됨!' : '복사' }}
-                </button>
-              </div>
-            </div>
-            <p
-              class="font-mono text-xs sm:text-sm break-all text-emerald-100 relative z-10"
-              :class="sealing ? 'scrambling' : ''"
-            >
-              <span v-if="encryptedHash">{{ encryptedHash }}</span>
-              <span v-else>소망 메시지를 입력하면 암호화된 데이터가 나타납니다.</span>
-            </p>
-
-          </div>
         </div>
       </div>
     </div>
@@ -521,85 +435,310 @@
     <!-- All Time Capsules List -->
     <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6">
       <div class="flex items-center justify-between mb-4">
-        <div>
-          <h3 class="text-lg font-semibold text-slate-900">전체 타임캡슐 목록</h3>
-          <p class="text-sm text-slate-500 mt-1">모든 사용자의 타임캡슐을 확인하세요.</p>
-        </div>
+        <h3 class="text-lg font-semibold text-slate-900">전체 타임캡슐 목록</h3>
         <button
           @click="fetchCapsules(1)"
-          class="inline-flex items-center px-3 py-2 border border-slate-300 shadow-sm text-sm leading-4 font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
+          class="inline-flex items-center justify-center w-10 h-10 rounded-full text-slate-600 hover:text-slate-900 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-400"
+          aria-label="타임캡슐 목록 새로고침"
         >
-          <svg class="-ml-0.5 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
-          새로고침
         </button>
       </div>
 
-      <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-slate-300">
-          <thead class="bg-slate-50">
-            <tr>
-              <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 sm:pl-6">생성일</th>
-              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">사용자</th>
-              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">암호화된 메시지</th>
-              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">비트코인 주소</th>
+      <div class="hidden sm:block">
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-slate-300">
+            <thead class="bg-slate-50">
+              <tr>
+                <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 sm:pl-6">사용자</th>
+                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">암호화된 메시지</th>
+                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">비트코인 주소</th>
+              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">생성일</th>
+              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">트랜잭션</th>
               <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold text-slate-900">쿠폰 사용</th>
               <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold text-slate-900">작업</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-200 bg-white">
-            <tr v-for="capsule in capsules" :key="capsule.id">
-              <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm text-slate-500 sm:pl-6">
-                {{ formatDate(capsule.created_at) }}
-              </td>
-              <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
-                {{ capsule.user_info || '-' }}
-              </td>
-              <td class="px-3 py-4 text-sm text-slate-500 max-w-xs truncate" :title="capsule.encrypted_message">
-                {{ capsule.encrypted_message }}
-              </td>
-              <td class="px-3 py-4 text-sm text-slate-500">
-                <span v-if="capsule.bitcoin_address" class="break-all select-text">
-                  {{ capsule.bitcoin_address }}
-                </span>
-                <span v-else class="text-xs text-slate-400">주소 할당 대기중</span>
-              </td>
-              <td class="whitespace-nowrap px-3 py-4 text-sm text-center">
+              <tr
+                v-for="capsule in capsules"
+                :key="capsule.id"
+                :class="[
+                  'transition-colors',
+                  isMyCapsule(capsule) ? 'bg-emerald-50/80 text-slate-900 ring-1 ring-emerald-100' : 'opacity-60 hover:opacity-80'
+                ]"
+              >
+                <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm text-slate-600 sm:pl-6">
+                  {{ capsule.user_info || '-' }}
+                </td>
+                <td class="px-3 py-4 text-sm text-slate-500 max-w-xs">
+                  <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+                      <span class="truncate flex-1 min-w-0" :title="capsule.encrypted_message">
+                        {{ capsule.encrypted_message }}
+                      </span>
+                      <span
+                        v-if="capsule.encrypted_message"
+                        class="text-xs text-slate-400 whitespace-nowrap"
+                      >
+                        {{ formatByteLength(capsule.encrypted_message) }}
+                      </span>
+                    </div>
+                    <button
+                      v-if="capsule.encrypted_message"
+                      type="button"
+                      class="flex-shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-slate-400 transition"
+                      :aria-label="copiedCapsuleId === capsule.id ? '복사됨' : '암호화된 메시지 복사'"
+                      :title="copiedCapsuleId === capsule.id ? '복사 완료' : '암호화된 메시지 복사'"
+                      @click="copyCapsuleEncryptedMessage(capsule)"
+                    >
+                      <svg
+                        v-if="copiedCapsuleId !== capsule.id"
+                        class="w-3.5 h-3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                        />
+                      </svg>
+                      <svg
+                        v-else
+                        class="w-3.5 h-3.5 text-emerald-500"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                </td>
+                <td class="px-3 py-4 text-sm text-slate-500">
+                  <span v-if="capsule.bitcoin_address" class="break-all select-text">
+                    {{ capsule.bitcoin_address }}
+                  </span>
+                  <span v-else class="text-xs text-slate-400">주소 할당 대기중</span>
+                </td>
+                <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500">
+                  {{ formatDate(capsule.created_at) }}
+                </td>
+                <td class="px-3 py-4 text-sm text-slate-500">
+                  <div v-if="capsule.broadcast_txid" class="flex flex-col">
+                    <a
+                      :href="explorerUrlForTx(capsule.broadcast_txid)"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="text-indigo-600 hover:text-indigo-800 font-semibold w-fit"
+                    >
+                      {{ shortTxid(capsule.broadcast_txid) }}
+                    </a>
+                    <span class="text-xs text-slate-400 mt-0.5">{{ formatDate(capsule.broadcasted_at) }}</span>
+                  </div>
+                  <span v-else class="text-xs text-slate-400">전파 내역 없음</span>
+                </td>
+                <td class="whitespace-nowrap px-3 py-4 text-sm text-center">
+                  <button
+                    disabled
+                    class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-not-allowed rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out opacity-60"
+                    :class="[capsule.is_coupon_used ? 'bg-emerald-600' : 'bg-slate-200']"
+                  >
+                    <span class="sr-only">쿠폰 사용 여부 (읽기 전용)</span>
+                    <span
+                      aria-hidden="true"
+                      class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                      :class="[capsule.is_coupon_used ? 'translate-x-5' : 'translate-x-0']"
+                    />
+                  </button>
+                </td>
+                <td class="whitespace-nowrap px-3 py-4 text-sm">
+                  <div class="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      v-if="canDeleteCapsule(capsule)"
+                      @click="confirmDeleteCapsule(capsule)"
+                      class="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-rose-500 hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-rose-500 transition"
+                      aria-label="타임캡슐 삭제"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7H5m3 0V5a2 2 0 012-2h4a2 2 0 012 2v2m2 0v12a2 2 0 01-2 2H8a2 2 0 01-2-2V7m3 4v6m4-6v6" />
+                      </svg>
+                      삭제
+                    </button>
+                    <button
+                      type="button"
+                      @click="openSealModal(capsule)"
+                      class="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                      :disabled="!canSealCapsule(capsule)"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L7.5 20.5H4v-3.5l12.732-12.732z" />
+                      </svg>
+                      봉인
+                    </button>
+                  </div>
+                  <p v-if="!canDeleteCapsule(capsule)" class="text-xs text-slate-400 mt-1 text-center">삭제 권한 없음</p>
+                  <p v-if="!canSealCapsule(capsule)" class="text-xs text-amber-500 mt-1 text-center">주소·메시지가 필요합니다.</p>
+                </td>
+              </tr>
+              <tr v-if="capsules.length === 0">
+                <td colspan="7" class="px-3 py-8 text-center text-sm text-slate-500">
+                  저장된 타임캡슐이 없습니다.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="sm:hidden">
+        <div v-if="capsules.length === 0" class="px-3 py-6 text-center text-sm text-slate-500 border border-dashed border-slate-200 rounded-xl">
+          저장된 타임캡슐이 없습니다.
+        </div>
+        <div v-else class="space-y-4">
+          <article
+            v-for="capsule in capsules"
+            :key="`mobile-${capsule.id}`"
+            :class="[
+              'rounded-2xl border p-4 shadow-sm space-y-4 transition-colors',
+              isMyCapsule(capsule) ? 'bg-emerald-50/80 ring-1 ring-emerald-100 text-slate-900 border-emerald-200' : 'bg-white border-slate-200 text-slate-600'
+            ]"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="text-sm font-semibold text-slate-900">{{ capsule.user_info || '-' }}</p>
+                <p class="text-xs text-slate-500 mt-0.5">{{ formatDate(capsule.created_at) }}</p>
+              </div>
+              <span
+                class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                :class="capsule.is_coupon_used ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'"
+              >
+                {{ capsule.is_coupon_used ? '쿠폰 사용' : '쿠폰 미사용' }}
+              </span>
+            </div>
+
+            <div class="space-y-1">
+              <p class="text-xs font-semibold text-slate-500">암호화된 메시지</p>
+              <div class="flex items-start gap-2">
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm text-slate-600 break-words" :title="capsule.encrypted_message">
+                    {{ capsule.encrypted_message || '메시지 없음' }}
+                  </p>
+                  <p v-if="capsule.encrypted_message" class="text-xs text-slate-400 mt-1">
+                    {{ formatByteLength(capsule.encrypted_message) }}
+                  </p>
+                </div>
                 <button
-                  disabled
-                  class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-not-allowed rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out opacity-60"
-                  :class="[capsule.is_coupon_used ? 'bg-emerald-600' : 'bg-slate-200']"
+                  v-if="capsule.encrypted_message"
+                  type="button"
+                  class="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-slate-400 transition"
+                  :aria-label="copiedCapsuleId === capsule.id ? '복사됨' : '암호화된 메시지 복사'"
+                  :title="copiedCapsuleId === capsule.id ? '복사 완료' : '암호화된 메시지 복사'"
+                  @click="copyCapsuleEncryptedMessage(capsule)"
                 >
-                  <span class="sr-only">쿠폰 사용 여부 (읽기 전용)</span>
-                  <span
-                    aria-hidden="true"
-                    class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                    :class="[capsule.is_coupon_used ? 'translate-x-5' : 'translate-x-0']"
-                  />
+                  <svg
+                    v-if="copiedCapsuleId !== capsule.id"
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                    />
+                  </svg>
+                  <svg
+                    v-else
+                    class="w-4 h-4 text-emerald-500"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
                 </button>
-              </td>
-              <td class="whitespace-nowrap px-3 py-4 text-sm text-center">
+              </div>
+            </div>
+
+            <div class="space-y-1">
+              <p class="text-xs font-semibold text-slate-500">비트코인 주소</p>
+              <p v-if="capsule.bitcoin_address" class="text-sm text-slate-600 break-all select-text">
+                {{ capsule.bitcoin_address }}
+              </p>
+              <p v-else class="text-xs text-slate-400">주소 할당 대기중</p>
+            </div>
+
+            <div class="space-y-1">
+              <p class="text-xs font-semibold text-slate-500">트랜잭션</p>
+              <div v-if="capsule.broadcast_txid" class="flex items-center justify-between gap-3">
+                <div>
+                  <a
+                    :href="explorerUrlForTx(capsule.broadcast_txid)"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-indigo-600 hover:text-indigo-800 text-sm font-semibold"
+                  >
+                    {{ shortTxid(capsule.broadcast_txid) }}
+                  </a>
+                  <p class="text-[11px] text-slate-400 mt-0.5">{{ formatDate(capsule.broadcasted_at) }}</p>
+                </div>
+                <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+              </div>
+              <p v-else class="text-xs text-slate-400">전파 내역 없음</p>
+            </div>
+
+            <div class="flex items-center justify-between pt-2">
+              <div class="text-xs text-slate-500">
+                ID: <span class="font-semibold text-slate-700">{{ capsule.id }}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  @click="openSealModal(capsule)"
+                  :disabled="!canSealCapsule(capsule)"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L7.5 20.5H4v-3.5l12.732-12.732z" />
+                  </svg>
+                  봉인
+                </button>
                 <button
                   v-if="canDeleteCapsule(capsule)"
                   @click="confirmDeleteCapsule(capsule)"
-                  class="inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-rose-700 bg-rose-100 hover:bg-rose-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-rose-500 transition-colors"
+                  class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-white bg-rose-500 hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-rose-500 transition"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7H5m3 0V5a2 2 0 012-2h4a2 2 0 012 2v2m2 0v12a2 2 0 01-2 2H8a2 2 0 01-2-2V7m3 4v6m4-6v6" />
                   </svg>
-                  <span class="ml-1">삭제</span>
+                  삭제
                 </button>
-                <span v-else class="text-xs text-slate-400">-</span>
-              </td>
-            </tr>
-            <tr v-if="capsules.length === 0">
-              <td colspan="6" class="px-3 py-8 text-center text-sm text-slate-500">
-                저장된 타임캡슐이 없습니다.
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                <span v-else class="text-xs text-slate-400">삭제 권한 없음</span>
+              </div>
+            </div>
+            <p v-if="!canSealCapsule(capsule)" class="text-[11px] text-amber-500">주소와 메시지가 준비된 캡슐만 봉인할 수 있습니다.</p>
+          </article>
+        </div>
       </div>
 
       <!-- Pagination -->
@@ -666,54 +805,171 @@
     </div>
 
     <!-- Delete Confirmation Modal -->
-    <div v-if="deleteModal.show" class="fixed z-10 inset-0 overflow-y-auto">
-      <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div class="fixed inset-0 bg-slate-500 bg-opacity-75 transition-opacity" @click="cancelDeleteMyCapsule"></div>
-        <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-        <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
-          <div class="sm:flex sm:items-start">
-            <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-rose-100 sm:mx-0 sm:h-10 sm:w-10">
-              <svg class="h-6 w-6 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-              <h3 class="text-lg leading-6 font-medium text-slate-900">타임캡슐 삭제</h3>
-              <div class="mt-2">
-                <p class="text-sm text-slate-500">
-                  이 타임캡슐을 정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
-                </p>
-                <div class="mt-2 text-xs text-slate-400 bg-slate-50 p-2 rounded">
-                  <div><strong>생성일:</strong> {{ formatDate(deleteModal.capsule?.created_at) }}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
-            <button
-              type="button"
-              @click="deleteMyCapsule"
-              :disabled="deleteModal.deleting"
-              class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-rose-600 text-base font-medium text-white hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-rose-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <svg v-if="deleteModal.deleting" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              {{ deleteModal.deleting ? '삭제 중...' : '삭제' }}
-            </button>
-            <button
-              type="button"
-              @click="cancelDeleteMyCapsule"
-              :disabled="deleteModal.deleting"
-              class="mt-3 w-full inline-flex justify-center rounded-md border border-slate-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 sm:mt-0 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              취소
-            </button>
-          </div>
+    <div v-if="deleteModal.show" class="fixed inset-0 bg-slate-900/40 z-[9999] flex items-center justify-center px-4">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-6 text-center">
+        <div class="space-y-2">
+          <h3 class="text-lg font-semibold text-slate-900">타임캡슐을 삭제할까요?</h3>
+          <p class="text-sm text-slate-500">
+            이 작업은 되돌릴 수 없습니다.
+          </p>
+        </div>
+        <div class="flex flex-col gap-3">
+          <button
+            type="button"
+            @click="deleteMyCapsule"
+            :disabled="deleteModal.deleting"
+            class="w-full inline-flex justify-center rounded-xl px-4 py-2.5 text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {{ deleteModal.deleting ? '삭제 중...' : '삭제하기' }}
+          </button>
+          <button
+            type="button"
+            @click="cancelDeleteMyCapsule"
+            :disabled="deleteModal.deleting"
+            class="w-full inline-flex justify-center rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            취소
+          </button>
         </div>
       </div>
     </div>
+
+    <!-- Seal & Broadcast Modal -->
+    <div v-if="sealModal.show" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 px-4">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div>
+            <h3 class="text-xl font-semibold text-slate-900">타임캡슐 봉인 · 전파</h3>
+            <p class="text-sm text-slate-500">선택된 타임캡슐을 블록체인에 기록합니다.</p>
+          </div>
+          <button
+            type="button"
+            @click="closeSealModal"
+            class="inline-flex items-center justify-center rounded-full w-10 h-10 text-slate-500 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300 disabled:opacity-40"
+            :disabled="sealModal.building || sealModal.sending"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="p-6 space-y-5">
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label class="text-xs font-semibold text-slate-500">받는 주소</label>
+              <input
+                v-model="sealForm.toAddress"
+                readonly
+                  class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-mono text-slate-700"
+                />
+              </div>
+              <div>
+                <label class="text-xs font-semibold text-slate-500">보낼 금액 (sats)</label>
+                <input
+                  v-model.number="sealForm.amountSats"
+                  readonly
+                  class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                />
+              </div>
+              <div>
+                <label class="text-xs font-semibold text-slate-500">수수료율 (sats/vB)</label>
+                <input
+                  v-model.number="sealForm.feeRate"
+                  readonly
+                  class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                />
+              </div>
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-slate-500">메모</label>
+              <textarea
+                v-model="sealForm.memo"
+                readonly
+                class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 min-h-[90px]"
+              />
+            </div>
+          </div>
+          <p v-if="sealBuildError" class="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-sm text-rose-600">
+            {{ sealBuildError }}
+          </p>
+          <div class="flex flex-wrap gap-3 pt-2 pb-4">
+            <button
+              type="button"
+              class="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-400 disabled:opacity-40 disabled:cursor-not-allowed"
+              @click="buildSealTransaction"
+              :disabled="sealModal.building || sealModal.sending"
+              >
+                <svg v-if="sealModal.building" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                {{ sealModal.building ? '생성 중...' : '봉인하기' }}
+              </button>
+              <button
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                @click="broadcastSealTransaction"
+                :disabled="sealModal.sending || !sealTxPreview"
+              >
+                <svg v-if="sealModal.sending" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                {{ sealModal.sending ? '전파 중...' : '타임캡슐 묻기' }}
+            </button>
+          </div>
+
+          <div
+            v-if="sealTxPreview"
+            class="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3 text-sm text-slate-700"
+          >
+            <div class="grid gap-3 sm:grid-cols-3">
+              <div>
+                <p class="text-xs text-slate-500">보낼 금액</p>
+                <p class="font-semibold text-slate-900">{{ formatSats(sealTxPreview.amount_sats) }}</p>
+              </div>
+              <div>
+                <p class="text-xs text-slate-500">총 수수료</p>
+                <p class="font-semibold text-slate-900">
+                  {{ formatSats(sealTxPreview.fee_sats) }}
+                  <span class="text-xs text-slate-500">
+                    ({{ formatFeeRate(sealTxPreview.fee_rate_sats_vb) }} sats/vB · {{ formatVsize(sealTxPreview.vsize) }})
+                  </span>
+                </p>
+              </div>
+              <div>
+                <p class="text-xs text-slate-500">거스름돈</p>
+                <p class="font-semibold text-slate-900">{{ formatSats(sealTxPreview.change_sats) }}</p>
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-if="sealBroadcastResult.txid"
+            class="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-3 text-sm text-emerald-700 space-y-1"
+          >
+            <p class="font-semibold">전파 완료</p>
+            <a
+              :href="sealBroadcastResult.broadcastUrl || explorerUrlForTx(sealBroadcastResult.txid)"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center gap-1 text-emerald-800 font-semibold underline"
+            >
+              {{ sealBroadcastResult.txid }}
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7m0 0v7m0-7L10 14" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10v11h11" />
+              </svg>
+            </a>
+          </div>
+          <div
+            v-if="sealBroadcastResult.error"
+            class="rounded-2xl border border-rose-100 bg-rose-50 px-3 py-3 text-sm text-rose-700"
+          >
+            {{ sealBroadcastResult.error }}
+          </div>
+        </div>
+      </div>
 
   </section>
 </template>
@@ -721,6 +977,12 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { API_BASE_URL } from '../api'
+import { useNotification } from '../composables/useNotification'
+
+const DEFAULT_NICKNAME = 'Anonymous'
+const EXISTING_CAPSULE_WARNING = '이미 저장된 타임캡슐이 있습니다. 목록에서 기존 캡슐을 삭제한 후 다시 시도해주세요.'
+
+const { successMessage: toastSuccess, errorMessage: toastError, showSuccess, showError } = useNotification()
 
 const secretKey = ref('')
 const wishMessage = ref('')
@@ -743,7 +1005,8 @@ const decryptError = ref('')
 const showDecryptSecret = ref(false)
 
 // UI states
-const copiedEncrypted = ref(false)
+const copiedCapsuleId = ref(null)
+const copiedEncryptedStatus = ref(false)
 const sealing = ref(false)
 const sealed = ref(false)
 const opening = ref(false)
@@ -752,6 +1015,20 @@ const mode = ref('seal') // 'seal' or 'unseal'
 
 // My Capsules List
 const capsules = ref([])
+const myNickname = ref(getStoredNickname())
+const hasExistingCapsule = computed(() => {
+  const nickname = myNickname.value
+  if (!nickname) return false
+  return capsules.value.some((capsule) => normalizeUserInfo(capsule.user_info) === nickname)
+})
+const myCapsuleEntry = computed(() => {
+  if (!hasExistingCapsule.value) return null
+  const nickname = normalizeUserInfo(myNickname.value)
+  return capsules.value.find((capsule) => normalizeUserInfo(capsule.user_info) === nickname) || null
+})
+const existingCapsuleWarning = computed(() =>
+  hasExistingCapsule.value ? EXISTING_CAPSULE_WARNING : ''
+)
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
@@ -762,6 +1039,28 @@ const deleteModal = ref({
   show: false,
   capsule: null,
   deleting: false
+})
+const AUTO_SEAL_AMOUNT_SATS = 1000
+const sealModal = ref({
+  show: false,
+  capsule: null,
+  building: false,
+  sending: false
+})
+const sealForm = ref({
+  toAddress: '',
+  memo: '',
+  amountSats: AUTO_SEAL_AMOUNT_SATS,
+  feeRate: 1
+})
+const sealTxPreview = ref(null)
+const sealBuildError = ref('')
+const sealBroadcastResult = ref({
+  txid: '',
+  feeSats: null,
+  vsize: null,
+  broadcastUrl: '',
+  error: ''
 })
 
 const displayedPages = computed(() => {
@@ -780,8 +1079,12 @@ const messageLimit = 280
 const hasSecret = computed(() => secretKey.value.trim().length > 0)
 const hasMessage = computed(() => wishMessage.value.trim().length > 0)
 const capsuleReady = computed(() => hasSecret.value && hasMessage.value && !!encryptedHash.value && sealed.value)
-
+const primarySealDisabled = computed(() => hasExistingCapsule.value || !hasSecret.value || !hasMessage.value || computing.value || sealing.value)
+const lockedByStoredCapsule = computed(() => hasExistingCapsule.value && !opening.value && !opened.value)
+const capsuleVisualLocked = computed(() => lockedByStoredCapsule.value || capsuleReady.value)
+const shouldShowClosedLid = computed(() => lockedByStoredCapsule.value || (capsuleReady.value && mode.value === 'seal'))
 const statusLabel = computed(() => {
+  if (hasExistingCapsule.value) return '봉인됨'
   if (!hasSecret.value) return '대기 중'
   if (computing.value) return '암호화 중'
   if (capsuleReady.value) return '봉인 완료'
@@ -789,6 +1092,9 @@ const statusLabel = computed(() => {
 })
 
 const statusDescription = computed(() => {
+  if (hasExistingCapsule.value && !opening.value && !opened.value) {
+    return '이미 봉인된 타임캡슐입니다. 나만의 키로 해제해주세요.'
+  }
   if (opening.value) {
     return '타임캡슐이 열리고 있습니다... 메시지가 나타나고 있어요!'
   }
@@ -820,11 +1126,14 @@ const statusDescription = computed(() => {
 })
 
 const statusBadgeClass = computed(() => {
+  if (hasExistingCapsule.value) return 'bg-emerald-100 text-emerald-700 border border-emerald-200'
   if (!hasSecret.value) return 'bg-slate-100 text-slate-700'
   if (computing.value) return 'bg-amber-100 text-amber-700 border border-amber-200'
   if (capsuleReady.value) return 'bg-emerald-100 text-emerald-700 border border-emerald-200'
   return 'bg-indigo-100 text-indigo-700 border border-indigo-200'
 })
+
+const encryptedHashSizeLabel = computed(() => formatByteLength(encryptedHash.value))
 
 const lastUpdatedText = computed(() => {
   if (!lastUpdated.value) return ''
@@ -841,6 +1150,7 @@ const lastUpdatedText = computed(() => {
 let recomputeTimer
 let computeRunId = 0
 const textEncoder = new TextEncoder()
+let capsuleCopyTimer
 
 // watch([secretKey, wishMessage], () => {
 //   // Reset states when input changes
@@ -861,11 +1171,41 @@ watch([secretKey, wishMessage], () => {
   saved.value = false
 })
 
+watch(hasExistingCapsule, (value) => {
+  mode.value = value ? 'unseal' : 'seal'
+}, { immediate: true })
+
+watch(mode, () => {
+  sealing.value = false
+  sealed.value = false
+  opening.value = false
+  opened.value = false
+  errorMessage.value = ''
+  decryptError.value = ''
+  decryptedMessage.value = ''
+})
+
+watch(myCapsuleEntry, (entry) => {
+  if (entry?.encrypted_message) {
+    encryptedDataInput.value = entry.encrypted_message
+  } else if (!hasExistingCapsule.value) {
+    encryptedDataInput.value = ''
+  }
+}, { immediate: true })
+
 onBeforeUnmount(() => {
   if (recomputeTimer) clearTimeout(recomputeTimer)
+  if (capsuleCopyTimer) clearTimeout(capsuleCopyTimer)
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('storage', syncNicknameFromStorage)
+  }
 })
 
 onMounted(() => {
+  syncNicknameFromStorage()
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', syncNicknameFromStorage)
+  }
   fetchCapsules()
 })
 
@@ -899,9 +1239,49 @@ function changePage(page) {
     }
 }
 
+function normalizeUserInfo(value) {
+  const normalized = (value ?? DEFAULT_NICKNAME).toString().trim()
+  return normalized || DEFAULT_NICKNAME
+}
+
+function getStoredNickname() {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return DEFAULT_NICKNAME
+  }
+  try {
+    const stored = (window.localStorage.getItem('nickname') || '').trim()
+    return stored || DEFAULT_NICKNAME
+  } catch (error) {
+    return DEFAULT_NICKNAME
+  }
+}
+
+function syncNicknameFromStorage() {
+  myNickname.value = getStoredNickname()
+}
+
+function getByteLength(value) {
+  if (!value) return 0
+  return textEncoder.encode(typeof value === 'string' ? value : String(value)).length
+}
+
+function formatByteLength(value) {
+  const bytes = getByteLength(value)
+  if (!bytes) return ''
+  return `${bytes.toLocaleString()} bytes`
+}
+
+function isMyCapsule(capsule) {
+  return normalizeUserInfo(capsule.user_info) === myNickname.value
+}
+
 function canDeleteCapsule(capsule) {
-  const currentNickname = localStorage.getItem('nickname') || 'Anonymous'
-  return capsule.user_info === currentNickname
+  return isMyCapsule(capsule)
+}
+
+function canSealCapsule(capsule) {
+  if (!capsule) return false
+  return Boolean(capsule.bitcoin_address && capsule.encrypted_message)
 }
 
 function confirmDeleteCapsule(capsule) {
@@ -919,6 +1299,63 @@ function cancelDeleteCapsule() {
     capsule: null,
     deleting: false
   }
+}
+
+function resetSealModalState() {
+  sealModal.value = {
+    show: false,
+    capsule: null,
+    building: false,
+    sending: false
+  }
+  sealForm.value = {
+    toAddress: '',
+    memo: '',
+    amountSats: AUTO_SEAL_AMOUNT_SATS,
+    feeRate: 1
+  }
+  sealTxPreview.value = null
+  sealBuildError.value = ''
+  sealBroadcastResult.value = {
+    txid: '',
+    feeSats: null,
+    vsize: null,
+    broadcastUrl: '',
+    error: ''
+  }
+}
+
+function openSealModal(capsule) {
+  if (!canSealCapsule(capsule)) {
+    showError('비트코인 주소와 암호화된 메시지가 있어야 봉인할 수 있습니다.')
+    return
+  }
+  sealModal.value = {
+    show: true,
+    capsule,
+    building: false,
+    sending: false
+  }
+  sealForm.value = {
+    toAddress: capsule.bitcoin_address || '',
+    memo: capsule.encrypted_message || '',
+    amountSats: AUTO_SEAL_AMOUNT_SATS,
+    feeRate: 1
+  }
+  sealTxPreview.value = null
+  sealBuildError.value = ''
+  sealBroadcastResult.value = {
+    txid: '',
+    feeSats: null,
+    vsize: null,
+    broadcastUrl: '',
+    error: ''
+  }
+}
+
+function closeSealModal() {
+  if (sealModal.value.building || sealModal.value.sending) return
+  resetSealModalState()
 }
 
 async function deleteMyCapsule() {
@@ -961,6 +1398,150 @@ async function deleteMyCapsule() {
   }
 }
 
+async function buildSealTransaction() {
+  if (!sealModal.value.show || sealModal.value.building || sealModal.value.sending) return
+  const toAddress = (sealForm.value.toAddress || '').trim()
+  const amount = Number(sealForm.value.amountSats)
+  const feeRate = Number(sealForm.value.feeRate)
+  if (!toAddress) {
+    showError('받는 주소가 필요합니다.')
+    return
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    showError('유효한 금액이 설정되지 않았습니다.')
+    return
+  }
+  if (!Number.isFinite(feeRate) || feeRate <= 0) {
+    showError('유효한 수수료율을 확인하세요.')
+    return
+  }
+  sealModal.value.building = true
+  sealTxPreview.value = null
+  sealBuildError.value = ''
+  try {
+    const response = await fetch(appendAdminUsername(`${API_BASE_URL}/api/time-capsule/admin/build-tx`), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to_address: toAddress,
+        amount_sats: amount,
+        fee_rate_sats_vb: feeRate,
+        memo_text: sealForm.value.memo || '',
+      }),
+    })
+    const data = await response.json()
+    if (response.ok && data.ok !== false) {
+      sealTxPreview.value = data
+      sealBuildError.value = ''
+      showSuccess('트랜잭션을 생성했습니다.')
+    } else {
+      const message = data.error || '트랜잭션 생성에 실패했습니다.'
+      sealBuildError.value = message
+      showError(message)
+    }
+  } catch (error) {
+    console.error('Failed to build seal transaction', error)
+    sealBuildError.value = '트랜잭션 생성에 실패했습니다.'
+    showError('트랜잭션 생성에 실패했습니다.')
+  } finally {
+    sealModal.value.building = false
+  }
+}
+
+async function broadcastSealTransaction() {
+  if (!sealTxPreview.value?.raw_tx) {
+    showError('먼저 트랜잭션을 생성하세요.')
+    return
+  }
+  if (sealModal.value.sending) return
+  const feeRate = Number(sealForm.value.feeRate)
+  if (!Number.isFinite(feeRate) || feeRate <= 0) {
+    showError('유효한 수수료율을 확인하세요.')
+    return
+  }
+  sealModal.value.sending = true
+  sealBroadcastResult.value = {
+    txid: '',
+    feeSats: null,
+    vsize: null,
+    broadcastUrl: '',
+    error: ''
+  }
+  try {
+    const response = await fetch(appendAdminUsername(`${API_BASE_URL}/api/time-capsule/admin/broadcast-tx`), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        raw_tx: sealTxPreview.value.raw_tx,
+        fee_sats: sealTxPreview.value.fee_sats,
+        fee_rate_sats_vb: feeRate,
+      }),
+    })
+    const data = await response.json()
+    if (response.ok && data.ok) {
+      sealBroadcastResult.value = {
+        txid: data.txid,
+        feeSats: data.fee_sats,
+        vsize: data.vsize,
+        broadcastUrl: data.broadcast_url,
+        error: ''
+      }
+      showSuccess('트랜잭션을 전파했습니다.')
+      sealTxPreview.value = null
+      if (sealModal.value.capsule?.id && data.txid) {
+        await recordCapsuleBroadcast(sealModal.value.capsule.id, data.txid)
+      }
+    } else {
+      sealBroadcastResult.value.error = data.error || '트랜잭션 전파에 실패했습니다.'
+      showError(sealBroadcastResult.value.error)
+    }
+  } catch (error) {
+    console.error('Failed to broadcast seal transaction', error)
+    sealBroadcastResult.value.error = '트랜잭션 전파 중 오류가 발생했습니다.'
+    showError('트랜잭션 전파 중 오류가 발생했습니다.')
+  } finally {
+    sealModal.value.sending = false
+  }
+}
+
+async function recordCapsuleBroadcast(capsuleId, txid) {
+  try {
+    const response = await fetch(appendAdminUsername(`${API_BASE_URL}/api/time-capsule/admin/broadcast-record/${capsuleId}`), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txid }),
+    })
+    const data = await response.json()
+    if (response.ok && data.ok) {
+      updateCapsuleInList(data.capsule)
+      showSuccess('전파 내역을 저장했습니다.')
+      return data.capsule
+    }
+    showError(data.error || '전파 내역을 저장하지 못했습니다.')
+    return null
+  } catch (error) {
+    console.error('Failed to record capsule broadcast', error)
+    showError('전파 내역을 저장하지 못했습니다.')
+    return null
+  }
+}
+
+function updateCapsuleInList(updatedCapsule) {
+  if (!updatedCapsule) return
+  const next = capsules.value.slice()
+  const index = next.findIndex(c => c.id === updatedCapsule.id)
+  if (index !== -1) {
+    next[index] = { ...next[index], ...updatedCapsule }
+    capsules.value = next
+  }
+  if (sealModal.value.capsule?.id === updatedCapsule.id) {
+    sealModal.value.capsule = { ...sealModal.value.capsule, ...updatedCapsule }
+  }
+}
+
 function formatDate(isoString) {
   if (!isoString) return '-'
   return new Date(isoString).toLocaleString('ko-KR', {
@@ -970,6 +1551,48 @@ function formatDate(isoString) {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function explorerUrlForTx(txid) {
+  if (!txid) return 'https://mempool.space/tx/'
+  return `https://mempool.space/tx/${txid}`
+}
+
+function shortTxid(txid) {
+  if (!txid) return ''
+  if (txid.length <= 12) return txid
+  return `${txid.slice(0, 6)}...${txid.slice(-4)}`
+}
+
+function formatSats(value) {
+  if (!Number.isFinite(Number(value))) return '-'
+  return `${Number(value).toLocaleString()} sats`
+}
+
+function formatFeeRate(value) {
+  if (!Number.isFinite(Number(value))) return '-'
+  return `${Number(value).toFixed(2)}`
+}
+
+function formatVsize(value) {
+  if (!Number.isFinite(Number(value))) return '-'
+  return `${Number(value).toLocaleString()} vB`
+}
+
+function getAdminUsername() {
+  if (typeof window === 'undefined' || !window.localStorage) return ''
+  const nickname = window.localStorage.getItem('nickname')
+  if (!nickname) return ''
+  const isAdmin = window.localStorage.getItem('isAdmin')
+  if (isAdmin !== 'true') return ''
+  return nickname
+}
+
+function appendAdminUsername(url) {
+  const username = getAdminUsername()
+  if (!username) return url
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}username=${encodeURIComponent(username)}`
 }
 
 function toggleSecretVisibility() {
@@ -990,18 +1613,6 @@ function handleReset() {
   errorMessage.value = ''
   sealed.value = false
   opened.value = false
-}
-
-function switchMode(newMode) {
-  mode.value = newMode
-  // Reset states when switching modes
-  sealing.value = false
-  sealed.value = false
-  opening.value = false
-  opened.value = false
-  errorMessage.value = ''
-  decryptError.value = ''
-  decryptedMessage.value = ''
 }
 
 function handleDecryptReset() {
@@ -1044,28 +1655,41 @@ async function handleUnseal() {
     }
   } catch (error) {
     console.error('Decryption error:', error)
-    errorMessage.value = '복호화에 실패했습니다. 비밀키가 올바른지 확인해주세요.'
+    errorMessage.value = '봉인 해제에 실패했습니다. 비밀키가 올바른지 확인해주세요.'
     opening.value = false
   }
 }
 
-async function copyEncryptedData() {
-  if (!encryptedHash.value) return
-
+async function copyCapsuleEncryptedMessage(capsule) {
+  if (!capsule?.encrypted_message) return
   try {
-    await navigator.clipboard.writeText(encryptedHash.value)
-    copiedEncrypted.value = true
-    setTimeout(() => {
-      copiedEncrypted.value = false
+    await navigator.clipboard.writeText(capsule.encrypted_message)
+    copiedCapsuleId.value = capsule.id
+    if (capsuleCopyTimer) clearTimeout(capsuleCopyTimer)
+    capsuleCopyTimer = setTimeout(() => {
+      copiedCapsuleId.value = null
     }, 2000)
   } catch (error) {
-    console.error('Failed to copy:', error)
+    console.error('Failed to copy encrypted message:', error)
+  }
+}
+
+async function copyEncryptedHash() {
+  if (!encryptedHash.value) return
+  try {
+    await navigator.clipboard.writeText(encryptedHash.value)
+    copiedEncryptedStatus.value = true
+    setTimeout(() => {
+      copiedEncryptedStatus.value = false
+    }, 2000)
+  } catch (error) {
+    console.error('Failed to copy encrypted hash:', error)
   }
 }
 
 async function saveTimeCapsule(encryptedMessage) {
   try {
-    const nickname = localStorage.getItem('nickname') || 'Anonymous'
+    const nickname = myNickname.value || DEFAULT_NICKNAME
     const response = await fetch(`${API_BASE_URL}/api/time-capsule/save`, {
       method: 'POST',
       headers: {
@@ -1091,6 +1715,10 @@ async function saveTimeCapsule(encryptedMessage) {
 }
 
 async function handleSave() {
+  if (hasExistingCapsule.value) {
+    errorMessage.value = EXISTING_CAPSULE_WARNING
+    return
+  }
   if (!encryptedHash.value) return
   saving.value = true
   errorMessage.value = ''
@@ -1100,26 +1728,34 @@ async function handleSave() {
 
   if (result.success) {
     saved.value = true
+    showSuccess('데이터가 저장되었습니다.')
     // Refresh the list after saving
     fetchCapsules()
   } else {
     errorMessage.value = result.error
+    showError(result.error || '타임캡슐 저장에 실패했습니다.')
   }
 }
 
 async function triggerImmediateComputation() {
+  if (hasExistingCapsule.value) {
+    errorMessage.value = EXISTING_CAPSULE_WARNING
+    return
+  }
+
   if (recomputeTimer) clearTimeout(recomputeTimer)
 
-  // Trigger sealing animation
   sealing.value = true
   sealed.value = false
 
   await runComputation()
 
-  // Complete sealing animation after a delay
   setTimeout(() => {
     sealing.value = false
     sealed.value = true
+    if (encryptedHash.value) {
+      showSuccess('타임캡슐이 성공적으로 봉인되었습니다.')
+    }
   }, 2000)
 }
 
@@ -1194,7 +1830,7 @@ async function handleDecrypt() {
     decryptedMessage.value = message
   } catch (error) {
     console.error('Decryption error:', error)
-    decryptError.value = '복호화에 실패했습니다. 비밀키가 올바른지 확인해주세요.'
+    decryptError.value = '봉인 해제에 실패했습니다. 비밀키가 올바른지 확인해주세요.'
   } finally {
     decrypting.value = false
   }

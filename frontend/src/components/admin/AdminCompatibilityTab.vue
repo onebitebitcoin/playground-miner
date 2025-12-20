@@ -132,13 +132,128 @@
       </div>
     </section>
 
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
+      <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">캐시 관리</p>
+          <h3 class="text-xl font-semibold text-slate-900 mt-1">에이전트 캐시된 답변</h3>
+          <p class="text-sm text-slate-500 mt-1">
+            동일한 인물 요청 시 재사용되는 스토리·사주·리포트·하이라이트 응답을 확인하고 정리할 수 있습니다.
+          </p>
+        </div>
+      </div>
+
+      <div class="grid gap-3 lg:grid-cols-[1fr,250px,auto]">
+        <label class="text-sm text-slate-600 space-y-1">
+          <span class="font-medium text-slate-900">이름 검색</span>
+          <input
+            v-model="cacheFilters.search"
+            type="text"
+            class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-900 focus:ring-0"
+            placeholder="이름 또는 키워드"
+            @keyup.enter="handleCacheSearch"
+            :disabled="!isAdmin"
+          />
+        </label>
+        <label class="text-sm text-slate-600 space-y-1">
+          <span class="font-medium text-slate-900">카테고리</span>
+          <select
+            v-model="cacheFilters.category"
+            class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-900 focus:ring-0 bg-white"
+            :disabled="!isAdmin"
+          >
+            <option
+              v-for="option in CACHE_CATEGORY_OPTIONS"
+              :key="option.value || 'all'"
+              :value="option.value"
+            >
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+        <div class="flex items-end gap-2">
+          <button
+            type="button"
+            class="px-4 py-2 rounded-xl border border-slate-200 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            @click="handleCacheSearch"
+            :disabled="!isAdmin || cacheLoading"
+          >
+            검색
+          </button>
+          <button
+            type="button"
+            class="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold disabled:opacity-60"
+            @click="loadAgentCaches"
+            :disabled="!isAdmin || cacheLoading"
+          >
+            새로고침
+          </button>
+        </div>
+      </div>
+
+      <div v-if="!isAdmin" class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">
+        관리자 모드에서만 캐시 내역을 확인할 수 있습니다.
+      </div>
+
+      <div v-else>
+        <div v-if="cacheLoading" class="text-center py-10 text-slate-500">캐시된 답변을 불러오는 중...</div>
+        <div v-else-if="!cacheEntries.length" class="text-center py-10 text-slate-500">
+          조건에 맞는 캐시된 답변이 없습니다.
+        </div>
+        <div v-else class="space-y-4">
+          <div
+            v-for="entry in cacheEntries"
+            :key="entry.id"
+            class="border border-slate-200 rounded-2xl p-4 space-y-3"
+          >
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p class="text-sm font-semibold text-slate-900">{{ formatCacheCategory(entry.category) }}</p>
+                <p class="text-xs text-slate-500 mt-0.5">
+                  대상: <span class="font-medium text-slate-800">{{ entry.subject_name || '미지정' }}</span>
+                  <span v-if="entry.target_name"> ↔ {{ entry.target_name }}</span>
+                </p>
+                <p class="text-xs text-slate-500">
+                  업데이트: {{ formatTimestampLabel(entry.updated_at) }} · 조회 {{ entry.hit_count }}회
+                </p>
+              </div>
+              <button
+                type="button"
+                class="text-xs text-rose-600 hover:text-rose-800 disabled:opacity-40"
+                @click="handleCacheDelete(entry)"
+                :disabled="!isAdmin || isCacheSaving(entry.id)"
+              >
+                삭제
+              </button>
+            </div>
+            <textarea
+              v-model="entry._draftText"
+              rows="6"
+              class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-mono text-slate-800 focus:border-slate-900 focus:ring-0"
+              :disabled="!isAdmin || isCacheSaving(entry.id)"
+            />
+            <div class="flex justify-end">
+              <button
+                type="button"
+                class="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold disabled:opacity-60"
+                @click="handleCacheSave(entry)"
+                :disabled="!isAdmin || isCacheSaving(entry.id)"
+              >
+                {{ isCacheSaving(entry.id) ? '저장 중...' : '내용 저장' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
       <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">보고서 컨텍스트</p>
           <h3 class="text-xl font-semibold text-slate-900 mt-1">궁합 리포트 템플릿</h3>
           <p class="text-sm text-slate-500 mt-1">
-            사용자/비교 대상/팀 리포트에 추가되는 세부 지침을 수정할 수 있습니다. 플레이스홀더를 사용하면 이름이나 추가 정보를 동적으로 삽입할 수 있습니다.
+            사용자/비교 대상/두 사람 리포트에 추가되는 세부 지침을 수정할 수 있습니다. 플레이스홀더를 사용하면 이름이나 추가 정보를 동적으로 삽입할 수 있습니다.
           </p>
         </div>
       </div>
@@ -154,7 +269,7 @@
           <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p class="text-sm font-semibold text-slate-900">{{ template.label }}</p>
-              <p class="text-xs text-slate-500">{{ template.description || '설명이 없습니다.' }}</p>
+              <p v-if="template.description" class="text-xs text-slate-500">{{ template.description }}</p>
             </div>
             <span class="text-[11px] font-semibold text-slate-500 bg-slate-100 rounded-full px-3 py-1 uppercase tracking-wide">
               {{ template.key }}
@@ -395,14 +510,14 @@
       <h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">페르소나 메모</h4>
       <p class="text-sm leading-relaxed">
         이 에이전트는 비트코인이 금(金)과 화(火)가 혼재된 존재라고 확신하며, 사용자의 사주와 비교해 상생/상극을 판별합니다.
-        답변은 저축 관점, 루틴 기반 리듬, 리스크 메모를 반드시 포함해야 합니다.
+        답변은 저축 관점, 루틴 기반 흐름, 리스크 메모를 반드시 포함해야 합니다.
       </p>
     </section>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import {
   fetchCompatibilityAgentPrompt,
   fetchPublicCompatibilityPrompt,
@@ -413,7 +528,10 @@ import {
   createCompatibilityQuickPreset,
   updateCompatibilityQuickPreset,
   deleteCompatibilityQuickPreset,
-  updateCompatibilityReportTemplate
+  updateCompatibilityReportTemplate,
+  fetchCompatibilityAgentCaches,
+  updateCompatibilityAgentCache,
+  deleteCompatibilityAgentCache
 } from '../../services/compatibilityService'
 import { getCurrentUsername } from '../../utils/adminAuth'
 
@@ -482,6 +600,32 @@ const REPORT_TEMPLATE_PLACEHOLDERS = {
   ]
 }
 
+const CACHE_CATEGORY_LABELS = {
+  story: '스토리 요약',
+  saju_summary: '사주 요약',
+  user_report: '사용자 리포트',
+  target_report: '비교 대상 리포트',
+  duo_report: '두 사람 × 비트코인',
+  pair_report: '직접 궁합 리포트',
+  highlight_user: '사용자 하이라이트',
+  highlight_target: '비교 대상 하이라이트',
+  highlight_duo: '두 사람 하이라이트',
+  highlight_pair: '직접 궁합 하이라이트'
+}
+
+const CACHE_CATEGORY_OPTIONS = [
+  { value: '', label: '전체' },
+  ...Object.entries(CACHE_CATEGORY_LABELS).map(([value, label]) => ({ value, label }))
+]
+
+const cacheFilters = reactive({
+  search: '',
+  category: ''
+})
+const cacheEntries = ref([])
+const cacheLoading = ref(false)
+const cacheSavingMap = ref({})
+
 function getEmptyQuickPresetForm() {
   return {
     label: '',
@@ -506,6 +650,12 @@ const formatTimestampLabel = (value) => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+const formatCacheCategory = (value) => CACHE_CATEGORY_LABELS[value] || value || '분류 없음'
+const isCacheSaving = (id) => !!cacheSavingMap.value[id]
+const setCacheSaving = (id, status) => {
+  cacheSavingMap.value = { ...cacheSavingMap.value, [id]: status }
 }
 
 const applyPromptToForm = (prompt) => {
@@ -606,6 +756,89 @@ const handleReportTemplateSave = async (template) => {
 }
 
 const getTemplatePlaceholders = (key) => REPORT_TEMPLATE_PLACEHOLDERS[key] || []
+
+const loadAgentCaches = async () => {
+  if (!props.isAdmin) {
+    cacheEntries.value = []
+    cacheLoading.value = false
+    return
+  }
+  cacheLoading.value = true
+  try {
+    const username = getCurrentUsername()
+    const caches = await fetchCompatibilityAgentCaches({
+      username,
+      search: cacheFilters.search || undefined,
+      category: cacheFilters.category || undefined
+    })
+    cacheEntries.value = Array.isArray(caches)
+      ? caches.map((entry) => ({
+        ...entry,
+        _draftText: entry.response_text || ''
+      }))
+      : []
+  } catch (error) {
+    cacheEntries.value = []
+    props.showError(error.message || '캐시된 답변을 불러오지 못했습니다.')
+  } finally {
+    cacheLoading.value = false
+  }
+}
+
+const handleCacheSearch = () => {
+  if (!props.isAdmin) {
+    props.showError('관리자 권한이 필요합니다.')
+    return
+  }
+  loadAgentCaches()
+}
+
+const handleCacheSave = async (entry) => {
+  if (!props.isAdmin || !entry?.id) {
+    props.showError('관리자 권한이 필요합니다.')
+    return
+  }
+  setCacheSaving(entry.id, true)
+  try {
+    const username = getCurrentUsername()
+    const updated = await updateCompatibilityAgentCache({
+      username,
+      cacheId: entry.id,
+      responseText: entry._draftText,
+      category: entry.category,
+      subjectName: entry.subject_name,
+      targetName: entry.target_name,
+      metadata: entry.metadata
+    })
+    Object.assign(entry, updated, { _draftText: updated.response_text || '' })
+    props.showSuccess('캐시된 답변을 저장했습니다.')
+  } catch (error) {
+    props.showError(error.message || '캐시 저장에 실패했습니다.')
+  } finally {
+    setCacheSaving(entry.id, false)
+  }
+}
+
+const handleCacheDelete = async (entry) => {
+  if (!props.isAdmin || !entry?.id) {
+    props.showError('관리자 권한이 필요합니다.')
+    return
+  }
+  if (!confirm('선택한 캐시된 답변을 삭제할까요?')) {
+    return
+  }
+  setCacheSaving(entry.id, true)
+  try {
+    const username = getCurrentUsername()
+    await deleteCompatibilityAgentCache({ username, cacheId: entry.id })
+    props.showSuccess('캐시된 답변을 삭제했습니다.')
+    await loadAgentCaches()
+  } catch (error) {
+    props.showError(error.message || '캐시 삭제에 실패했습니다.')
+  } finally {
+    setCacheSaving(entry.id, false)
+  }
+}
 
 function setActiveAgent(key) {
   if (activeAgentKey.value === key) return
@@ -755,12 +988,24 @@ watch(
     loadReportTemplates()
     if (isAdmin) {
       loadQuickPresets()
+      loadAgentCaches()
     } else {
       quickPresets.value = []
       quickPresetLoading.value = false
       resetQuickPresetForm()
+      cacheEntries.value = []
+      cacheLoading.value = false
     }
   },
   { immediate: true }
+)
+
+watch(
+  () => cacheFilters.category,
+  () => {
+    if (props.isAdmin) {
+      loadAgentCaches()
+    }
+  }
 )
 </script>

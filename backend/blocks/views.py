@@ -7,6 +7,7 @@ import time
 import threading
 import hashlib
 import uuid
+import os
 from datetime import datetime, timedelta
 import requests
 from urllib.parse import urlparse
@@ -36,17 +37,29 @@ from .models import (
     FinanceQuickCompareGroup,
     AssetPriceCache,
     CompatibilityAgentPrompt,
+    CompatibilityAgentCache,
+    CompatibilityAgentCache,
     CompatibilityQuickPreset,
     CompatibilityReportTemplate,
     TimeCapsule,
     TimeCapsuleBroadcastSetting,
 )
 from django.db import connection
+from django.utils import timezone
 from django.conf import settings
 from .broadcast import broadcaster
 from .finance_stream import finance_stream_manager
-from .btc import derive_bip84_addresses, fetch_blockstream_balances, calc_total_sats, derive_bip84_account_zpub, derive_master_fingerprint, _normalize_mnemonic
+from .btc import (
+    derive_bip84_addresses,
+    fetch_blockstream_balances,
+    calc_total_sats,
+    derive_bip84_account_zpub,
+    derive_master_fingerprint,
+    _normalize_mnemonic,
+    derive_bip84_private_key,
+)
 from mnemonic import Mnemonic as MnemonicValidator
+from bitcoinlib.transactions import Transaction
 from .prompts import (
     COMPATIBILITY_AGENT_DEFAULT_PROMPT,
     STORY_EXTRACTOR_AGENT_PROMPT,
@@ -56,6 +69,115 @@ from .prompts import (
 )
 
 TIME_CAPSULE_MNEMONIC_USERNAME = 'timecapsule'
+DUST_LIMIT = 294  # standard dust threshold for native segwit outputs (P2WPKH)
+OP_RETURN_MAX_BYTES = 80
+
+
+def _get_block_explorer_base():
+    """Return the base URL for explorer operations (UTXO lookup, broadcast, etc.)."""
+    return (os.environ.get('BTC_EXPLORER_API') or 'https://blockstream.info/api').rstrip('/')
+
+
+def _clean_cache_value(value):
+    if value is None:
+        return ''
+    if isinstance(value, str):
+        return value.strip()
+    return str(value).strip()
+
+
+def _normalize_cache_profile(profile):
+    if not isinstance(profile, dict):
+        return ''
+    name = _clean_cache_value(profile.get('name') or profile.get('label'))
+    birthdate = _clean_cache_value(profile.get('birthdate') or profile.get('birth_date'))
+    birth_time = _clean_cache_value(profile.get('birth_time') or profile.get('birthtime'))
+    gender = _clean_cache_value(profile.get('gender'))
+    zodiac = _clean_cache_value(profile.get('zodiac'))
+    yin_yang = _clean_cache_value(profile.get('yin_yang') or profile.get('yinyang'))
+    element = _clean_cache_value(profile.get('element'))
+    return '|'.join([
+        name.lower(),
+        birthdate,
+        birth_time or 'unknown',
+        gender.lower(),
+        zodiac.lower(),
+        yin_yang.lower(),
+        element.lower(),
+    ])
+
+
+def _resolve_cache_metadata(agent_key, cache_payload, context):
+    if not cache_payload or not isinstance(cache_payload, dict) or not context:
+        return None, None
+    category = _clean_cache_value(cache_payload.get('category') or agent_key or 'compat')
+    if not category:
+        category = agent_key or 'compat'
+    profile_signature = _normalize_cache_profile(cache_payload.get('profile'))
+    target_signature = _normalize_cache_profile(cache_payload.get('target_profile'))
+    scope = _clean_cache_value(
+        cache_payload.get('scope')
+        or cache_payload.get('role')
+        or cache_payload.get('extra_scope')
+        or (cache_payload.get('extra') or {}).get('scope')
+    )
+    base_components = [
+        category.lower(),
+        agent_key or '',
+        profile_signature,
+        target_signature,
+        scope,
+    ]
+    context_hash = hashlib.sha256((context or '').encode('utf-8')).hexdigest()
+    digest_source = '|'.join(filter(None, base_components + [context_hash]))
+    cache_key = hashlib.sha256(digest_source.encode('utf-8')).hexdigest()
+    cache_meta = {
+        'cache_key': f"{category.lower()}:{cache_key}",
+        'category': category,
+        'profile_signature': profile_signature,
+        'target_signature': target_signature,
+        'context_hash': context_hash,
+        'subject_name': _clean_cache_value((cache_payload.get('profile') or {}).get('name')),
+        'target_name': _clean_cache_value((cache_payload.get('target_profile') or {}).get('name')),
+        'payload': cache_payload,
+    }
+    try:
+        cache_entry = CompatibilityAgentCache.objects.get(cache_key=cache_meta['cache_key'])
+        cache_entry.hit_count += 1
+        cache_entry.save(update_fields=['hit_count', 'updated_at'])
+        return cache_meta, cache_entry
+    except CompatibilityAgentCache.DoesNotExist:
+        return cache_meta, None
+    except (OperationalError, ProgrammingError):
+        logger.warning('[Compatibility] Cache storage unavailable - skipping cache lookup')
+        return None, None
+
+
+def _store_cache_entry(agent_key, cache_meta, narrative, provider, model_used):
+    if not cache_meta or not cache_meta.get('cache_key'):
+        return
+    try:
+        metadata = {
+            'provider': provider,
+            'model': model_used,
+            'context_hash': cache_meta.get('context_hash'),
+        }
+        CompatibilityAgentCache.objects.update_or_create(
+            cache_key=cache_meta['cache_key'],
+            defaults={
+                'agent_key': agent_key,
+                'category': cache_meta.get('category') or agent_key,
+                'subject_name': cache_meta.get('subject_name', ''),
+                'target_name': cache_meta.get('target_name', ''),
+                'profile_signature': cache_meta.get('profile_signature', ''),
+                'target_signature': cache_meta.get('target_signature', ''),
+                'request_payload': cache_meta.get('payload') or {},
+                'response_text': narrative,
+                'metadata': metadata,
+            }
+        )
+    except (OperationalError, ProgrammingError):
+        logger.warning('[Compatibility] Cache storage unavailable - skipping cache save')
 
 
 def _call_openai_chat_model(model_name, system_prompt, user_prompt, temperature=0.7, top_p=1.0, presence_penalty=0.0, frequency_penalty=0.0, max_tokens=None):
@@ -6392,7 +6514,7 @@ DEFAULT_COMPATIBILITY_REPORT_TEMPLATES = [
     {
         'key': 'user_vs_bitcoin',
         'label': '개별 사용자와 비트코인의 궁합',
-        'description': '단일 사용자의 비트코인 궁합 리포트 지침',
+        'description': '',
         'sort_order': 1,
         'content': """{{SUBJECT_NAME}}의 사주와 비트코인 궁합을 분석하세요.{{SUBJECT_EXTRA}}
 
@@ -6404,12 +6526,12 @@ DEFAULT_COMPATIBILITY_REPORT_TEMPLATES = [
 3. **출력 템플릿(순서 고정, 마크다운 엄수)**:
    - ## 프로필 브리핑
      - 일간: …
-     - 오행 앵커: …
+     - 오행 핵심 기운: …
      - 직업/역할: …
    - ## 커리어 & 재물
-     - 불릿 2~3개로 비트코인 커리어와 재물 흐름 서술
+     - 항목 2~3개로 비트코인 커리어와 재물 흐름 서술
    - ## 인간관계
-     - 협업/대인관계 리듬과 리스크를 불릿 2개로 정리
+     - 협업/대인관계 흐름과 리스크를 항목 2개로 정리
    - ## 비트코인 전략 체크리스트
      - 1. …
      - 2. …
@@ -6422,23 +6544,23 @@ DEFAULT_COMPATIBILITY_REPORT_TEMPLATES = [
     {
         'key': 'team_vs_bitcoin',
         'label': '두 사용자의 비트코인 궁합',
-        'description': '두 사람의 팀 리포트 지침',
+        'description': '',
         'sort_order': 2,
-        'content': """{{USER_NAME}}와(과) {{TARGET_NAME}}가 함께 비트코인 투자할 때의 팀 궁합을 분석하세요.{{TEAM_EXTRA}}
+        'content': """{{USER_NAME}}와(과) {{TARGET_NAME}}가 함께 비트코인 투자할 때의 두 사람 궁합을 분석하세요.{{TEAM_EXTRA}}
 
 **작성 지침 (반드시 준수):**
 
-1. **분량**: 700~950자. 두 사람의 사주 앵커, 투자 습관, 협업 리듬, 전략 포지셔닝을 모두 다루세요.
+1. **분량**: 700~950자. 두 사람의 사주 핵심 기운, 투자 습관, 협업 흐름, 전략 포지셔닝을 모두 다루세요.
 2. **문체**: 모든 문장을 ‘~입니다’ 체로 작성하고, 각 문단의 첫 문장은 '제목: 내용' 구조로 요약하세요.
 
 3. **출력 템플릿(순서 고정, 마크다운 엄수)**:
-   - ## 팀 특성 & 호흡
-     - 사용자 이름과 비교 대상 이름을 모두 언급하는 불릿 2~3개
+   - ## 두 사람 특성 & 호흡
+     - 사용자 이름과 비교 대상 이름을 모두 언급하는 항목 2~3개
    - ## 커리어 & 재물 시너지
-     - 불릿 2개, 각 문장에 어느 사람이 어떤 역할을 맡는지 명시
+     - 항목 2개, 각 문장에 어느 사람이 어떤 역할을 맡는지 명시
    - ## 인간관계/커뮤니케이션
-     - 불릿 2개, 갈등 방지법 포함
-   - ## 팀 비트코인 전략 체크리스트
+     - 항목 2개, 갈등 방지법 포함
+   - ## 두 사람 비트코인 전략 체크리스트
      - 1. 역할 분담 규칙
      - 2. 의사결정 루틴
      - 3. 리스크 통제법
@@ -6489,7 +6611,7 @@ def _get_default_compatibility_prompt_config(agent_key):
         },
         'saju_analysis': {
             'name': '사주 추론 에이전트',
-            'description': '인물 서사를 기반으로 투자 성향과 오행 앵커를 추론합니다.',
+            'description': '인물 서사를 기반으로 투자 성향과 오행 핵심 기운을 추론합니다.',
             'system_prompt': SAJU_AGENT_ANALYSIS_PROMPT.strip(),
             'model_name': default_model_name,
             'is_active': True,
@@ -6832,6 +6954,25 @@ def compatibility_agent_generate_view(request):
     if not context:
         return JsonResponse({'ok': False, 'error': 'context is required'}, status=400)
 
+    cache_payload = payload.get('cache')
+    cache_meta = None
+    cache_entry = None
+    if cache_payload:
+        cache_meta, cache_entry = _resolve_cache_metadata(agent_key, cache_payload, context)
+        if cache_entry and cache_meta:
+            logger.info('[Compatibility:%s] Cache hit - category=%s key=%s', agent_key, cache_meta.get('category'), cache_meta.get('cache_key'))
+            cache_metadata = cache_entry.metadata or {}
+            return JsonResponse({
+                'ok': True,
+                'narrative': cache_entry.response_text,
+                'provider': cache_metadata.get('provider') or 'cache',
+                'model': cache_metadata.get('model') or cache_entry.agent_key,
+                'agent_key': agent_key,
+                'cached': True,
+                'cache_key': cache_entry.cache_key,
+                'cache_category': cache_entry.category,
+            })
+
     temp = payload.get('temperature', 0.7)
     try:
         temperature = float(temp)
@@ -6869,6 +7010,9 @@ def compatibility_agent_generate_view(request):
                 'error_type': 'api_key_missing'
             }, status=503)
         return JsonResponse({'ok': False, 'error': 'Agent request failed'}, status=502)
+
+    if cache_meta and narrative:
+        _store_cache_entry(agent_key, cache_meta, narrative, provider, model_used)
 
     return JsonResponse({
         'ok': True,
@@ -7226,6 +7370,89 @@ def compatibility_admin_quick_preset_detail_view(request, pk):
         preset.delete()
         print(f"[DELETE] Deleted preset: {preset_label} (ID: {preset_id})")
         return JsonResponse({'ok': True, 'deleted_id': preset_id, 'deleted_label': preset_label})
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def compatibility_agent_cache_list_view(request):
+    if not is_admin(request):
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'GET only'}, status=405)
+
+    search = (request.GET.get('search') or '').strip()
+    category = (request.GET.get('category') or '').strip()
+    limit = request.GET.get('limit')
+    try:
+        limit_value = int(limit) if limit else 50
+    except ValueError:
+        limit_value = 50
+    limit_value = max(1, min(limit_value, 200))
+
+    try:
+        caches = CompatibilityAgentCache.objects.all().order_by('-updated_at', '-created_at')
+        if category:
+            caches = caches.filter(category=category)
+        if search:
+            caches = caches.filter(Q(subject_name__icontains=search) | Q(target_name__icontains=search))
+
+        payload = [cache.as_dict() for cache in caches[:limit_value]]
+        return JsonResponse({'ok': True, 'caches': payload, 'limit': limit_value})
+    except (OperationalError, ProgrammingError):
+        logger.exception('[Compatibility] Failed to load agent cache list')
+        return JsonResponse({
+            'ok': False,
+            'caches': [],
+            'limit': limit_value,
+            'error': '궁합 캐시 저장소를 불러올 수 없습니다. backend/db 마이그레이션을 적용한 뒤 다시 시도해주세요.'
+        })
+
+
+@csrf_exempt
+def compatibility_agent_cache_detail_view(request, pk):
+    if not is_admin(request):
+        return JsonResponse({'ok': False, 'error': 'Admin access required'}, status=403)
+    try:
+        cache_entry = CompatibilityAgentCache.objects.get(pk=pk)
+    except CompatibilityAgentCache.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'Cache entry not found'}, status=404)
+    except (OperationalError, ProgrammingError):
+        logger.exception('[Compatibility] Cache storage unavailable for detail request')
+        return JsonResponse({'ok': False, 'error': '궁합 캐시 저장소가 준비되지 않았습니다. 마이그레이션을 다시 확인해주세요.'})
+
+    if request.method == 'GET':
+        return JsonResponse({'ok': True, 'cache': cache_entry.as_dict()})
+
+    if request.method in ['PUT', 'PATCH']:
+        payload = _load_json_body(request)
+        if payload is None:
+            return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+        updated_fields = []
+        if 'response_text' in payload and payload['response_text'] is not None:
+            cache_entry.response_text = payload['response_text']
+            updated_fields.append('response_text')
+        if 'category' in payload and payload['category'] is not None:
+            cache_entry.category = (payload['category'] or cache_entry.category or '').strip()
+            updated_fields.append('category')
+        if 'subject_name' in payload and payload['subject_name'] is not None:
+            cache_entry.subject_name = payload['subject_name']
+            updated_fields.append('subject_name')
+        if 'target_name' in payload and payload['target_name'] is not None:
+            cache_entry.target_name = payload['target_name']
+            updated_fields.append('target_name')
+        if 'metadata' in payload and isinstance(payload['metadata'], dict):
+            cache_entry.metadata = payload['metadata']
+            updated_fields.append('metadata')
+
+        if updated_fields:
+            cache_entry.save(update_fields=list(set(updated_fields + ['updated_at'])))
+        return JsonResponse({'ok': True, 'cache': cache_entry.as_dict()})
+
+    if request.method == 'DELETE':
+        cache_entry.delete()
+        return JsonResponse({'ok': True})
 
     return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
 
@@ -7759,6 +7986,295 @@ def _get_time_capsule_broadcast_setting():
     return setting
 
 
+def _estimate_vbytes(num_inputs, num_outputs):
+    """Rudimentary estimator for transaction weight in virtual bytes."""
+    num_inputs = max(1, int(num_inputs))
+    num_outputs = max(1, int(num_outputs))
+    return 10 + num_inputs * 68 + num_outputs * 31
+
+
+def _fetch_address_utxos(address, base_url=None):
+    """Fetch UTXOs for a single address via the configured explorer."""
+    base = (base_url or _get_block_explorer_base()).rstrip('/')
+    url = f'{base}/address/{address}/utxo'
+    resp = requests.get(url, timeout=8)
+    resp.raise_for_status()
+    data = resp.json()
+    utxos = []
+    for item in data:
+        txid = item.get('txid') or item.get('tx_hash') or ''
+        if not txid:
+            continue
+        vout = item.get('vout')
+        if vout is None:
+            vout = item.get('output') or item.get('n') or 0
+        utxos.append({
+            'txid': txid,
+            'vout': int(vout),
+            'value': int(item.get('value') or 0),
+            'status': item.get('status') or {},
+        })
+    return utxos
+
+
+def _locate_time_capsule_address_path(mnemonic_obj, mnemonic_plain, target_address, account=0, scan_limit=200):
+    """Return (change, index) tuple for a given address controlled by the mnemonic."""
+    capsule = (
+        TimeCapsule.objects
+        .filter(bitcoin_address=target_address, mnemonic=mnemonic_obj)
+        .only('address_index')
+        .first()
+    )
+    if capsule and capsule.address_index is not None:
+        return 0, int(capsule.address_index)
+
+    normalized_target = (target_address or '').strip()
+    if not normalized_target:
+        return None, None
+
+    scan_limit = max(1, int(scan_limit))
+    for change in (0, 1):
+        try:
+            batch = derive_bip84_addresses(
+                mnemonic_plain,
+                account=account,
+                change=change,
+                start=0,
+                count=scan_limit,
+            )
+        except Exception:
+            break
+        for idx, addr in enumerate(batch):
+            if addr == normalized_target:
+                return change, idx
+    return None, None
+
+
+def _build_op_return_script(memo_text):
+    memo = (memo_text or '').strip()
+    if not memo:
+        raise ValueError('메모 내용을 입력하세요.')
+    memo_bytes = memo.encode('utf-8')
+    if len(memo_bytes) > OP_RETURN_MAX_BYTES:
+        raise ValueError(f'메모는 최대 {OP_RETURN_MAX_BYTES}바이트까지 입력할 수 있습니다.')
+
+    if len(memo_bytes) <= 75:
+        return b'\x6a' + bytes([len(memo_bytes)]) + memo_bytes
+    return b'\x6a\x4c' + bytes([len(memo_bytes)]) + memo_bytes
+
+
+def _build_time_capsule_transaction(
+    mnemonic_obj,
+    mnemonic_plain,
+    *,
+    to_address,
+    amount_sats,
+    fee_rate,
+    account=0,
+    from_address='',
+    scan_limit=50,
+    memo_text='',
+):
+    to_address = (to_address or '').strip()
+    if not to_address:
+        raise ValueError('받는 주소를 입력하세요.')
+    if amount_sats <= 0:
+        raise ValueError('양수 금액을 입력하세요.')
+    if fee_rate <= 0:
+        raise ValueError('수수료율을 입력하세요.')
+    memo_text = (memo_text or '').strip()
+
+    candidate_utxos = []
+    if from_address:
+        change_chain, address_index = _locate_time_capsule_address_path(
+            mnemonic_obj, mnemonic_plain, from_address, account=account
+        )
+        if address_index is None:
+            raise ValueError('니모닉에서 해당 주소를 찾을 수 없습니다.')
+        utxos = _fetch_address_utxos(from_address)
+        for utxo in utxos:
+            value = int(utxo.get('value') or 0)
+            if value <= 0:
+                continue
+            candidate_utxos.append({
+                'txid': utxo['txid'],
+                'vout': int(utxo['vout']),
+                'value': value,
+                'address': from_address,
+                'change': change_chain or 0,
+                'index': address_index,
+            })
+    else:
+        scan_limit = max(1, min(int(scan_limit), 200))
+        for change_chain in (0, 1):
+            try:
+                addresses = derive_bip84_addresses(
+                    mnemonic_plain,
+                    account=account,
+                    change=change_chain,
+                    start=0,
+                    count=scan_limit,
+                )
+            except Exception as exc:
+                logger.error('Failed to derive addresses for change=%s: %s', change_chain, exc)
+                continue
+
+            for idx, address in enumerate(addresses):
+                normalized = address.strip()
+                if not normalized:
+                    continue
+                try:
+                    utxos = _fetch_address_utxos(normalized)
+                except Exception as exc:
+                    logger.warning('Failed to fetch UTXOs for derived address %s: %s', normalized, exc)
+                    continue
+                if not utxos:
+                    continue
+                for utxo in utxos:
+                    value = int(utxo.get('value') or 0)
+                    if value <= 0:
+                        continue
+                    candidate_utxos.append({
+                        'txid': utxo['txid'],
+                        'vout': int(utxo['vout']),
+                        'value': value,
+                        'address': normalized,
+                        'change': change_chain,
+                        'index': idx,
+                    })
+
+    if not candidate_utxos:
+        raise ValueError('사용 가능한 주소의 UTXO가 없습니다.')
+
+    candidate_utxos.sort(key=lambda x: x['value'])
+    selected = []
+    total_in = 0
+    for utxo in candidate_utxos:
+        selected.append(utxo)
+        total_in += utxo['value']
+        est_fee = fee_rate * _estimate_vbytes(len(selected), 2)
+        if total_in >= amount_sats + est_fee:
+            break
+
+    est_needed_fee = fee_rate * _estimate_vbytes(len(selected) or 1, 2)
+    if total_in < amount_sats + est_needed_fee:
+        raise ValueError('잔액이 부족합니다. (수수료 포함)')
+
+    key_cache = {}
+    tx = Transaction(network='bitcoin')
+    for utxo in selected:
+        cache_key = f"{utxo['change']}:{utxo['index']}"
+        if cache_key not in key_cache:
+            key_cache[cache_key] = derive_bip84_private_key(
+                mnemonic_plain,
+                account=account,
+                change=utxo['change'] or 0,
+                index=utxo['index'],
+            )
+        tx.add_input(
+            bytes.fromhex(utxo['txid']),
+            int(utxo['vout']),
+            keys=[key_cache[cache_key]],
+            value=int(utxo['value']),
+            address=utxo['address'],
+            script_type='sig_pubkey',
+            witness_type='segwit',
+        )
+
+    tx.add_output(int(amount_sats), to_address)
+    memo_output_index = None
+    if memo_text:
+        memo_output_index = tx.add_output(0, lock_script=_build_op_return_script(memo_text))
+    provisional_change = total_in - amount_sats
+    change_output_index = None
+    change_address = selected[0]['address']
+    if provisional_change > 0:
+        change_output_index = tx.add_output(int(provisional_change), change_address, change=True)
+
+    base_outputs = 1 + (1 if memo_output_index is not None else 0)
+    num_outputs = base_outputs + (1 if change_output_index is not None else 0)
+    estimated_size = _estimate_vbytes(len(selected), num_outputs)
+    target_fee = fee_rate * estimated_size
+    final_change = total_in - amount_sats - target_fee
+
+    if final_change < 0:
+        raise ValueError('잔액이 부족합니다. 수수료율을 낮춰주세요.')
+
+    dust_burned_sats = 0
+    if change_output_index is not None:
+        if final_change <= 0:
+            tx.outputs.pop(change_output_index)
+            change_output_index = None
+            num_outputs = base_outputs
+        elif final_change < DUST_LIMIT:
+            dust_burned_sats = int(final_change)
+            tx.outputs.pop(change_output_index)
+            change_output_index = None
+            num_outputs = base_outputs
+            final_change = 0
+        else:
+            tx.outputs[change_output_index].value = int(final_change)
+    else:
+        if final_change >= DUST_LIMIT:
+            change_output_index = tx.add_output(int(final_change), change_address, change=True)
+            num_outputs = base_outputs + 1
+        elif final_change > 0:
+            dust_burned_sats = int(final_change)
+            final_change = 0
+
+    tx.sign_and_update()
+    tx.calc_weight_units()
+    final_vsize = tx.vsize or _estimate_vbytes(len(selected), num_outputs)
+    final_fee = total_in - sum(int(o.value) for o in tx.outputs)
+    raw_tx = tx.raw_hex()
+
+    outputs = []
+    change_sats = 0
+    for idx, out in enumerate(tx.outputs):
+        if change_output_index == idx:
+            change_sats = int(out.value)
+        lock_script = getattr(out, 'lock_script', b'') or b''
+        outputs.append({
+            'address': out.address,
+            'value': int(out.value),
+            'is_change': change_output_index == idx,
+            'is_memo': memo_output_index == idx or lock_script.startswith(b'\x6a'),
+        })
+
+    inputs_summary = [{
+        'txid': utxo['txid'],
+        'vout': utxo['vout'],
+        'value': utxo['value'],
+        'address': utxo['address'],
+        'change': utxo['change'],
+        'index': utxo['index'],
+    } for utxo in selected]
+
+    effective_fee_rate = fee_rate
+    if final_vsize:
+        effective_fee_rate = final_fee / final_vsize
+
+    metadata = {
+        'inputs': inputs_summary,
+        'outputs': outputs,
+        'total_input_sats': total_in,
+        'amount_sats': amount_sats,
+        'change_sats': change_sats,
+        'fee_sats': final_fee,
+        'fee_rate_sats_vb': effective_fee_rate,
+        'requested_fee_rate_sats_vb': fee_rate,
+        'vsize': final_vsize,
+        'raw_tx': raw_tx,
+        'txid': tx.txid,
+        'change_address': change_address if change_sats > 0 else '',
+        'dust_limit_sats': DUST_LIMIT,
+        'dust_burned_sats': dust_burned_sats,
+        'memo_text': memo_text,
+    }
+
+    return tx, metadata
+
+
 @csrf_exempt
 def admin_time_capsule_mnemonic_view(request):
     """Create or fetch the dedicated time capsule mnemonic."""
@@ -7800,7 +8316,101 @@ def admin_time_capsule_mnemonic_view(request):
             logger.error('Failed to generate time capsule mnemonic: %s', exc)
             return JsonResponse({'ok': False, 'error': '니모닉 생성에 실패했습니다.'}, status=500)
 
+    if request.method in ('PUT', 'PATCH'):
+        mnemonic_obj = _get_time_capsule_mnemonic()
+        if not mnemonic_obj:
+            return JsonResponse({'ok': False, 'error': '수정할 니모닉이 존재하지 않습니다.'}, status=404)
+
+        try:
+            payload = json.loads(request.body or '{}')
+        except json.JSONDecodeError:
+            return JsonResponse({'ok': False, 'error': '잘못된 JSON 데이터입니다.'}, status=400)
+
+        new_mnemonic = (payload.get('mnemonic') or '').strip()
+        if not new_mnemonic:
+            return JsonResponse({'ok': False, 'error': '니모닉을 입력하세요.'}, status=400)
+
+        try:
+            normalized = _normalize_mnemonic(new_mnemonic)
+            validator = MnemonicValidator('english')
+            words = normalized.split()
+            if len(words) not in (12, 15, 18, 21, 24):
+                return JsonResponse({'ok': False, 'error': '유효한 단어 수의 니모닉을 입력하세요.'}, status=400)
+            if not validator.check(normalized):
+                return JsonResponse({'ok': False, 'error': '유효하지 않은 BIP39 니모닉입니다.'}, status=400)
+        except Exception as exc:
+            logger.error('Failed to validate updated mnemonic: %s', exc)
+            return JsonResponse({'ok': False, 'error': '니모닉 검증에 실패했습니다.'}, status=400)
+
+        update_fields = ['mnemonic']
+        mnemonic_obj.mnemonic = normalized
+
+        if payload.get('reset_address_index'):
+            mnemonic_obj.next_address_index = 0
+            update_fields.append('next_address_index')
+        elif 'next_address_index' in payload:
+            try:
+                next_index = max(0, int(payload.get('next_address_index')))
+            except (TypeError, ValueError):
+                next_index = None
+            if next_index is not None:
+                mnemonic_obj.next_address_index = next_index
+                update_fields.append('next_address_index')
+
+        mnemonic_obj.save(update_fields=update_fields)
+
+        return JsonResponse({
+            'ok': True,
+            'mnemonic_id': mnemonic_obj.id,
+            'mnemonic': mnemonic_obj.get_mnemonic(),
+            'has_mnemonic': True,
+            'assigned_count': mnemonic_obj.time_capsules.count(),
+            'next_address_index': int(mnemonic_obj.next_address_index or 0),
+        })
+
     return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def admin_time_capsule_build_transaction_view(request):
+    """Build a transaction and return details without broadcasting."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+    payload = _load_json_body(request) or {}
+    to_address = (payload.get('to_address') or '').strip()
+    amount_sats = _parse_int(payload.get('amount_sats'))
+    fee_rate = _parse_int(payload.get('fee_rate_sats_vb'))
+    account = max(0, _parse_int(payload.get('account'), 0) or 0)
+    from_address = (payload.get('from_address') or '').strip()
+    memo_text = (payload.get('memo_text') or '').strip()
+
+    mnemonic_obj = _get_time_capsule_mnemonic()
+    if not mnemonic_obj:
+        return JsonResponse({'ok': False, 'error': '타임캡슐 니모닉이 없습니다.'}, status=404)
+
+    try:
+        mnemonic_plain = mnemonic_obj.get_mnemonic()
+    except Exception:
+        return JsonResponse({'ok': False, 'error': '니모닉을 불러오지 못했습니다.'}, status=500)
+
+    try:
+        _, details = _build_time_capsule_transaction(
+            mnemonic_obj,
+            mnemonic_plain,
+            to_address=to_address,
+            amount_sats=amount_sats,
+            fee_rate=fee_rate,
+            account=account,
+            from_address=from_address,
+            memo_text=memo_text,
+        )
+        return JsonResponse({'ok': True, **details})
+    except ValueError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+    except Exception as exc:
+        logger.error('Failed to build time capsule transaction: %s', exc)
+        return JsonResponse({'ok': False, 'error': '트랜잭션 생성에 실패했습니다.'}, status=500)
 
 
 @csrf_exempt
@@ -7887,6 +8497,195 @@ def admin_time_capsule_broadcast_test_view(request):
 
 
 @csrf_exempt
+def admin_time_capsule_xpub_view(request):
+    """Expose the BIP84 account xpub (zpub) for the time capsule mnemonic."""
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+    mnemonic_obj = _get_time_capsule_mnemonic()
+    if not mnemonic_obj:
+        return JsonResponse({'ok': False, 'error': '타임캡슐 니모닉이 없습니다.'}, status=404)
+
+    try:
+        account = max(0, int(request.GET.get('account', '0')))
+    except Exception:
+        account = 0
+
+    try:
+        mnemonic_plain = mnemonic_obj.get_mnemonic()
+    except Exception as exc:
+        logger.error('Failed to read time capsule mnemonic for xpub: %s', exc)
+        return JsonResponse({'ok': False, 'error': '니모닉을 읽지 못했습니다.'}, status=500)
+
+    try:
+        zpub = derive_bip84_account_zpub(mnemonic_plain, account=account)
+        try:
+            master_fingerprint = derive_master_fingerprint(mnemonic_plain)
+        except Exception:
+            master_fingerprint = None
+        return JsonResponse({
+            'ok': True,
+            'mnemonic_id': mnemonic_obj.id,
+            'account': account,
+            'xpub': zpub,
+            'zpub': zpub,
+            'master_fingerprint': master_fingerprint,
+        })
+    except Exception as exc:
+        logger.error('Failed to derive time capsule xpub: %s', exc)
+        return JsonResponse({'ok': False, 'error': 'xpub 생성에 실패했습니다.'}, status=500)
+
+
+@csrf_exempt
+def admin_time_capsule_xpub_balance_view(request):
+    """Query explorer balances by deriving addresses from the time capsule xpub."""
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+    mnemonic_obj = _get_time_capsule_mnemonic()
+    if not mnemonic_obj:
+        return JsonResponse({'ok': False, 'error': '타임캡슐 니모닉이 없습니다.'}, status=404)
+
+    try:
+        account = max(0, int(request.GET.get('account', '0')))
+    except Exception:
+        account = 0
+    include_mempool = str(request.GET.get('include_mempool', '1')).lower() in ('1', 'true', 'yes')
+    both_chains = str(request.GET.get('both_chains', '1')).lower() in ('1', 'true', 'yes')
+    try:
+        count = max(1, min(int(request.GET.get('count', '20')), 100))
+    except Exception:
+        count = 20
+
+    try:
+        mnemonic_plain = mnemonic_obj.get_mnemonic()
+        zpub = derive_bip84_account_zpub(mnemonic_plain, account=account)
+    except Exception as exc:
+        logger.error('Failed to derive time capsule xpub for balance lookup: %s', exc)
+        return JsonResponse({'ok': False, 'error': 'xpub 생성에 실패했습니다.'}, status=500)
+
+    try:
+        addresses = derive_bip84_addresses(
+            mnemonic_plain, account=account, change=0, start=0, count=count
+        )
+        if both_chains:
+            addresses += derive_bip84_addresses(
+                mnemonic_plain, account=account, change=1, start=0, count=count
+            )
+    except Exception as exc:
+        logger.error('Failed to derive addresses for time capsule balance lookup: %s', exc)
+        return JsonResponse({'ok': False, 'error': f'주소 생성 실패: {exc}'}, status=500)
+
+    try:
+        by_address = fetch_blockstream_balances(addresses, include_mempool=include_mempool)
+        total = calc_total_sats(by_address)
+    except Exception as exc:
+        logger.error('Failed to fetch balances for time capsule addresses: %s', exc)
+        return JsonResponse({'ok': False, 'error': '잔액 조회에 실패했습니다.'}, status=502)
+
+    return JsonResponse({
+        'ok': True,
+        'xpub': zpub,
+        'account': account,
+        'balance_sats': max(0, total),
+        'include_mempool': include_mempool,
+        'both_chains': both_chains,
+        'count_per_chain': count,
+        'address_count': len(addresses),
+        'by_address': by_address,
+    })
+
+
+@csrf_exempt
+def admin_time_capsule_broadcast_transaction_view(request):
+    """Construct and broadcast a transaction from the time capsule mnemonic."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+    payload = _load_json_body(request) or {}
+    from_address = (payload.get('from_address') or '').strip()
+    to_address = (payload.get('to_address') or '').strip()
+    amount_sats = _parse_int(payload.get('amount_sats'))
+    fee_rate = _parse_int(payload.get('fee_rate_sats_vb'))
+    account = max(0, _parse_int(payload.get('account'), 0) or 0)
+    raw_tx_payload = (payload.get('raw_tx') or '').strip()
+    memo_text = (payload.get('memo_text') or '').strip()
+
+    summary = {}
+    tx = None
+    if raw_tx_payload:
+        try:
+            tx = Transaction.parse_hex(raw_tx_payload, network='bitcoin')
+            tx.calc_weight_units()
+            summary = {
+                'raw_tx': raw_tx_payload,
+                'txid': tx.txid,
+                'fee_sats': payload.get('fee_sats'),
+                'fee_rate_sats_vb': fee_rate or payload.get('fee_rate_sats_vb'),
+                'vsize': tx.vsize,
+            }
+        except Exception as exc:
+            logger.error('Failed to parse provided raw transaction: %s', exc)
+            return JsonResponse({'ok': False, 'error': '유효한 raw 트랜잭션이 아닙니다.'}, status=400)
+    else:
+        mnemonic_obj = _get_time_capsule_mnemonic()
+        if not mnemonic_obj:
+            return JsonResponse({'ok': False, 'error': '타임캡슐 니모닉이 없습니다.'}, status=404)
+        try:
+            mnemonic_plain = mnemonic_obj.get_mnemonic()
+        except Exception:
+            return JsonResponse({'ok': False, 'error': '니모닉을 불러오지 못했습니다.'}, status=500)
+        try:
+            tx, summary = _build_time_capsule_transaction(
+                mnemonic_obj,
+                mnemonic_plain,
+                to_address=to_address,
+                amount_sats=amount_sats,
+                fee_rate=fee_rate,
+                account=account,
+                from_address=from_address,
+                memo_text=memo_text,
+            )
+        except ValueError as exc:
+            return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+        except Exception as exc:
+            logger.error('Failed to build transaction for broadcast: %s', exc)
+            return JsonResponse({'ok': False, 'error': '트랜잭션 생성에 실패했습니다.'}, status=500)
+
+    setting = _get_time_capsule_broadcast_setting()
+    stored_value, hostname, scheme, normalized_port = _parse_broadcast_target(
+        setting.fullnode_host, setting.fullnode_port
+    )
+    broadcast_url = f"{scheme}://{hostname}:{normalized_port}/api/tx"
+    try:
+        resp = requests.post(
+            broadcast_url,
+            data=summary['raw_tx'],
+            timeout=10,
+            headers={'Content-Type': 'text/plain'},
+        )
+        resp.raise_for_status()
+        broadcast_result = resp.text.strip()
+    except Exception as exc:
+        logger.error('Time capsule transaction broadcast failed via %s: %s', broadcast_url, exc)
+        return JsonResponse({'ok': False, 'error': f'트랜잭션 전파에 실패했습니다. ({exc})'}, status=502)
+
+    response_data = {
+        'ok': True,
+        'txid': summary.get('txid'),
+        'raw_tx': summary.get('raw_tx'),
+        'fee_sats': summary.get('fee_sats'),
+        'fee_rate_sats_vb': summary.get('fee_rate_sats_vb'),
+        'vsize': summary.get('vsize'),
+        'inputs': summary.get('inputs', []),
+        'outputs': summary.get('outputs', []),
+        'broadcast_url': broadcast_url,
+        'broadcast_response': broadcast_result or summary.get('txid'),
+    }
+    return JsonResponse(response_data)
+
+
+@csrf_exempt
 def admin_time_capsule_fee_estimates_view(request):
     """Fetch current fee estimates from mempool.space."""
     if request.method != 'GET':
@@ -7952,6 +8751,38 @@ def admin_time_capsule_assign_address_view(request, pk):
     except Exception as exc:
         logger.error('Failed to assign bitcoin address to capsule %s: %s', pk, exc)
         return JsonResponse({'ok': False, 'error': '주소 할당에 실패했습니다.'}, status=500)
+
+
+@csrf_exempt
+def admin_time_capsule_unassign_address_view(request, pk):
+    """Clear the assigned bitcoin address from a time capsule entry."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    try:
+        with transaction.atomic():
+            capsule = TimeCapsule.objects.select_for_update().get(pk=pk)
+            if not capsule.bitcoin_address and not capsule.mnemonic_id:
+                return JsonResponse({
+                    'ok': True,
+                    'already_unassigned': True,
+                    'capsule': capsule.as_dict(),
+                })
+
+            capsule.bitcoin_address = ''
+            capsule.mnemonic = None
+            capsule.address_index = None
+            capsule.save(update_fields=['bitcoin_address', 'mnemonic', 'address_index'])
+
+            return JsonResponse({
+                'ok': True,
+                'capsule': capsule.as_dict(),
+            })
+    except TimeCapsule.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': '타임캡슐을 찾을 수 없습니다.'}, status=404)
+    except Exception as exc:
+        logger.error('Failed to unassign bitcoin address from capsule %s: %s', pk, exc)
+        return JsonResponse({'ok': False, 'error': '주소 할당 해제에 실패했습니다.'}, status=500)
 
 @csrf_exempt
 def time_capsule_save_view(request):
@@ -8030,6 +8861,31 @@ def admin_time_capsule_update_coupon_view(request, pk):
         logger.error(f"Error updating time capsule: {e}")
         return JsonResponse({'error': str(e)}, status=500)
 
+
+@csrf_exempt
+def admin_time_capsule_record_broadcast_view(request, pk):
+    if request.method not in ['POST', 'PUT', 'PATCH']:
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    payload = _load_json_body(request)
+    if payload is None:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    txid = (payload.get('txid') or '').strip()
+    if not txid:
+        return JsonResponse({'error': 'txid is required'}, status=400)
+
+    try:
+        capsule = TimeCapsule.objects.get(pk=pk)
+    except TimeCapsule.DoesNotExist:
+        return JsonResponse({'error': 'Time capsule not found'}, status=404)
+
+    capsule.broadcast_txid = txid
+    capsule.broadcasted_at = timezone.now()
+    capsule.save(update_fields=['broadcast_txid', 'broadcasted_at'])
+
+    return JsonResponse({'ok': True, 'capsule': capsule.as_dict()})
+
 @csrf_exempt
 def admin_time_capsule_delete_view(request, pk):
     if request.method != 'DELETE':
@@ -8047,10 +8903,10 @@ def admin_time_capsule_delete_view(request, pk):
         logger.error(f"Error deleting time capsule: {e}")
         return JsonResponse({'error': str(e)}, status=500)
 DEFAULT_BROADCAST_NODE = {
-    'label': 'Nunchuk Electrum',
-    'host': 'https://mainnet.nunchuk.io',
+    'label': 'mempool.space',
+    'host': 'https://mempool.space',
     'port': 443,
-    'description': 'Nunchuk에서 공개하는 메인넷 Electrum 풀노드 엔드포인트입니다.',
+    'description': 'mempool.space에서 제공하는 공개 REST 풀노드 엔드포인트입니다.',
 }
 
 DEPRECATED_BROADCAST_HOSTS = {
@@ -8060,6 +8916,8 @@ DEPRECATED_BROADCAST_HOSTS = {
     'coconutwallet.io',
     'https://nunchuk.io',
     'nunchuk.io',
+    'https://mainnet.nunchuk.io',
+    'mainnet.nunchuk.io',
 }
 
 RECOMMENDED_BROADCAST_NODES = [

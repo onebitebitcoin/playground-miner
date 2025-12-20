@@ -32,7 +32,7 @@
                 {{ selectedBitcoinHighlight.description }}
               </p>
             </div>
-            <div v-else class="text-sm text-slate-500">표시할 앵커가 없습니다.</div>
+            <div v-else class="text-sm text-slate-500">표시할 핵심 기운이 없습니다.</div>
           </div>
           <div class="flex flex-wrap gap-2">
             <button
@@ -1083,12 +1083,12 @@ const REPORT_TEMPLATE_DEFAULTS = {
 3. **출력 템플릿(순서 고정, 마크다운 엄수)**:
    - ## 프로필 브리핑
      - 일간: …
-     - 오행 앵커: …
+     - 오행 핵심 기운: …
      - 직업/역할: …
    - ## 커리어 & 재물
-     - 불릿 2~3개로 비트코인 커리어와 재물 흐름 서술
+     - 항목 2~3개로 비트코인 커리어와 재물 흐름 서술
    - ## 인간관계
-     - 협업/대인관계 리듬과 리스크를 불릿 2개로 정리
+     - 협업/대인관계 흐름과 리스크를 항목 2개로 정리
    - ## 비트코인 전략 체크리스트
      - 1. …
      - 2. …
@@ -1097,21 +1097,21 @@ const REPORT_TEMPLATE_DEFAULTS = {
 4. **근거 & 어휘**: 저장된 사주·스토리·오행 분포에서 최소 2가지 근거를 명시하고, 한자 대신 풀이형 표현을 사용하세요.
 
 5. **금지 사항**: 인사말, 잡담, “모르겠다” 류 표현, 표 생략, 섹션 누락 금지.`,
-  team_vs_bitcoin: `{{USER_NAME}}와(과) {{TARGET_NAME}}가 함께 비트코인 투자할 때의 팀 궁합을 분석하세요.{{TEAM_EXTRA}}
+  team_vs_bitcoin: `{{USER_NAME}}와(과) {{TARGET_NAME}}가 함께 비트코인 투자할 때의 두 사람 궁합을 분석하세요.{{TEAM_EXTRA}}
 
 **작성 지침 (반드시 준수):**
 
-1. **분량**: 700~950자. 두 사람의 사주 앵커, 투자 습관, 협업 리듬, 전략 포지셔닝을 모두 다루세요.
+1. **분량**: 700~950자. 두 사람의 사주 핵심 기운, 투자 습관, 협업 흐름, 전략 포지셔닝을 모두 다루세요.
 2. **문체**: 모든 문장을 ‘~입니다’ 체로 작성하고, 각 문단의 첫 문장은 '제목: 내용' 구조로 요약하세요.
 
 3. **출력 템플릿(순서 고정, 마크다운 엄수)**:
-   - ## 팀 특성 & 호흡
-     - 사용자 이름과 비교 대상 이름을 모두 언급하는 불릿 2~3개
+   - ## 두 사람 특성 & 호흡
+     - 사용자 이름과 비교 대상 이름을 모두 언급하는 항목 2~3개
    - ## 커리어 & 재물 시너지
-     - 불릿 2개, 각 문장에 어느 사람이 어떤 역할을 맡는지 명시
+     - 항목 2개, 각 문장에 어느 사람이 어떤 역할을 맡는지 명시
    - ## 인간관계/커뮤니케이션
-     - 불릿 2개, 갈등 방지법 포함
-   - ## 팀 비트코인 전략 체크리스트
+     - 항목 2개, 갈등 방지법 포함
+   - ## 두 사람 비트코인 전략 체크리스트
      - 1. 역할 분담 규칙
      - 2. 의사결정 루틴
      - 3. 리스크 통제법
@@ -1119,6 +1119,19 @@ const REPORT_TEMPLATE_DEFAULTS = {
 4. **근거**: 각 섹션에서 최소 한 번씩 두 사람의 사주 요약 또는 스토리에서 직접 언급한 특징을 인용하세요.
 
 5. **금지 사항**: 인사말, 모호한 표현, 생략표, 섹션 누락 금지.`
+}
+
+const CACHE_CATEGORY = {
+  STORY: 'story',
+  SAJU_SUMMARY: 'saju_summary',
+  USER_REPORT: 'user_report',
+  TARGET_REPORT: 'target_report',
+  TEAM_REPORT: 'duo_report',
+  PAIR_REPORT: 'pair_report',
+  HIGHLIGHT_USER: 'highlight_user',
+  HIGHLIGHT_TARGET: 'highlight_target',
+  HIGHLIGHT_DUO: 'highlight_duo',
+  HIGHLIGHT_PAIR: 'highlight_pair'
 }
 
 const BITCOIN_CANVAS_PROFILE = {
@@ -1227,7 +1240,7 @@ const STRATEGY_LIBRARY = {
 
 const TIME_WINDOWS = [
   { key: 'dawn', label: '새벽 (23:00-05:00)', bonus: 6, title: '직감이 강해지는 새벽', description: '새벽에 태어난 사람은 직감이 강하지만, 비트코인 저축에서는 감정보다 규칙이 중요합니다. 정해진 날짜에 자동 적립하세요.' },
-  { key: 'morning', label: '아침 (05:00-11:00)', bonus: 4, title: '규칙적인 아침 리듬', description: '아침 에너지는 꾸준함과 루틴을 강화합니다. 매주 또는 매월 정기 적립 일정을 아침 시간으로 정하면 좋습니다.' },
+  { key: 'morning', label: '아침 (05:00-11:00)', bonus: 4, title: '규칙적인 아침 루틴', description: '아침 에너지는 꾸준함과 루틴을 강화합니다. 매주 또는 매월 정기 적립 일정을 아침 시간으로 정하면 좋습니다.' },
   { key: 'afternoon', label: '낮 (11:00-17:00)', bonus: 2, title: '균형 잡힌 낮의 안정감', description: '낮 시간대는 균형과 안정을 상징합니다. 시장 변동성에 흔들리지 말고 장기 관점을 유지하세요.' },
   { key: 'evening', label: '저녁 (17:00-23:00)', bonus: 5, title: '차분한 저녁의 인내', description: '저녁 에너지는 복기와 성찰에 최적화되어 있습니다. 하루를 마무리하며 비트코인 저축 목표를 다시 상기하세요.' },
   { key: 'unknown', label: '시간 미상', bonus: 0, title: '중립 시간대', description: '시간 정보를 모르는 경우에는 매월 정해진 날짜에 자동 적립하는 루틴을 만드는 것이 가장 안전합니다.' }
@@ -1347,7 +1360,7 @@ function openPromptDebug() {
     prompts.push({ title: '2. 비교대상 vs 비트코인', content: targetVsBitcoinResult.value.debugPrompt })
   }
   if (userVsTargetResult.value?.debugPrompt) {
-    prompts.push({ title: '3. 팀 궁합 vs 비트코인', content: userVsTargetResult.value.debugPrompt })
+    prompts.push({ title: '3. 두 사람 궁합 vs 비트코인', content: userVsTargetResult.value.debugPrompt })
   }
   if (pairCompatibilityResult.value?.debugPrompt) {
     prompts.push({ title: '4. 두 사람 직접 궁합', content: pairCompatibilityResult.value.debugPrompt })
@@ -1618,13 +1631,23 @@ function buildPresetProfileContext(preset, roleLabel) {
 
 async function runPresetStoryAgent(preset, roleLabel) {
   const { name, baseContext } = buildPresetProfileContext(preset, roleLabel)
+  const presetProfile = {
+    name,
+    birthdate: preset.birthdate || '',
+    birthtime: preset.birth_time || preset.birthtime || '',
+    genderCode: preset.gender || ''
+  }
   const storyResponse = await runCompatibilityAgent({
     agentKey: 'story_extractor',
     context: baseContext,
-    temperature: 0.65
+    temperature: 0.65,
+    cache: buildCachePayload({
+      category: CACHE_CATEGORY.STORY,
+      profile: presetProfile
+    })
   })
   if (!storyResponse?.ok) {
-    throw new Error(storyResponse?.error || '스토리 에이전트 실패')
+    throw new Error(storyResponse?.error || '스토리 생성 실패')
   }
   return {
     name,
@@ -1641,16 +1664,25 @@ async function runPresetSajuAgent({ name, baseContext, story }) {
     story || '별도 서사가 제공되지 않았습니다.',
     '',
     '## 요청',
-    `${name}의 사주적 앵커와 비트코인 투자 태도를 분석하세요.`
+    `${name}의 사주 핵심 기운과 비트코인 투자 태도를 분석하세요.`
   ].join('\n')
 
   const sajuResponse = await runCompatibilityAgent({
     agentKey: 'saju_analysis',
     context: sajuContext,
-    temperature: 0.45
+    temperature: 0.45,
+    cache: buildCachePayload({
+      category: CACHE_CATEGORY.SAJU_SUMMARY,
+      profile: {
+        name,
+        birthdate: (baseContext.match(/생년월일:\s*(.*)/)?.[1] || '').trim(),
+        birthtime: (baseContext.match(/태어난 시간:\s*(.*)/)?.[1] || '').trim() || '',
+        genderCode: ''
+      }
+    })
   })
   if (!sajuResponse?.ok) {
-    throw new Error(sajuResponse?.error || '사주 요약 에이전트 실패')
+    throw new Error(sajuResponse?.error || '사주 요약 생성 실패')
   }
   return (sajuResponse.narrative || '').trim()
 }
@@ -1678,24 +1710,25 @@ function buildFallbackHighlights(text) {
   return picked.map((line) => `- ==${line}==`).join('\n')
 }
 
-async function highlightNarrativeText(originalText) {
+async function highlightNarrativeText(originalText, cachePayload) {
   const trimmed = (originalText || '').trim()
   if (!trimmed) return ''
   const highlightGuide = [
     '## 역할',
-    '당신은 사주/궁합 리포트에서 임팩트 있는 구절을 뽑아내는 전문 에디터입니다.',
+    '당신은 사주/궁합 리포트에서 핵심 구절만 골라내는 전문 하이라이트 에디터입니다.',
     '## 목표',
-    '원문에서 반드시 기억해야 할 구절만 선택해 <mark> 형광 표시로 감싸세요.',
+    "원문에서 8~15%만 선택해 ==형광== 처리하고, 섹션별 마크다운 구조로 정리하세요.",
     '## 출력 형식',
-    '- 원문 전체를 그대로 출력하되, 강조할 구절만 <mark>...</mark>로 감싸세요.',
-    '- 새로운 문장이나 해설을 추가하지 마세요.',
-    '- 하이라이트는 2~4개 구절로 제한하세요.'
+    '- 원문 그대로를 복사하지 말고, 해당 구절을 구분된 섹션(궁합 결론, 오행 요약 등)에 bullet으로 정리하세요.',
+    "- 각 bullet 안에서 필요한 구절만 ==이렇게== 감싸고 나머지는 그대로 둡니다.",
+    '- 설명이나 메타 코멘트는 금지합니다.'
   ].join('\n')
   const context = `${highlightGuide}\n\n[원문]\n${trimmed}`
   const response = await runCompatibilityAgent({
     agentKey: 'highlight_story',
     context,
-    temperature: 0.15
+    temperature: 0.15,
+    cache: cachePayload || null
   })
   if (response?.ok && response?.narrative) {
     return response.narrative.trim()
@@ -1703,7 +1736,7 @@ async function highlightNarrativeText(originalText) {
   return ''
 }
 
-async function applyHighlightToResult(result) {
+async function applyHighlightToResult(result, cachePayload = null) {
   if (!result?.narrative) {
     if (result) {
       result.highlightLoading = false
@@ -1714,8 +1747,8 @@ async function applyHighlightToResult(result) {
   result.highlightLoading = true
   updateHighlightStageStatus()
   try {
-    const highlighted = await highlightNarrativeText(result.narrative)
-    const hasMarks = typeof highlighted === 'string' && /<mark/i.test(highlighted)
+    const highlighted = await highlightNarrativeText(result.narrative, cachePayload)
+    const hasMarks = typeof highlighted === 'string' && /==.+==/.test(highlighted)
     const fallback = !hasMarks ? buildFallbackHighlights(result.narrative) : ''
     if (highlighted && hasMarks) {
       result.highlightedNarrative = highlighted
@@ -1723,7 +1756,7 @@ async function applyHighlightToResult(result) {
       result.highlightedNarrative = fallback
     }
   } catch (error) {
-    console.warn('하이라이트 에이전트 실패', error)
+    console.warn('하이라이트 작업 실패', error)
     const fallback = buildFallbackHighlights(result.narrative)
     if (fallback) {
       result.highlightedNarrative = fallback
@@ -1744,12 +1777,17 @@ async function runStoryAgentForProfile(profile, { roleLabel = '사용자', baseD
     lines.push(`- 참고 메모: ${baseDescription}`)
   }
   const context = lines.join('\n')
+  const cachePayload = buildCachePayload({
+    category: CACHE_CATEGORY.STORY,
+    profile
+  })
   let response
   try {
     response = await runCompatibilityAgent({
       agentKey: 'story_extractor',
       context,
-      temperature: 0.6
+      temperature: 0.6,
+      cache: cachePayload
     })
   } catch (error) {
     error.agentPrompt = context
@@ -1794,7 +1832,7 @@ function buildPersonTargetMeta() {
     label: `${name} 사주 캔버스`,
     summaryHighlight: `${zodiac} · ${yinYang}의 기운 · 주력 ${element.label}`,
     description: `${targetBirthdate.value} 출생 ${genderLabel} · ${timeLabel} 기준 분석입니다.`,
-    profileNarrative: `${name}의 사주적 앵커는 ${element.label}이며 ${element.summary} 성향이 두드러집니다.`,
+    profileNarrative: `${name}의 사주 핵심 기운은 ${element.label}이며 ${element.summary} 성향이 두드러집니다.`,
     highlights: buildPersonHighlights(element, zodiac, yinYang, timeLabel),
     dominantElementKey: element.key,
     agentPrompt: `${name}의 사주를 기준으로 사용자와의 궁합을 분석하라.`,
@@ -1843,12 +1881,14 @@ function buildSubjectProfile(payload, { fallbackName, assumeTimeUnknown } = {}) 
   if (!payload) return null
   const name = payload.userName || payload.name || fallbackName || DEFAULT_USER_NAME
   const birthdate = `${payload.year}-${String(payload.month).padStart(2, '0')}-${String(payload.day).padStart(2, '0')}`
-  const timeLabel = payload.time ? payload.time : assumeTimeUnknown ? '시간 미상' : '미입력'
+  const rawBirthTime = payload.time || ''
+  const timeLabel = rawBirthTime ? rawBirthTime : assumeTimeUnknown ? '시간 미상' : '미입력'
   const sajuData = calculateSajuElement(payload.year, payload.month, payload.day)
   const element = sajuData.element
   const zodiac = calculateZodiacSign(payload.year, payload.month, payload.day)
   const yinYang = calculateYinYang(payload.year, payload.month, payload.day)
-  const genderLabel = payload.gender === 'male' ? '남성' : payload.gender === 'female' ? '여성' : (payload.gender || '미입력')
+  const genderCode = payload.gender || ''
+  const genderLabel = genderCode === 'male' ? '남성' : genderCode === 'female' ? '여성' : (genderCode || '미입력')
   const facts = [
     `생년월일: ${birthdate}`,
     `성별: ${genderLabel}`,
@@ -1867,6 +1907,8 @@ function buildSubjectProfile(payload, { fallbackName, assumeTimeUnknown } = {}) 
     elementLabel: element.label,
     elementSummary: element.summary,
     timeLabel,
+    birthtime: rawBirthTime || '',
+    genderCode,
     facts,
     elementHighlights
   }
@@ -1905,6 +1947,40 @@ function buildTargetContext(targetProfileMeta, targetPayload, { targetTimeUnknow
     title: `${targetName} 기준선:`,
     lines
   }
+}
+
+function serializeProfileForCache(profile) {
+  if (!profile) return null
+  const birthdate = profile.birthdate || profile.birthDate || ''
+  const birthTime = profile.birthtime || profile.birth_time || profile.birthTime || ''
+  const genderCode = profile.genderCode || profile.gender || ''
+  const payload = {
+    name: profile.name || '',
+    birthdate,
+    birth_time: birthTime || null,
+    gender: genderCode || '',
+    zodiac: profile.zodiac || '',
+    yin_yang: profile.yinYang || '',
+    element: profile.elementLabel || profile.element || ''
+  }
+  return payload
+}
+
+function buildCachePayload({ category, profile, targetProfile, extra } = {}) {
+  if (!category) return null
+  const payload = { category }
+  const serializedProfile = serializeProfileForCache(profile)
+  if (serializedProfile) {
+    payload.profile = serializedProfile
+  }
+  const serializedTarget = serializeProfileForCache(targetProfile)
+  if (serializedTarget) {
+    payload.target_profile = serializedTarget
+  }
+  if (extra && Object.keys(extra).length) {
+    payload.extra = extra
+  }
+  return payload
 }
 
 function buildAgentContextPayload({
@@ -2140,14 +2216,14 @@ async function handleCompatibility() {
           throw storyTaskError
         }
       }
-      const storyDetail = storyNotes.length ? `스토리 에이전트 완료 · ${storyNotes.join(' / ')}` : '스토리 에이전트 완료'
+      const storyDetail = storyNotes.length ? `스토리 정리 완료 · ${storyNotes.join(' / ')}` : '스토리 정리 완료'
       setLoadingStepStatus('story_stage', 'done', storyDetail)
     } catch (storyError) {
-      console.error('스토리 에이전트 실패:', storyError)
+      console.error('스토리 정리 실패:', storyError)
       setLoadingStepStatus('story_stage', 'error', storyError?.message || '스토리 추출 실패')
       setLoadingStepStatus('saju_stage', 'error', '스토리 추출 실패로 중단되었습니다.')
       setLoadingStepStatus('report_stage', 'error', '스토리 추출 실패로 중단되었습니다.')
-      errorMessage.value = '스토리 에이전트 요청에 실패했습니다. 잠시 후 다시 시도해주세요.'
+      errorMessage.value = '스토리 정리 요청에 실패했습니다. 잠시 후 다시 시도해주세요.'
       loading.value = false
       analysisStep.value = 0
       return
@@ -2159,7 +2235,7 @@ async function handleCompatibility() {
   const sajuTasks = []
   if (hasUser && userProfile) sajuTasks.push('사용자')
   if (hasTarget && targetProfile) sajuTasks.push('비교 대상')
-  if (hasUser && hasTarget && userProfile && targetProfile) sajuTasks.push('팀')
+  if (hasUser && hasTarget && userProfile && targetProfile) sajuTasks.push('두 사람')
   const sajuTotal = sajuTasks.length
   let sajuCompleted = 0
   const sajuResults = []
@@ -2208,6 +2284,20 @@ async function handleCompatibility() {
     userName: '비트코인',
     gender: ''
   }
+  const bitcoinSubjectProfile = buildSubjectProfile(
+    {
+      year: bitcoinPayload.year,
+      month: bitcoinPayload.month,
+      day: bitcoinPayload.day,
+      time: bitcoinPayload.time,
+      gender: '',
+      userName: '비트코인'
+    },
+    {
+      fallbackName: '비트코인',
+      assumeTimeUnknown: true
+    }
+  )
 
   if (currentRunId !== runId) return
 
@@ -2232,12 +2322,19 @@ async function handleCompatibility() {
         })
       ].filter(Boolean).join('\n\n')
       let agentResponse1
+      const userReportCachePayload = buildCachePayload({
+        category: CACHE_CATEGORY.USER_REPORT,
+        profile: userProfile,
+        targetProfile: bitcoinSubjectProfile,
+        extra: { scope: 'user_vs_bitcoin' }
+      })
       try {
         agentResponse1 = await runCompatibilityAgent({
           agentKey: 'saju_bitcoin',
           context: combinedContext1,
           data: agentPayload1.data,
-          temperature: 0.55
+          temperature: 0.55,
+          cache: userReportCachePayload
         })
       } catch (error) {
         addStageDebugDetail('saju', {
@@ -2255,6 +2352,7 @@ async function handleCompatibility() {
           personImageUrl: userImageUrl.value || '',
           profileFacts: userProfile.facts,
           profileSnapshot: userProfile,
+          targetProfileSnapshot: bitcoinSubjectProfile,
           personStory: userStory.value || '',
           narrative: agentResponse1.narrative,
           highlightedNarrative: '',
@@ -2272,7 +2370,13 @@ async function handleCompatibility() {
           provider: agentResponse1.model || agentResponse1.provider || 'llm',
           status: 'ok'
         })
-        highlightTasks.push(applyHighlightToResult(userVsBitcoinResult.value, 'user_highlight'))
+        const userHighlightCache = buildCachePayload({
+          category: CACHE_CATEGORY.HIGHLIGHT_USER,
+          profile: userProfile,
+          targetProfile: bitcoinSubjectProfile,
+          extra: { scope: 'user_vs_bitcoin' }
+        })
+        highlightTasks.push(applyHighlightToResult(userVsBitcoinResult.value, userHighlightCache))
       } else {
         sajuCompleted += 1
         sajuResults.push('사용자: 실패(응답 없음)')
@@ -2305,12 +2409,19 @@ async function handleCompatibility() {
         })
       ].filter(Boolean).join('\n\n')
       let agentResponse2
+      const targetReportCachePayload = buildCachePayload({
+        category: CACHE_CATEGORY.TARGET_REPORT,
+        profile: targetProfile,
+        targetProfile: bitcoinSubjectProfile,
+        extra: { scope: 'target_vs_bitcoin' }
+      })
       try {
         agentResponse2 = await runCompatibilityAgent({
           agentKey: 'saju_bitcoin',
           context: combinedContext2,
           data: agentPayload2.data,
-          temperature: 0.55
+          temperature: 0.55,
+          cache: targetReportCachePayload
         })
       } catch (error) {
         addStageDebugDetail('saju', {
@@ -2328,6 +2439,7 @@ async function handleCompatibility() {
           personImageUrl: targetImageUrl.value || '',
           profileFacts: targetProfile.facts,
           profileSnapshot: targetProfile,
+          targetProfileSnapshot: bitcoinSubjectProfile,
           personStory: targetStory.value || '',
           narrative: agentResponse2.narrative,
           highlightedNarrative: '',
@@ -2345,7 +2457,13 @@ async function handleCompatibility() {
           provider: agentResponse2.model || agentResponse2.provider || 'llm',
           status: 'ok'
         })
-        highlightTasks.push(applyHighlightToResult(targetVsBitcoinResult.value, 'target_highlight'))
+        const targetHighlightCache = buildCachePayload({
+          category: CACHE_CATEGORY.HIGHLIGHT_TARGET,
+          profile: targetProfile,
+          targetProfile: bitcoinSubjectProfile,
+          extra: { scope: 'target_vs_bitcoin' }
+        })
+        highlightTasks.push(applyHighlightToResult(targetVsBitcoinResult.value, targetHighlightCache))
       } else {
         sajuCompleted += 1
         sajuResults.push('비교 대상: 실패(응답 없음)')
@@ -2359,7 +2477,7 @@ async function handleCompatibility() {
       }
     }
 
-    // 3. 두 사람 × 비트코인 (팀 궁합 - 둘 다 있을 때만)
+    // 3. 두 사람 × 비트코인 (두 사람 궁합 - 둘 다 있을 때만)
     if (hasUser && hasTarget && userProfile && targetProfile) {
       analysisStep.value = 3
       const teamPayload = buildTeamAgentContextPayload({
@@ -2384,21 +2502,28 @@ async function handleCompatibility() {
         })
       ].filter(Boolean).join('\n\n')
       let agentResponse3
+      const teamReportCachePayload = buildCachePayload({
+        category: CACHE_CATEGORY.TEAM_REPORT,
+        profile: userProfile,
+        targetProfile,
+        extra: { scope: 'duo_vs_bitcoin' }
+      })
       try {
         agentResponse3 = await runCompatibilityAgent({
           agentKey: 'saju_bitcoin',
           context: combinedContext3,
           data: teamPayload.data,
-          temperature: 0.5
+          temperature: 0.5,
+          cache: teamReportCachePayload
         })
       } catch (error) {
         addStageDebugDetail('saju', {
-          label: `${userProfile.name} & ${targetProfile.name} 팀`,
+          label: `${userProfile.name} & ${targetProfile.name} 궁합`,
           prompt: combinedContext3,
-          error: error?.message || '팀 궁합 분석 실패',
+          error: error?.message || '두 사람 궁합 분석 실패',
           status: 'error'
         })
-        throw new Error(error?.message ? `팀 궁합 분석 실패: ${error.message}` : '팀 궁합 분석 실패')
+        throw new Error(error?.message ? `두 사람 궁합 분석 실패: ${error.message}` : '두 사람 궁합 분석 실패')
       }
       if (currentRunId !== runId) return
       if (agentResponse3?.ok && agentResponse3?.narrative) {
@@ -2420,22 +2545,28 @@ async function handleCompatibility() {
           debugPrompt: combinedContext3
         }
         sajuCompleted += 1
-        sajuResults.push('팀: 완료')
+        sajuResults.push('두 사람: 완료')
         updateSajuProgress()
         addStageDebugDetail('saju', {
-          label: `${userProfile.name} & ${targetProfile.name} 팀`,
+          label: `${userProfile.name} & ${targetProfile.name} 궁합`,
           prompt: combinedContext3,
           response: agentResponse3.narrative,
           provider: agentResponse3.model || agentResponse3.provider || 'llm',
           status: 'ok'
         })
-        highlightTasks.push(applyHighlightToResult(userVsTargetResult.value, 'team_highlight'))
+        const teamHighlightCache = buildCachePayload({
+          category: CACHE_CATEGORY.HIGHLIGHT_DUO,
+          profile: userProfile,
+          targetProfile,
+          extra: { scope: 'duo_vs_bitcoin' }
+        })
+        highlightTasks.push(applyHighlightToResult(userVsTargetResult.value, teamHighlightCache))
       } else {
         sajuCompleted += 1
-        sajuResults.push('팀: 실패(응답 없음)')
+        sajuResults.push('두 사람: 실패(응답 없음)')
         updateSajuProgress()
         addStageDebugDetail('saju', {
-          label: `${userProfile.name} & ${targetProfile.name} 팀`,
+          label: `${userProfile.name} & ${targetProfile.name} 궁합`,
           prompt: combinedContext3,
           error: agentResponse3?.error || '응답이 비어 있습니다',
           status: 'error'
@@ -2445,10 +2576,10 @@ async function handleCompatibility() {
 
     finalizeSajuStage()
   } catch (agentError) {
-    console.error('궁합 에이전트 호출 실패:', agentError)
+    console.error('궁합 분석 호출 실패:', agentError)
     setLoadingStepStatus('saju_stage', 'error', agentError?.message || '사주 분석 실패')
     setLoadingStepStatus('report_stage', 'error', '사주 분석이 끝나지 않아 리포트가 중단되었습니다.')
-    errorMessage.value = '궁합 에이전트 요청에 실패했습니다. 잠시 후 다시 시도해주세요.'
+    errorMessage.value = '궁합 분석 요청에 실패했습니다. 잠시 후 다시 시도해주세요.'
     loading.value = false
     analysisStep.value = 0
     return
@@ -2469,11 +2600,18 @@ async function handleCompatibility() {
         targetNarrative: targetVsBitcoinResult.value.narrative
       })
       let pairResponse
+      const pairReportCachePayload = buildCachePayload({
+        category: CACHE_CATEGORY.PAIR_REPORT,
+        profile: userProfile,
+        targetProfile,
+        extra: { scope: 'direct_pair' }
+      })
       try {
         pairResponse = await runCompatibilityAgent({
           agentKey: 'pair_compatibility',
           context: pairContext,
-          temperature: 0.5
+          temperature: 0.5,
+          cache: pairReportCachePayload
         })
       } catch (error) {
         addStageDebugDetail('report', {
@@ -2493,10 +2631,18 @@ async function handleCompatibility() {
           highlightLoading: true,
           agentProvider: pairResponse.model || pairResponse.provider || 'llm',
           debugPrompt: pairContext,
-          highlightedNarrative: ''
+          highlightedNarrative: '',
+          personProfile: userProfile,
+          targetProfile
         }
         pairCompatibilityResult.value = pairResult
-        highlightTasks.push(applyHighlightToResult(pairCompatibilityResult.value, 'pair_highlight'))
+        const pairHighlightCache = buildCachePayload({
+          category: CACHE_CATEGORY.HIGHLIGHT_PAIR,
+          profile: userProfile,
+          targetProfile,
+          extra: { scope: 'direct_pair' }
+        })
+        highlightTasks.push(applyHighlightToResult(pairCompatibilityResult.value, pairHighlightCache))
         setLoadingStepStatus('report_stage', 'done', '직접 궁합 리포트 완료')
         addStageDebugDetail('report', {
           label: `${userProfile.name} & ${targetProfile.name}`,
@@ -2517,7 +2663,7 @@ async function handleCompatibility() {
         updateHighlightStageStatus()
       }
     } catch (pairError) {
-      console.warn('두 사람 궁합 에이전트 실패', pairError)
+      console.warn('두 사람 궁합 생성 실패', pairError)
       setLoadingStepStatus('report_stage', 'error', pairError?.message || '직접 궁합 리포트 생성 실패')
       if (!pairError?.__stageLogged) {
         addStageDebugDetail('report', {
@@ -2852,7 +2998,7 @@ function buildPairCompatibilityContext({
     '',
     '## 출력 지침',
     '- 결과는 반드시 마크다운 문법을 사용하고, 각 섹션은 `##` 헤딩으로 시작하세요.',
-    '- 최소 3개 섹션(관계 다이내믹, 투자 전략, 리스크 신호)을 포함하고, 필요 시 표나 불릿을 사용해 상세히 기술하세요.',
+    '- 최소 3개 섹션(관계 다이내믹, 투자 전략, 리스크 신호)을 포함하고, 필요 시 표나 목록을 사용해 상세히 기술하세요.',
     '- 근거가 되는 사주/스토리 인용 문장은 **굵게** 표시하세요.'
   ].join('\n')
 }

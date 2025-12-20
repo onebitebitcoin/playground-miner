@@ -144,3 +144,19 @@ def derive_bip84_account_zpub(mnemonic: str, account: int = 0) -> str:
         return acc.wif_public()
     except Exception as e:
         raise ValueError(f"Failed to derive zpub: {str(e)}")
+
+
+def derive_bip84_private_key(mnemonic: str, account: int = 0, change: int = 0, index: int = 0) -> HDKey:
+    """Return the private HDKey for a given BIP84 path m/84'/0'/account'/change/index."""
+    mnorm = _normalize_mnemonic(mnemonic)
+    mnemo_validator = Mnemonic('english')
+    if not mnemo_validator.check(mnorm):
+        raise ValueError(f"Invalid mnemonic: {mnorm}")
+
+    try:
+        seed = BtcLibMnemonic().to_seed(mnorm)
+        root = HDKey.from_seed(seed, network='bitcoin')
+        path = f"m/84'/0'/{int(account)}'/{int(change)}/{int(index)}"
+        return root.subkey_for_path(path)
+    except Exception as e:
+        raise ValueError(f"Failed to derive private key: {str(e)}")
