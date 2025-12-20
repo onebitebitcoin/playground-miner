@@ -71,6 +71,7 @@ from .prompts import (
 TIME_CAPSULE_MNEMONIC_USERNAME = 'timecapsule'
 DUST_LIMIT = 294  # standard dust threshold for native segwit outputs (P2WPKH)
 OP_RETURN_MAX_BYTES = 80
+MIN_TIME_CAPSULE_FEE_RATE = 0.5
 
 
 def _get_block_explorer_base():
@@ -1267,6 +1268,13 @@ def admin_mnemonics_view(request):
 def _parse_int(value, default=None):
     try:
         return int(value)
+    except Exception:
+        return default
+
+
+def _parse_float(value, default=None):
+    try:
+        return float(value)
     except Exception:
         return default
 
@@ -7993,13 +8001,36 @@ def _estimate_vbytes(num_inputs, num_outputs):
     return 10 + num_inputs * 68 + num_outputs * 31
 
 
-def _fetch_address_utxos(address, base_url=None):
-    """Fetch UTXOs for a single address via the configured explorer."""
+def _fetch_address_utxos(address, base_url=None, use_cache=True):
+    """Fetch UTXOs for a single address via the configured explorer with caching."""
+    from django.core.cache import cache
+
+    # 캐시 키 생성
+    cache_key = f'utxo:{address}'
+
+    # 캐시 확인 (30초 TTL)
+    if use_cache:
+        cached_utxos = cache.get(cache_key)
+        if cached_utxos is not None:
+            logger.debug(f'Cache HIT for address {address}')
+            return cached_utxos
+
+    logger.debug(f'Cache MISS for address {address}, fetching from API')
+
     base = (base_url or _get_block_explorer_base()).rstrip('/')
     url = f'{base}/address/{address}/utxo'
-    resp = requests.get(url, timeout=8)
-    resp.raise_for_status()
-    data = resp.json()
+
+    try:
+        resp = requests.get(url, timeout=5)  # 8초 → 5초로 단축
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.exceptions.Timeout:
+        logger.error(f'Timeout fetching UTXOs for {address}')
+        raise ValueError(f'주소 {address}의 UTXO 조회 시간이 초과되었습니다.')
+    except requests.exceptions.RequestException as e:
+        logger.error(f'Failed to fetch UTXOs for {address}: {e}')
+        raise ValueError(f'주소 {address}의 UTXO를 가져올 수 없습니다.')
+
     utxos = []
     for item in data:
         txid = item.get('txid') or item.get('tx_hash') or ''
@@ -8014,6 +8045,11 @@ def _fetch_address_utxos(address, base_url=None):
             'value': int(item.get('value') or 0),
             'status': item.get('status') or {},
         })
+
+    # 캐시 저장 (30초)
+    if use_cache:
+        cache.set(cache_key, utxos, timeout=30)
+
     return utxos
 
 
@@ -8080,8 +8116,8 @@ def _build_time_capsule_transaction(
         raise ValueError('받는 주소를 입력하세요.')
     if amount_sats <= 0:
         raise ValueError('양수 금액을 입력하세요.')
-    if fee_rate <= 0:
-        raise ValueError('수수료율을 입력하세요.')
+    if fee_rate is None or fee_rate < MIN_TIME_CAPSULE_FEE_RATE:
+        raise ValueError(f'수수료율은 최소 {MIN_TIME_CAPSULE_FEE_RATE} sats/vB 이상이어야 합니다.')
     memo_text = (memo_text or '').strip()
 
     candidate_utxos = []
@@ -8254,6 +8290,10 @@ def _build_time_capsule_transaction(
     if final_vsize:
         effective_fee_rate = final_fee / final_vsize
 
+    # 실제 사용된 from 주소들 수집 (중복 제거)
+    used_from_addresses = list(set(utxo['address'] for utxo in selected))
+    primary_from_address = selected[0]['address'] if selected else ''
+
     metadata = {
         'inputs': inputs_summary,
         'outputs': outputs,
@@ -8267,6 +8307,8 @@ def _build_time_capsule_transaction(
         'raw_tx': raw_tx,
         'txid': tx.txid,
         'change_address': change_address if change_sats > 0 else '',
+        'from_address': primary_from_address,  # 주 출금 주소
+        'from_addresses': used_from_addresses,  # 모든 출금 주소 (다중 UTXO 경우)
         'dust_limit_sats': DUST_LIMIT,
         'dust_burned_sats': dust_burned_sats,
         'memo_text': memo_text,
@@ -8374,16 +8416,22 @@ def admin_time_capsule_mnemonic_view(request):
 @csrf_exempt
 def admin_time_capsule_build_transaction_view(request):
     """Build a transaction and return details without broadcasting."""
+    import time
+
+    start_time = time.time()
+
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
 
     payload = _load_json_body(request) or {}
     to_address = (payload.get('to_address') or '').strip()
     amount_sats = _parse_int(payload.get('amount_sats'))
-    fee_rate = _parse_int(payload.get('fee_rate_sats_vb'))
+    fee_rate = _parse_float(payload.get('fee_rate_sats_vb'))
     account = max(0, _parse_int(payload.get('account'), 0) or 0)
     from_address = (payload.get('from_address') or '').strip()
     memo_text = (payload.get('memo_text') or '').strip()
+
+    logger.info(f'Building TX: to={to_address[:10]}..., from={from_address[:10] if from_address else "auto"}, amount={amount_sats}')
 
     mnemonic_obj = _get_time_capsule_mnemonic()
     if not mnemonic_obj:
@@ -8391,7 +8439,8 @@ def admin_time_capsule_build_transaction_view(request):
 
     try:
         mnemonic_plain = mnemonic_obj.get_mnemonic()
-    except Exception:
+    except Exception as e:
+        logger.error(f'Failed to load mnemonic: {e}')
         return JsonResponse({'ok': False, 'error': '니모닉을 불러오지 못했습니다.'}, status=500)
 
     try:
@@ -8405,11 +8454,19 @@ def admin_time_capsule_build_transaction_view(request):
             from_address=from_address,
             memo_text=memo_text,
         )
+
+        elapsed = time.time() - start_time
+        logger.info(f'Build TX SUCCESS in {elapsed:.2f}s: fee={details.get("fee_sats")} sats, vsize={details.get("vsize")} vB')
+
         return JsonResponse({'ok': True, **details})
+
     except ValueError as exc:
+        elapsed = time.time() - start_time
+        logger.warning(f'Build TX FAILED (ValueError) in {elapsed:.2f}s: {exc}')
         return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
     except Exception as exc:
-        logger.error('Failed to build time capsule transaction: %s', exc)
+        elapsed = time.time() - start_time
+        logger.error(f'Build TX FAILED (Exception) in {elapsed:.2f}s: {exc}', exc_info=True)
         return JsonResponse({'ok': False, 'error': '트랜잭션 생성에 실패했습니다.'}, status=500)
 
 
@@ -8606,7 +8663,7 @@ def admin_time_capsule_broadcast_transaction_view(request):
     from_address = (payload.get('from_address') or '').strip()
     to_address = (payload.get('to_address') or '').strip()
     amount_sats = _parse_int(payload.get('amount_sats'))
-    fee_rate = _parse_int(payload.get('fee_rate_sats_vb'))
+    fee_rate = _parse_float(payload.get('fee_rate_sats_vb'))
     account = max(0, _parse_int(payload.get('account'), 0) or 0)
     raw_tx_payload = (payload.get('raw_tx') or '').strip()
     memo_text = (payload.get('memo_text') or '').strip()

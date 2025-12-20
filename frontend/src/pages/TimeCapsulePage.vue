@@ -454,7 +454,10 @@
               <tr>
                 <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 sm:pl-6">사용자</th>
                 <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">암호화된 메시지</th>
-                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">비트코인 주소</th>
+                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">
+                  타임캡슐 주소
+                  <span class="block text-xs font-normal text-slate-500">(From/To)</span>
+                </th>
               <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">생성일</th>
               <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">트랜잭션</th>
               <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold text-slate-900">쿠폰 사용</th>
@@ -679,7 +682,9 @@
             </div>
 
             <div class="space-y-1">
-              <p class="text-xs font-semibold text-slate-500">비트코인 주소</p>
+              <p class="text-xs font-semibold text-slate-500">
+                타임캡슐 주소 <span class="text-slate-400">(From/To)</span>
+              </p>
               <p v-if="capsule.bitcoin_address" class="text-sm text-slate-600 break-all select-text">
                 {{ capsule.bitcoin_address }}
               </p>
@@ -859,7 +864,10 @@
         <div class="p-4 sm:p-6 space-y-4">
           <div class="space-y-4">
             <div>
-              <label class="text-xs font-semibold text-slate-500">받는 주소</label>
+              <label class="text-xs font-semibold text-slate-500">
+                타임캡슐 주소
+                <span class="text-slate-400 font-normal">(From/To)</span>
+              </label>
               <input
                 v-model="sealForm.toAddress"
                 readonly
@@ -936,23 +944,30 @@
             v-if="sealTxPreview"
             class="rounded-2xl border border-slate-100 bg-slate-50 p-3 sm:p-4 space-y-3 text-xs sm:text-sm text-slate-700"
           >
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <p class="text-xs text-slate-500">보낼 금액</p>
-                <p class="font-semibold text-slate-900 text-sm sm:text-base">{{ formatSats(sealTxPreview.amount_sats) }}</p>
+            <div class="space-y-3">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <p class="text-xs text-slate-500">보낼 금액</p>
+                  <p class="font-semibold text-slate-900 text-sm sm:text-base">{{ formatSats(sealTxPreview.amount_sats) }}</p>
+                </div>
+                <div>
+                  <p class="text-xs text-slate-500">총 수수료</p>
+                  <p class="font-semibold text-slate-900 text-sm sm:text-base">
+                    {{ formatSats(sealTxPreview.fee_sats) }}
+                    <span class="text-xs text-slate-500 block sm:inline">
+                      ({{ formatFeeRate(sealTxPreview.fee_rate_sats_vb) }} sats/vB · {{ formatVsize(sealTxPreview.vsize) }})
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <p class="text-xs text-slate-500">거스름돈</p>
+                  <p class="font-semibold text-slate-900 text-sm sm:text-base">{{ formatSats(sealTxPreview.change_sats) }}</p>
+                </div>
               </div>
-              <div>
-                <p class="text-xs text-slate-500">총 수수료</p>
-                <p class="font-semibold text-slate-900 text-sm sm:text-base">
-                  {{ formatSats(sealTxPreview.fee_sats) }}
-                  <span class="text-xs text-slate-500 block sm:inline">
-                    ({{ formatFeeRate(sealTxPreview.fee_rate_sats_vb) }} sats/vB · {{ formatVsize(sealTxPreview.vsize) }})
-                  </span>
-                </p>
-              </div>
-              <div>
-                <p class="text-xs text-slate-500">거스름돈</p>
-                <p class="font-semibold text-slate-900 text-sm sm:text-base">{{ formatSats(sealTxPreview.change_sats) }}</p>
+
+              <div v-if="sealTxPreview.from_address" class="border-t border-slate-200 pt-3">
+                <p class="text-xs text-slate-500 mb-1">출금 주소 (From)</p>
+                <p class="font-mono text-xs text-slate-700 break-all">{{ sealTxPreview.from_address }}</p>
               </div>
             </div>
           </div>
@@ -1054,7 +1069,8 @@ const deleteModal = ref({
   capsule: null,
   deleting: false
 })
-const AUTO_SEAL_AMOUNT_SATS = 1000
+const AUTO_SEAL_AMOUNT_SATS = 500
+const MIN_SEAL_FEE_RATE = 0.5
 const sealModal = ref({
   show: false,
   capsule: null,
@@ -1065,7 +1081,7 @@ const sealForm = ref({
   toAddress: '',
   memo: '',
   amountSats: AUTO_SEAL_AMOUNT_SATS,
-  feeRate: 1
+  feeRate: MIN_SEAL_FEE_RATE
 })
 const sealTxPreview = ref(null)
 const sealBuildError = ref('')
@@ -1326,7 +1342,7 @@ function resetSealModalState() {
     toAddress: '',
     memo: '',
     amountSats: AUTO_SEAL_AMOUNT_SATS,
-    feeRate: 1
+    feeRate: MIN_SEAL_FEE_RATE
   }
   sealTxPreview.value = null
   sealBuildError.value = ''
@@ -1354,7 +1370,7 @@ function openSealModal(capsule) {
     toAddress: capsule.bitcoin_address || '',
     memo: capsule.encrypted_message || '',
     amountSats: AUTO_SEAL_AMOUNT_SATS,
-    feeRate: 1
+    feeRate: MIN_SEAL_FEE_RATE
   }
   sealTxPreview.value = null
   sealBuildError.value = ''
@@ -1425,8 +1441,8 @@ async function buildSealTransaction() {
     showError('유효한 금액이 설정되지 않았습니다.')
     return
   }
-  if (!Number.isFinite(feeRate) || feeRate <= 0) {
-    showError('유효한 수수료율을 확인하세요.')
+  if (!Number.isFinite(feeRate) || feeRate < MIN_SEAL_FEE_RATE) {
+    showError(`수수료율은 최소 ${MIN_SEAL_FEE_RATE} sats/vB 이상이어야 합니다.`)
     return
   }
   sealModal.value.building = true
@@ -1439,6 +1455,7 @@ async function buildSealTransaction() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         to_address: toAddress,
+        from_address: toAddress,  // 🔒 전용 주소 사용으로 UTXO 충돌 방지
         amount_sats: amount,
         fee_rate_sats_vb: feeRate,
         memo_text: sealForm.value.memo || '',
@@ -1470,8 +1487,8 @@ async function broadcastSealTransaction() {
   }
   if (sealModal.value.sending) return
   const feeRate = Number(sealForm.value.feeRate)
-  if (!Number.isFinite(feeRate) || feeRate <= 0) {
-    showError('유효한 수수료율을 확인하세요.')
+  if (!Number.isFinite(feeRate) || feeRate < MIN_SEAL_FEE_RATE) {
+    showError(`수수료율은 최소 ${MIN_SEAL_FEE_RATE} sats/vB 이상이어야 합니다.`)
     return
   }
   sealModal.value.sending = true
