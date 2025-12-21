@@ -120,7 +120,8 @@ const sidebarConfig = vueRef({
   show_wallet: true,
   show_fee: true,
   show_finance: false,
-  show_compatibility: true
+  show_compatibility: true,
+  show_timecapsule: true
 })
 
 // Current nickname/admin flags
@@ -155,8 +156,9 @@ const menuItems = computed(() => {
     items.push({ key: 'compatibility', label: '궁합' })
   }
 
-  // Add time capsule menu item
-  items.push({ key: 'timecapsule', label: '타임캡슐' })
+  if (sidebarConfig.value.show_timecapsule) {
+    items.push({ key: 'timecapsule', label: '타임캡슐' })
+  }
 
   // Add admin menu only for admin users
   if (currentNickname.value === 'admin' && isAdminFlag.value) {

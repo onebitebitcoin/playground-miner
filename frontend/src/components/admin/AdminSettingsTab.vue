@@ -99,7 +99,8 @@ const sidebarConfig = ref({
   show_wallet: true,
   show_fee: true,
   show_finance: false,
-  show_compatibility: true
+  show_compatibility: true,
+  show_timecapsule: true
 })
 const sidebarOptions = [
   { key: 'show_mining', label: '비트코인 채굴', description: '채굴 페이지 메뉴 표시' },
@@ -107,7 +108,8 @@ const sidebarOptions = [
   { key: 'show_wallet', label: '지갑', description: '지갑 페이지 메뉴 표시' },
   { key: 'show_fee', label: '수수료 계산', description: '수수료 계산 페이지 메뉴 표시' },
   { key: 'show_finance', label: '재무 관리', description: '재무 관리 페이지 메뉴 표시' },
-  { key: 'show_compatibility', label: '궁합', description: '비트코인 궁합 분석 페이지 메뉴 표시' }
+  { key: 'show_compatibility', label: '궁합', description: '비트코인 궁합 분석 페이지 메뉴 표시' },
+  { key: 'show_timecapsule', label: '타임캡슐', description: '타임캡슐 페이지 메뉴 표시' }
 ]
 const sidebarConfigLoading = ref(false)
 const walletPasswordInput = ref('')

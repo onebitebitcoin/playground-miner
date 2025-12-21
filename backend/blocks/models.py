@@ -430,6 +430,8 @@ class SidebarConfig(models.Model):
     show_wallet = models.BooleanField(default=True)
     show_fee = models.BooleanField(default=True)
     show_finance = models.BooleanField(default=False)
+    show_compatibility = models.BooleanField(default=True)
+    show_timecapsule = models.BooleanField(default=True)
     # Optional wallet password protection (stored as SHA256 hex)
     wallet_password_hash = models.CharField(max_length=128, blank=True, default='')
     # For admin visibility (demo purpose): store plaintext as well
@@ -444,7 +446,8 @@ class SidebarConfig(models.Model):
     def __str__(self):
         return (
             f"SidebarConfig (mining={self.show_mining}, utxo={self.show_utxo}, "
-            f"wallet={self.show_wallet}, fee={self.show_fee}, finance={self.show_finance})"
+            f"wallet={self.show_wallet}, fee={self.show_fee}, finance={self.show_finance}, "
+            f"compatibility={self.show_compatibility}, timecapsule={self.show_timecapsule})"
         )
 
     def as_dict(self):
@@ -454,6 +457,8 @@ class SidebarConfig(models.Model):
             'show_wallet': self.show_wallet,
             'show_fee': self.show_fee,
             'show_finance': self.show_finance,
+            'show_compatibility': self.show_compatibility,
+            'show_timecapsule': self.show_timecapsule,
             'wallet_password_set': bool(self.wallet_password_hash),
             'updated_at': self.updated_at.isoformat(),
         }

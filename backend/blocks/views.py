@@ -2546,6 +2546,10 @@ def _ensure_sidebar_schema():
 
             if 'show_finance' not in existing:
                 cur.execute(f"ALTER TABLE {table} ADD COLUMN show_finance boolean DEFAULT false")
+            if 'show_compatibility' not in existing:
+                cur.execute(f"ALTER TABLE {table} ADD COLUMN show_compatibility boolean DEFAULT true")
+            if 'show_timecapsule' not in existing:
+                cur.execute(f"ALTER TABLE {table} ADD COLUMN show_timecapsule boolean DEFAULT true")
             if 'wallet_password_hash' not in existing:
                 cur.execute(f"ALTER TABLE {table} ADD COLUMN wallet_password_hash varchar(128) DEFAULT ''")
             if 'wallet_password_plain' not in existing:
@@ -2564,6 +2568,8 @@ def sidebar_config_view(request):
         'show_wallet': True,
         'show_fee': True,
         'show_finance': False,
+        'show_compatibility': True,
+        'show_timecapsule': True,
     })
     return JsonResponse({'ok': True, 'config': config.as_dict()})
 
@@ -2594,6 +2600,10 @@ def admin_update_sidebar_config_view(request):
         config.show_fee = bool(data['show_fee'])
     if 'show_finance' in data:
         config.show_finance = bool(data['show_finance'])
+    if 'show_compatibility' in data:
+        config.show_compatibility = bool(data['show_compatibility'])
+    if 'show_timecapsule' in data:
+        config.show_timecapsule = bool(data['show_timecapsule'])
 
     config.save()
     return JsonResponse({'ok': True, 'config': config.as_dict()})
