@@ -1322,7 +1322,7 @@ function confirmDeleteCapsule(capsule) {
   }
 }
 
-function cancelDeleteCapsule() {
+function cancelDeleteMyCapsule() {
   if (deleteModal.value.deleting) return
   deleteModal.value = {
     show: false,
@@ -1415,7 +1415,7 @@ async function deleteMyCapsule() {
 
       // Reset deleting state before calling cancel
       deleteModal.value.deleting = false
-      cancelDeleteCapsule()
+      cancelDeleteMyCapsule()
     } else {
       const errorData = await response.json().catch(() => ({}))
       alert(errorData.error || '삭제에 실패했습니다.')
