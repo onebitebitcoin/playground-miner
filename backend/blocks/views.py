@@ -72,6 +72,9 @@ TIME_CAPSULE_MNEMONIC_USERNAME = 'timecapsule'
 DUST_LIMIT = 294  # standard dust threshold for native segwit outputs (P2WPKH)
 OP_RETURN_MAX_BYTES = 80
 MIN_TIME_CAPSULE_FEE_RATE = 0.5
+TIME_CAPSULE_GAP_LIMIT = 20
+TIME_CAPSULE_MAX_SCAN_ADDRESSES = 1000
+TIME_CAPSULE_SCAN_BATCH_SIZE = 50
 
 
 def _get_block_explorer_base():
@@ -1340,7 +1343,7 @@ def mnemonic_onchain_balance_view(request):
         return JsonResponse({'ok': False, 'error': 'id required'}, status=400)
 
     try:
-        count = max(1, min(int(request.GET.get('count', '20')), 100))
+        count = max(1, min(int(request.GET.get('count', '1000')), 1000))
     except Exception:
         count = 20
     try:
@@ -8609,11 +8612,16 @@ def admin_time_capsule_xpub_balance_view(request):
         account = 0
     include_mempool = str(request.GET.get('include_mempool', '1')).lower() in ('1', 'true', 'yes')
     both_chains = str(request.GET.get('both_chains', '1')).lower() in ('1', 'true', 'yes')
-    try:
-        count = max(1, min(int(request.GET.get('count', '20')), 100))
-    except Exception:
-        count = 20
-
+    assigned_capsules = list(
+        TimeCapsule.objects.filter(mnemonic=mnemonic_obj).exclude(bitcoin_address='').values(
+            'id', 'bitcoin_address', 'address_index', 'user_info'
+        )
+    )
+    capsule_assignments = {
+        c['bitcoin_address']: c
+        for c in assigned_capsules
+        if c.get('bitcoin_address')
+    }
     try:
         mnemonic_plain = mnemonic_obj.get_mnemonic()
         zpub = derive_bip84_account_zpub(mnemonic_plain, account=account)
@@ -8621,24 +8629,113 @@ def admin_time_capsule_xpub_balance_view(request):
         logger.error('Failed to derive time capsule xpub for balance lookup: %s', exc)
         return JsonResponse({'ok': False, 'error': 'xpub 생성에 실패했습니다.'}, status=500)
 
-    try:
-        addresses = derive_bip84_addresses(
-            mnemonic_plain, account=account, change=0, start=0, count=count
-        )
-        if both_chains:
-            addresses += derive_bip84_addresses(
-                mnemonic_plain, account=account, change=1, start=0, count=count
-            )
-    except Exception as exc:
-        logger.error('Failed to derive addresses for time capsule balance lookup: %s', exc)
-        return JsonResponse({'ok': False, 'error': f'주소 생성 실패: {exc}'}, status=500)
+    addresses = []
+    address_set = set()
+    by_address = {}
+    scanned_counts = {0: 0, 1: 0}
 
-    try:
-        by_address = fetch_blockstream_balances(addresses, include_mempool=include_mempool)
-        total = calc_total_sats(by_address)
-    except Exception as exc:
-        logger.error('Failed to fetch balances for time capsule addresses: %s', exc)
-        return JsonResponse({'ok': False, 'error': '잔액 조회에 실패했습니다.'}, status=502)
+    def add_address(addr):
+        if addr in address_set:
+            return False
+        address_set.add(addr)
+        addresses.append(addr)
+        return True
+
+    def scan_chain(change):
+        idx = 0
+        consecutive_empty = 0
+        max_scan = TIME_CAPSULE_MAX_SCAN_ADDRESSES
+        while idx < max_scan and consecutive_empty < TIME_CAPSULE_GAP_LIMIT:
+            batch_count = min(TIME_CAPSULE_SCAN_BATCH_SIZE, max_scan - idx)
+            try:
+                derived = derive_bip84_addresses(
+                    mnemonic_plain,
+                    account=account,
+                    change=change,
+                    start=idx,
+                    count=batch_count,
+                )
+            except Exception as exc:
+                logger.error('Failed to derive addresses for change=%s: %s', change, exc)
+                break
+            idx += batch_count
+            try:
+                batch_balances = fetch_blockstream_balances(
+                    derived,
+                    include_mempool=include_mempool,
+                )
+            except Exception as exc:
+                logger.error('Failed to fetch balances for derived addresses (change=%s): %s', change, exc)
+                break
+
+            for addr in derived:
+                balance = int(batch_balances.get(addr) or 0)
+                by_address[addr] = balance
+                add_address(addr)
+                scanned_counts[change] += 1
+                if balance > 0:
+                    consecutive_empty = 0
+                else:
+                    consecutive_empty += 1
+            if consecutive_empty >= TIME_CAPSULE_GAP_LIMIT:
+                break
+
+    scan_chain(0)
+    if both_chains:
+        scan_chain(1)
+
+    assigned_only_addresses = [
+        addr for addr in capsule_assignments.keys()
+        if addr and addr not in by_address
+    ]
+    if assigned_only_addresses:
+        try:
+            assigned_balances = fetch_blockstream_balances(
+                assigned_only_addresses,
+                include_mempool=include_mempool,
+            )
+        except Exception as exc:
+            logger.error('Failed to fetch balances for assigned addresses: %s', exc)
+            assigned_balances = {}
+        for addr in assigned_only_addresses:
+            balance = int(assigned_balances.get(addr) or 0)
+            by_address[addr] = balance
+            add_address(addr)
+
+    total = calc_total_sats(by_address)
+
+    address_details = []
+    total_utxos = 0
+    for addr in addresses:
+        balance = int(by_address.get(addr) or 0)
+        utxos = []
+        if balance > 0:
+            try:
+                utxos = _fetch_address_utxos(addr)
+            except Exception as exc:
+                logger.warning('Failed to fetch UTXOs for %s: %s', addr, exc)
+                utxos = []
+        detail_utxos = []
+        for item in utxos or []:
+            try:
+                detail_utxos.append({
+                    'txid': item.get('txid'),
+                    'vout': int(item.get('vout')),
+                    'value': int(item.get('value') or 0),
+                    'status': item.get('status') or {},
+                })
+            except Exception:
+                continue
+        total_utxos += len(detail_utxos)
+        assigned = capsule_assignments.get(addr)
+        address_details.append({
+            'address': addr,
+            'balance_sats': balance,
+            'utxo_count': len(detail_utxos),
+            'utxos': detail_utxos,
+            'assigned_capsule_id': assigned['id'] if assigned else None,
+            'assigned_user_info': assigned['user_info'] if assigned else '',
+        })
 
     return JsonResponse({
         'ok': True,
@@ -8647,9 +8744,12 @@ def admin_time_capsule_xpub_balance_view(request):
         'balance_sats': max(0, total),
         'include_mempool': include_mempool,
         'both_chains': both_chains,
-        'count_per_chain': count,
+        'count_per_chain': scanned_counts,
         'address_count': len(addresses),
         'by_address': by_address,
+        'address_details': address_details,
+        'utxo_address_count': len(address_details),
+        'total_utxo_count': total_utxos,
     })
 
 
@@ -8769,6 +8869,14 @@ def admin_time_capsule_assign_address_view(request, pk):
         return JsonResponse({'ok': False, 'error': '타임캡슐 니모닉이 생성되지 않았습니다.'}, status=400)
 
     try:
+        account = max(0, int(request.GET.get('account', '0')))
+    except Exception:
+        account = 0
+
+    payload = _load_json_body(request) or {}
+    preferred_address = (payload.get('address') or payload.get('preferred_address') or '').strip()
+
+    try:
         with transaction.atomic():
             mnemonic_locked = Mnemonic.objects.select_for_update().get(pk=mnemonic_obj.pk)
             capsule = TimeCapsule.objects.select_for_update().get(pk=pk)
@@ -8783,24 +8891,47 @@ def admin_time_capsule_assign_address_view(request, pk):
 
             mnemonic_plain = mnemonic_locked.get_mnemonic()
             next_index = int(mnemonic_locked.next_address_index or 0)
-            try:
-                address = derive_bip84_addresses(mnemonic_plain, change=0, start=next_index, count=1)[0]
-            except Exception as exc:
-                logger.error('Failed to derive time capsule address: %s', exc)
-                raise
+            address = ''
+            address_index = None
+
+            if preferred_address:
+                change_chain, derived_index = _locate_time_capsule_address_path(
+                    mnemonic_locked,
+                    mnemonic_plain,
+                    preferred_address,
+                    account=account,
+                )
+                if derived_index is None:
+                    return JsonResponse({'ok': False, 'error': '니모닉에서 찾을 수 없는 주소입니다.'}, status=400)
+                if change_chain not in (0, None):
+                    return JsonResponse({'ok': False, 'error': '외부 체인 주소만 할당할 수 있습니다.'}, status=400)
+                if TimeCapsule.objects.filter(bitcoin_address=preferred_address).exclude(pk=capsule.pk).exists():
+                    return JsonResponse({'ok': False, 'error': '이미 다른 타임캡슐에 할당된 주소입니다.'}, status=400)
+                address = preferred_address
+                address_index = derived_index
+                next_index = max(next_index, derived_index + 1)
+            else:
+                try:
+                    address = derive_bip84_addresses(mnemonic_plain, change=0, start=next_index, count=1)[0]
+                except Exception as exc:
+                    logger.error('Failed to derive time capsule address: %s', exc)
+                    raise
+                address_index = next_index
+                next_index += 1
 
             capsule.bitcoin_address = address
             capsule.mnemonic = mnemonic_locked
-            capsule.address_index = next_index
+            capsule.address_index = address_index
             capsule.save(update_fields=['bitcoin_address', 'mnemonic', 'address_index'])
 
-            mnemonic_locked.next_address_index = next_index + 1
+            mnemonic_locked.next_address_index = next_index
             mnemonic_locked.save(update_fields=['next_address_index'])
 
             return JsonResponse({
                 'ok': True,
                 'address': address,
-                'address_index': next_index,
+                'address_index': address_index,
+                'used_preferred_address': bool(preferred_address),
                 'capsule': capsule.as_dict(),
             })
     except TimeCapsule.DoesNotExist:

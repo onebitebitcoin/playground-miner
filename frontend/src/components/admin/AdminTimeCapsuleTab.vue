@@ -55,14 +55,6 @@
             <table class="min-w-full divide-y divide-slate-300">
               <thead class="bg-slate-50">
                 <tr>
-                  <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 sm:pl-6">
-                    <input
-                      type="checkbox"
-                      class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                      :checked="allCapsulesSelected"
-                      @change="toggleSelectAll($event)"
-                    />
-                  </th>
                   <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">사용자 정보</th>
                   <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">암호화된 메시지</th>
                   <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">비트코인 주소</th>
@@ -73,15 +65,6 @@
               </thead>
       <tbody class="divide-y divide-slate-200 bg-white">
         <tr v-for="capsule in capsules" :key="capsule.id">
-          <td class="whitespace-nowrap py-4 pl-4 pr-3 sm:pl-6">
-            <input
-              type="checkbox"
-              class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-              :value="capsule.id"
-              v-model="selectedCapsuleIds"
-              @change="handleCapsuleCheckboxChange($event, capsule)"
-            />
-          </td>
                   <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-900">
                     {{ capsule.user_info || '-' }}
                   </td>
@@ -158,7 +141,7 @@
                         v-if="!capsule.bitcoin_address"
                         @click="assignAddress(capsule)"
                         class="inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-slate-700 bg-slate-100 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        :disabled="assigningAddressId === capsule.id || unassigningAddressId === capsule.id || !props.isAdmin || !mnemonicState.hasMnemonic"
+                        :disabled="assigningAddressId === capsule.id || unassigningAddressId === capsule.id || !props.isAdmin || !mnemonicState.hasMnemonic || availableUtxoEntries.length === 0"
                       >
                         <svg
                           v-if="assigningAddressId === capsule.id"
@@ -440,278 +423,57 @@
           </div>
         </section>
         <section class="space-y-4">
+          <div class="border border-slate-200 rounded-2xl p-4 bg-white/80">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="text-sm font-semibold text-slate-900">타임캡슐 UTXO 보유 현황</p>
+                <p class="text-xs text-slate-500">잔액 조회를 누르면 최신 주소와 UTXO가 표시됩니다.</p>
+              </div>
+              <div class="text-right text-xs text-slate-500">
+                <div>총 주소 {{ utxoInventory.length }}</div>
+                <div>할당 가능 {{ availableUtxoEntries.length }}</div>
+              </div>
+            </div>
+          </div>
           <div
-            v-if="selectedCapsuleTargets.length"
-            class="border border-indigo-200 rounded-2xl p-4 bg-indigo-50/40 space-y-3"
+            v-if="!utxoInventory.length"
+            class="text-xs text-slate-400 border border-dashed border-slate-200 rounded-2xl p-4 bg-slate-50"
           >
-            <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <div class="text-sm font-semibold text-slate-900">
-                선택된 타임캡슐 <span class="text-indigo-600">{{ selectedCapsuleTargets.length }}/{{ MAX_BATCH_CAPSULES }}</span>
-              </div>
-              <div class="text-xs text-slate-500">
-                체크박스를 선택하면 주소, 금액 {{ AUTO_SEND_AMOUNT_SATS }} sats, 메모가 자동 고정됩니다.
-              </div>
-            </div>
-            <div class="space-y-2 pr-1">
-              <button
-                v-for="target in pagedSelectedCapsuleTargets"
-                :key="target.id"
-                type="button"
-                class="w-full rounded-2xl border px-3 py-2 text-left text-xs transition sm:text-sm"
-                :class="[
-                  activeSelectedCapsuleId === target.id
-                    ? 'border-indigo-500 bg-white shadow-sm'
-                    : 'border-slate-200 bg-white/80 hover:border-indigo-400',
-                ]"
-                @click="setActiveSelectedCapsule(target.id)"
-              >
-                <div class="flex items-center justify-between gap-2 text-[11px]">
-                  <span class="font-semibold text-slate-900">대상 #{{ target.displayIndex }}</span>
-                  <span class="text-slate-500">{{ formatDate(target.createdAt) }}</span>
-                </div>
-                <div class="mt-1 text-xs text-slate-600 truncate">{{ target.userInfo || '사용자 정보 없음' }}</div>
-                <div class="mt-1 rounded-xl bg-slate-100/70 px-2 py-1">
-                  <div class="text-[11px] font-semibold text-slate-500">받는 주소</div>
-                  <div class="font-mono text-[11px] text-slate-800 break-all">{{ target.address }}</div>
-                </div>
-                <div class="flex items-center justify-between text-[11px] text-slate-500 mt-1">
-                  <span>금액</span>
-                  <span class="font-semibold text-slate-900">{{ formatSats(AUTO_SEND_AMOUNT_SATS) }}</span>
-                </div>
-                <div class="mt-1 rounded-xl bg-white/70 px-2 py-1 border border-slate-100">
-                  <div class="text-[11px] font-semibold text-slate-500">메모 (OP_RETURN)</div>
-                  <div class="text-[11px] text-slate-700 break-words line-clamp-3">{{ target.memo || '암호화된 메시지가 없습니다.' }}</div>
-                </div>
-              </button>
-            </div>
+            잔액 조회 버튼을 눌러 UTXO 목록을 불러오세요.
+          </div>
+          <div v-else class="space-y-3 max-h-[28rem] overflow-y-auto pr-1">
             <div
-              v-if="selectedCapsuleTotalPages > 1"
-              class="flex items-center justify-between text-[11px] text-slate-600 pt-1"
+              v-for="entry in utxoInventory"
+              :key="entry.address"
+              class="rounded-2xl border border-slate-200 bg-white/90 p-3 text-xs text-slate-600"
             >
-              <button
-                type="button"
-                class="px-2 py-1 rounded-lg border text-[11px]"
-                :class="selectedCapsuleActivePage === 1 ? 'text-slate-300 border-slate-200' : 'text-slate-700 border-slate-300 hover:bg-white'"
-                @click="goSelectedCapsulePage(-1)"
-                :disabled="selectedCapsuleActivePage === 1"
-              >
-                이전
-              </button>
-              <span>페이지 {{ selectedCapsuleActivePage }} / {{ selectedCapsuleTotalPages }}</span>
-              <button
-                type="button"
-                class="px-2 py-1 rounded-lg border text-[11px]"
-                :class="selectedCapsuleActivePage === selectedCapsuleTotalPages ? 'text-slate-300 border-slate-200' : 'text-slate-700 border-slate-300 hover:bg-white'"
-                @click="goSelectedCapsulePage(1)"
-                :disabled="selectedCapsuleActivePage === selectedCapsuleTotalPages"
-              >
-                다음
-              </button>
-            </div>
-            <div class="text-[11px] text-slate-500 space-y-0.5">
-              <div v-if="selectedCapsuleWarnings.missingAddressCount">
-                주소가 없는 선택 {{ selectedCapsuleWarnings.missingAddressCount }}개는 자동 준비에서 제외됩니다.
+              <div class="flex items-start justify-between gap-2">
+                <div class="flex-1">
+                  <p class="font-mono text-[11px] text-slate-900 break-all">{{ entry.address }}</p>
+                  <p v-if="entry.assignedCapsuleId" class="text-[11px] text-rose-500 mt-0.5">
+                    할당됨 · #{{ entry.assignedCapsuleId }}
+                    <span v-if="entry.assignedUserInfo">({{ entry.assignedUserInfo }})</span>
+                  </p>
+                  <p v-else class="text-[11px] text-emerald-600 mt-0.5">미할당</p>
+                </div>
+                <div class="text-right">
+                  <p class="text-sm font-semibold text-slate-900">{{ formatSats(entry.balanceSats) }}</p>
+                  <p class="text-[11px] text-slate-500">UTXO {{ entry.utxos.length }}</p>
+                </div>
               </div>
-              <div v-if="selectedCapsuleWarnings.overflowCount">
-                한 번에 최대 {{ MAX_BATCH_CAPSULES }}개까지만 준비됩니다. 나머지는 선택을 해제하거나 따로 전송하세요.
-              </div>
-            </div>
-          </div>
-          <div class="grid gap-3">
-            <div>
-              <label class="text-xs font-semibold text-slate-600">수수료율 (sats/vB)</label>
-              <input
-                v-model.number="broadcastForm.feeRate"
-                type="number"
-                min="1"
-                class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                placeholder="예: 8"
-                :disabled="broadcastForm.sending || !mnemonicState.hasMnemonic"
-              />
-            </div>
-          </div>
-          <div class="text-xs text-slate-500" v-if="selectedCapsuleTargets.length">
-            받는 주소·금액·메모는 위의 선택 카드에서 자동으로 채워집니다.
-          </div>
-          <div class="flex flex-wrap gap-3">
-            <button
-              type="button"
-              class="inline-flex items-center px-3 py-2 rounded-lg text-sm font-semibold text-indigo-700 bg-indigo-100 hover:bg-indigo-200 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              @click="buildTimeCapsuleTx"
-              :disabled="buildingTx || broadcastForm.sending || !mnemonicState.hasMnemonic"
-            >
-              <svg
-                v-if="buildingTx"
-                class="animate-spin -ml-0.5 mr-2 h-4 w-4 text-indigo-600"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              {{ buildingTx ? '생성 중...' : '트랜잭션 생성' }}
-            </button>
-            <button
-              type="button"
-              class="inline-flex items-center px-3 py-2 rounded-lg text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              @click="broadcastTimeCapsuleTx"
-              :disabled="broadcastForm.sending || !mnemonicState.hasMnemonic || !txPreview"
-            >
-              <svg
-                v-if="broadcastForm.sending"
-                class="animate-spin -ml-0.5 mr-2 h-4 w-4 text-white"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              {{ broadcastForm.sending ? '전파 중...' : '트랜잭션 전송' }}
-            </button>
-            <button
-              type="button"
-              class="inline-flex items-center px-3 py-2 rounded-lg text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              @click="resetBroadcastForm"
-              :disabled="broadcastForm.sending"
-            >
-              입력 초기화
-            </button>
-          </div>
-          <div v-if="txPreview" class="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4">
-            <div class="grid gap-3 sm:grid-cols-2">
-              <div>
-                <p class="text-xs text-slate-500">보낼 금액</p>
-                <p class="text-base font-semibold text-slate-900">{{ formatSats(txPreview.amount_sats) }}</p>
-              </div>
-              <div>
-                <p class="text-xs text-slate-500">총 수수료</p>
-                <p class="text-base font-semibold text-slate-900">
-                  {{ formatSats(txPreview.fee_sats) }}
-                  <span class="text-sm text-slate-500">
-                    ({{ formatFeeRate(txPreview.fee_rate_sats_vb) }} sats/vB · {{ formatVsize(txPreview.vsize) }})
-                  </span>
-                </p>
-              </div>
-              <div>
-                <p class="text-xs text-slate-500">거스름돈</p>
-                <p class="text-base font-semibold text-slate-900">{{ formatSats(txPreview.change_sats) }}</p>
-              </div>
-              <div>
-                <p class="text-xs text-slate-500">총 입력</p>
-                <p class="text-base font-semibold text-slate-900">{{ formatSats(txPreview.total_input_sats) }}</p>
-              </div>
-              <div>
-                <p class="text-xs text-slate-500">트랜잭션 크기</p>
-                <p class="text-base font-semibold text-slate-900">{{ formatVsize(txPreview.vsize) }}</p>
-              </div>
-            </div>
-            <div v-if="txPreview.memo_text" class="text-xs text-slate-600 bg-white/60 border border-slate-200 rounded-lg px-3 py-2">
-              <p class="font-semibold text-slate-900 text-sm mb-1">메모</p>
-              <p class="text-slate-700 break-words">{{ txPreview.memo_text }}</p>
-            </div>
-            <div
-              v-if="txPreview.requested_fee_rate_sats_vb && txPreview.requested_fee_rate_sats_vb !== txPreview.fee_rate_sats_vb"
-              class="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2"
-            >
-              요청한 수수료율 {{ formatFeeRate(txPreview.requested_fee_rate_sats_vb) }} sats/vB 와 실제 적용된 수수료율이 다릅니다.
-              남은 금액이 부족하거나 dust 한계 때문에 일부가 수수료로 흡수되었습니다.
-            </div>
-            <div
-              v-if="txPreview.dust_burned_sats"
-              class="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2"
-            >
-              {{ formatSats(txPreview.dust_burned_sats) }} 가 dust 한계({{ txPreview.dust_limit_sats }} sats)보다 작아 거스름돈으로 만들 수 없어 수수료에 더해졌습니다.
-            </div>
-            <div>
-              <p class="text-xs font-semibold text-slate-500 mb-1">사용된 UTXO</p>
-              <div class="max-h-40 overflow-y-auto border border-slate-200 rounded-lg">
-                <table class="min-w-full text-xs">
-                  <thead class="bg-slate-100 text-slate-500">
-                    <tr>
-                      <th class="px-3 py-1 text-left font-medium">주소</th>
-                      <th class="px-3 py-1 text-left font-medium">Value (sats)</th>
-                      <th class="px-3 py-1 text-left font-medium">TXID:vout</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="utxo in txPreview.inputs" :key="`${utxo.txid}-${utxo.vout}`" class="border-t border-slate-100">
-                      <td class="px-3 py-1 text-slate-900 break-all">{{ utxo.address }}</td>
-                      <td class="px-3 py-1 text-slate-600">{{ formatSats(utxo.value) }}</td>
-                      <td class="px-3 py-1 text-slate-500 break-all text-[11px]">{{ utxo.txid }}:{{ utxo.vout }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div>
-              <p class="text-xs font-semibold text-slate-500 mb-1">출력 내역</p>
-              <div class="max-h-32 overflow-y-auto border border-slate-200 rounded-lg">
-                <table class="min-w-full text-xs">
-                  <thead class="bg-slate-100 text-slate-500">
-                    <tr>
-                      <th class="px-3 py-1 text-left font-medium">주소</th>
-                      <th class="px-3 py-1 text-left font-medium">Value (sats)</th>
-                      <th class="px-3 py-1 text-left font-medium">비고</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(output, idx) in txPreview.outputs" :key="`out-${idx}`" class="border-t border-slate-100">
-                      <td class="px-3 py-1 text-slate-900 break-all">{{ output.address }}</td>
-                      <td class="px-3 py-1 text-slate-600">{{ formatSats(output.value) }}</td>
-                      <td class="px-3 py-1 text-slate-500">
-                        <span v-if="output.is_memo">메모 (OP_RETURN)</span>
-                        <span v-else-if="output.is_change">거스름돈</span>
-                        <span v-else>수취</span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-          <div v-else class="text-xs text-slate-400">
-            트랜잭션을 생성하면 사용할 UTXO, 수수료, 출력 정보를 미리 확인할 수 있습니다.
-          </div>
-          <div v-if="broadcastResult.error" class="text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
-            {{ broadcastResult.error }}
-          </div>
-          <div v-else-if="broadcastResult.txid" class="space-y-2 text-sm text-slate-600">
-            <div class="flex flex-wrap items-center gap-2 text-slate-900 font-semibold">
-              <span>TXID: {{ broadcastResult.txid }}</span>
-              <a
-                class="text-indigo-600 text-xs font-medium hover:text-indigo-500"
-                :href="explorerUrlForTx(broadcastResult.txid)"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                mempool.space에서 보기 →
-              </a>
-            </div>
-            <div class="text-xs text-slate-500">
-              수수료 {{ formatSats(broadcastResult.feeSats) }} · vsize {{ broadcastResult.vsize }} vB
-              <span v-if="broadcastResult.broadcastUrl">· 전파 노드 {{ broadcastResult.broadcastUrl }}</span>
-            </div>
-            <div class="space-y-1">
-              <label class="text-xs font-semibold text-slate-600">Raw Transaction</label>
-              <div class="relative">
-                <textarea
-                  class="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-mono bg-slate-50 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                  rows="4"
-                  readonly
-                  :value="broadcastResult.rawTx"
-                ></textarea>
-                <button
-                  type="button"
-                  class="absolute top-1.5 right-2 inline-flex items-center px-2 py-1 rounded-md text-[11px] font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  @click="copyRawTx"
-                  :disabled="!broadcastResult.rawTx"
+              <div class="mt-2 space-y-1" v-if="entry.utxos.length">
+                <div
+                  v-for="utxo in entry.utxos"
+                  :key="`${entry.address}-${utxo.txid}-${utxo.vout}`"
+                  class="flex items-center justify-between rounded-lg border border-slate-100 px-2 py-1 font-mono text-[11px]"
                 >
-                  복사
-                </button>
+                  <span>{{ formatSats(utxo.value) }}</span>
+                  <span class="text-slate-400">{{ shortenTxid(utxo.txid) }}:{{ utxo.vout }}</span>
+                </div>
               </div>
+              <div v-else class="text-[11px] text-slate-400 mt-2">보유 UTXO 없음</div>
             </div>
           </div>
-          <div v-else class="text-xs text-slate-400">아직 전송 기록이 없습니다.</div>
         </section>
       </div>
     </div>
@@ -987,23 +749,6 @@ const xpubBalance = ref({
   byAddress: {},
   error: '',
 })
-const broadcastForm = ref({
-  toAddress: '',
-  amountSats: '',
-  feeRate: 1,
-  memo: '',
-  sending: false,
-})
-const broadcastResult = ref({
-  txid: '',
-  feeSats: null,
-  vsize: null,
-  rawTx: '',
-  broadcastUrl: '',
-  error: '',
-})
-const txPreview = ref(null)
-const buildingTx = ref(false)
 const recommendedNodes = ref([])
 const deleteConfirmModal = ref({
   show: false,
@@ -1012,13 +757,6 @@ const deleteConfirmModal = ref({
 })
 const copiedCapsuleId = ref(null)
 let capsuleCopyTimer
-const selectedCapsuleIds = ref([])
-const activeSelectedCapsuleId = ref(null)
-const MAX_BATCH_CAPSULES = 30
-const AUTO_SEND_AMOUNT_SATS = 1000
-const SELECTED_CAPSULE_PAGE_SIZE = 4
-const selectedCapsuleActivePage = ref(1)
-const pendingActiveSelectedCapsuleId = ref(null)
 
 const usedCouponsCount = computed(() => capsules.value.filter(c => c.is_coupon_used).length)
 const feeCards = computed(() => {
@@ -1030,57 +768,7 @@ const feeCards = computed(() => {
     { key: 'economyFee', label: '절약형', caption: '저렴하지만 느림', value: data.economyFee ?? data.minimumFee },
   ]
 })
-const memoByteLength = computed(() => getUtf8ByteLength(broadcastForm.value.memo || ''))
-const allCapsulesSelected = computed(() => {
-  return capsules.value.length > 0 && selectedCapsuleIds.value.length === capsules.value.length
-})
 const numberFormatter = Intl.NumberFormat('en-US')
-const selectedCapsuleSummary = computed(() => {
-  const ready = []
-  let missingAddressCount = 0
-  let overflowCount = 0
-  const seen = new Set()
-  for (const id of selectedCapsuleIds.value) {
-    if (seen.has(id)) continue
-    seen.add(id)
-    const capsule = capsules.value.find(c => c.id === id)
-    if (!capsule) continue
-    if (!capsule.bitcoin_address) {
-      missingAddressCount += 1
-      continue
-    }
-    if (ready.length < MAX_BATCH_CAPSULES) {
-      ready.push({
-        id: capsule.id,
-        userInfo: capsule.user_info || '',
-        address: capsule.bitcoin_address,
-        memo: capsule.encrypted_message || '',
-        createdAt: capsule.created_at,
-        displayIndex: ready.length + 1,
-      })
-    } else {
-      overflowCount += 1
-    }
-  }
-  return { ready, missingAddressCount, overflowCount }
-})
-const selectedCapsuleTargets = computed(() => selectedCapsuleSummary.value.ready)
-const selectedCapsuleWarnings = computed(() => ({
-  missingAddressCount: selectedCapsuleSummary.value.missingAddressCount,
-  overflowCount: selectedCapsuleSummary.value.overflowCount,
-}))
-const selectedCapsuleTotalPages = computed(() => {
-  const total = selectedCapsuleTargets.value.length
-  if (!total) return 1
-  return Math.max(1, Math.ceil(total / SELECTED_CAPSULE_PAGE_SIZE))
-})
-const pagedSelectedCapsuleTargets = computed(() => {
-  if (!selectedCapsuleTargets.value.length) return []
-  const totalPages = selectedCapsuleTotalPages.value
-  const currentPage = Math.min(Math.max(selectedCapsuleActivePage.value, 1), totalPages)
-  const start = (currentPage - 1) * SELECTED_CAPSULE_PAGE_SIZE
-  return selectedCapsuleTargets.value.slice(start, start + SELECTED_CAPSULE_PAGE_SIZE)
-})
 const xpubAddressEntries = computed(() => {
   const byAddress = xpubBalance.value.byAddress || {}
   return Object.keys(byAddress).map(address => ({
@@ -1088,6 +776,11 @@ const xpubAddressEntries = computed(() => {
     info: byAddress[address] || {},
   }))
 })
+const utxoInventory = ref([])
+const latestAddressDetails = ref([])
+const availableUtxoEntries = computed(() =>
+  utxoInventory.value.filter(entry => entry.balanceSats > 0 && entry.utxos.length && !entry.assignedCapsuleId)
+)
 
 const getAdminUsername = () => {
   const nickname = localStorage.getItem('nickname')
@@ -1116,22 +809,52 @@ function resetXpubInfo() {
     byAddress: {},
     error: '',
   }
-  broadcastForm.value = {
-    toAddress: '',
-    amountSats: '',
-    feeRate: 1,
-    memo: '',
-    sending: false,
-  }
-  broadcastResult.value = {
-    txid: '',
-    feeSats: null,
-    vsize: null,
-    rawTx: '',
-    broadcastUrl: '',
-    error: '',
-  }
-  txPreview.value = null
+  latestAddressDetails.value = []
+  utxoInventory.value = []
+}
+
+function buildUtxoInventory(details) {
+  const capsuleMap = new Map(
+    capsules.value
+      .filter(c => c.bitcoin_address)
+      .map(c => [c.bitcoin_address, c])
+  )
+  return (details || [])
+    .map(detail => {
+      const normalizedAddress = detail.address || ''
+      const owner = capsuleMap.get(normalizedAddress)
+      const utxos = (detail.utxos || []).map(utxo => ({
+        txid: utxo.txid || '',
+        vout: Number(utxo.vout ?? 0),
+      value: Number(utxo.value ?? 0),
+      status: utxo.status || {},
+    }))
+    return {
+      address: normalizedAddress,
+      balanceSats: Number(detail.balance_sats ?? detail.balance ?? 0) || 0,
+      utxos,
+        assignedCapsuleId: owner?.id || null,
+        assignedUserInfo: owner?.user_info || '',
+      }
+    })
+    .filter(entry => entry.balanceSats > 0)
+}
+
+function updateUtxoInventory(details) {
+  latestAddressDetails.value = Array.isArray(details) ? details : []
+  utxoInventory.value = buildUtxoInventory(latestAddressDetails.value)
+}
+
+function markUtxoAssignment(address, capsuleId, userInfo = '') {
+  if (!address) return
+  utxoInventory.value = utxoInventory.value.map(entry => {
+    if (entry.address !== address) return entry
+    return {
+      ...entry,
+      assignedCapsuleId: capsuleId || null,
+      assignedUserInfo: userInfo || '',
+    }
+  })
 }
 
 async function fetchTimeCapsules() {
@@ -1145,47 +868,6 @@ async function fetchTimeCapsules() {
   } catch (error) {
     console.error('Error fetching time capsules:', error)
     props.showError?.('타임캡슐 목록을 불러오지 못했습니다.')
-  }
-}
-
-function resetBroadcastForm() {
-  if (broadcastForm.value.sending) return
-  broadcastForm.value = {
-    toAddress: '',
-    amountSats: '',
-    feeRate: 1,
-    memo: '',
-    sending: false,
-  }
-  broadcastResult.value = {
-    txid: '',
-    feeSats: null,
-    vsize: null,
-    rawTx: '',
-    broadcastUrl: '',
-    error: '',
-  }
-  txPreview.value = null
-}
-
-function applySelectedCapsuleToForm(target) {
-  if (!target || broadcastForm.value.sending || buildingTx.value) return
-  broadcastForm.value.toAddress = target.address || ''
-  broadcastForm.value.amountSats = AUTO_SEND_AMOUNT_SATS
-  broadcastForm.value.memo = target.memo || ''
-}
-
-function setActiveSelectedCapsule(id) {
-  if (!id) {
-    activeSelectedCapsuleId.value = null
-    return
-  }
-  const target = selectedCapsuleTargets.value.find(t => t.id === id)
-  if (!target) return
-  activeSelectedCapsuleId.value = id
-  const idx = selectedCapsuleTargets.value.findIndex(t => t.id === id)
-  if (idx >= 0) {
-    selectedCapsuleActivePage.value = Math.floor(idx / SELECTED_CAPSULE_PAGE_SIZE) + 1
   }
 }
 
@@ -1359,64 +1041,6 @@ async function fetchFeeEstimates() {
   }
 }
 
-async function buildTimeCapsuleTx() {
-  if (!props.isAdmin) {
-    props.showError?.('관리자만 전송할 수 있습니다.')
-    return
-  }
-  if (!mnemonicState.value.hasMnemonic) {
-    props.showError?.('니모닉이 없으면 전송할 수 없습니다.')
-    return
-  }
-  if (buildingTx.value || broadcastForm.value.sending) return
-
-  const feeRate = Number(broadcastForm.value.feeRate)
-  const amount = Number(broadcastForm.value.amountSats)
-  if (!Number.isFinite(feeRate) || feeRate <= 0) {
-    props.showError?.('유효한 수수료율을 입력하세요.')
-    return
-  }
-  if (!Number.isFinite(amount) || amount <= 0) {
-    props.showError?.('유효한 금액을 입력하세요.')
-    return
-  }
-  if (!broadcastForm.value.toAddress.trim()) {
-    props.showError?.('받는 주소를 입력하세요.')
-    return
-  }
-  const memoText = (broadcastForm.value.memo || '').trim()
-
-  buildingTx.value = true
-  txPreview.value = null
-  try {
-    const username = getAdminUsername()
-    const params = new URLSearchParams(username ? { username } : {})
-    const response = await fetch(`${API_BASE_URL}/api/time-capsule/admin/build-tx?${params}`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to_address: broadcastForm.value.toAddress.trim(),
-        amount_sats: amount,
-        fee_rate_sats_vb: feeRate,
-        memo_text: memoText,
-      }),
-    })
-    const data = await response.json()
-    if (response.ok && data.ok) {
-      txPreview.value = data
-      props.showSuccess?.('트랜잭션을 생성했습니다.')
-    } else {
-      props.showError?.(data.error || '트랜잭션 생성에 실패했습니다.')
-    }
-  } catch (error) {
-    console.error('Failed to build time capsule transaction', error)
-    props.showError?.('트랜잭션 생성에 실패했습니다.')
-  } finally {
-    buildingTx.value = false
-  }
-}
-
 async function createMnemonic() {
   if (!props.isAdmin) {
     props.showError?.('관리자만 니모닉을 생성할 수 있습니다.')
@@ -1533,6 +1157,11 @@ async function assignAddress(capsule) {
     props.showError?.('관리자 인증 정보가 없습니다.')
     return
   }
+  const targetUtxo = availableUtxoEntries.value[0]
+  if (!targetUtxo) {
+    props.showError?.('할당 가능한 UTXO가 없습니다. 잔액 조회 버튼으로 목록을 새로고침하세요.')
+    return
+  }
 
   assigningAddressId.value = capsule.id
   try {
@@ -1541,6 +1170,7 @@ async function assignAddress(capsule) {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address: targetUtxo.address }),
     })
     const data = await response.json()
     if (response.ok && data.ok) {
@@ -1549,15 +1179,29 @@ async function assignAddress(capsule) {
       if (idx >= 0) {
         capsules.value[idx] = { ...capsules.value[idx], ...updated }
       }
-      mnemonicState.value.nextAddressIndex = (mnemonicState.value.nextAddressIndex || 0) + 1
-      mnemonicState.value.assignedCount = (mnemonicState.value.assignedCount || 0) + 1
-      props.showSuccess?.('새 비트코인 주소를 생성했습니다.')
+      markUtxoAssignment(
+        updated.bitcoin_address,
+        updated.id || capsule.id,
+        updated.user_info || capsule.user_info || ''
+      )
+      if (typeof data.address_index === 'number') {
+        const suggestedNext = Number(data.address_index) + 1
+        if (!Number.isNaN(suggestedNext)) {
+          mnemonicState.value.nextAddressIndex = Math.max(mnemonicState.value.nextAddressIndex || 0, suggestedNext)
+        }
+      }
+      if (!data.already_assigned) {
+        mnemonicState.value.assignedCount = (mnemonicState.value.assignedCount || 0) + 1
+      }
+      props.showSuccess?.('타임캡슐 주소를 할당했습니다.')
     } else {
       props.showError?.(data.error || '주소 할당에 실패했습니다.')
+      await fetchXpubBalance()
     }
   } catch (error) {
     console.error('Failed to assign address', error)
     props.showError?.('주소 할당에 실패했습니다.')
+    await fetchXpubBalance()
   } finally {
     assigningAddressId.value = null
   }
@@ -1576,6 +1220,8 @@ async function unassignAddress(capsule) {
   }
 
   unassigningAddressId.value = capsule.id
+  const previousAddress = capsule.bitcoin_address
+
   try {
     const params = new URLSearchParams({ username })
     const response = await fetch(`${API_BASE_URL}/api/time-capsule/admin/unassign-address/${capsule.id}?${params}`, {
@@ -1589,6 +1235,7 @@ async function unassignAddress(capsule) {
       if (idx >= 0) {
         capsules.value[idx] = { ...capsules.value[idx], ...updated }
       }
+      markUtxoAssignment(previousAddress, null)
       if (!data.already_unassigned) {
         mnemonicState.value.assignedCount = Math.max(0, (mnemonicState.value.assignedCount || 0) - 1)
       }
@@ -1657,6 +1304,8 @@ async function fetchTimeCapsuleXpub() {
       xpubBalance.value.bothChains = true
       xpubBalance.value.countPerChain = 20
       xpubBalance.value.error = ''
+      latestAddressDetails.value = []
+      utxoInventory.value = []
     } else {
       xpubState.value.error = data.error || 'xpub 정보를 불러오지 못했습니다.'
     }
@@ -1697,92 +1346,22 @@ async function fetchXpubBalance() {
       xpubBalance.value.countPerChain = data.count_per_chain ?? xpubBalance.value.countPerChain
       xpubBalance.value.updatedAt = new Date().toISOString()
       xpubBalance.value.error = ''
+      updateUtxoInventory(data.address_details || [])
     } else {
       const message = data.error || '잔액 조회에 실패했습니다.'
       xpubBalance.value.error = message
       props.showError?.(message)
+      latestAddressDetails.value = []
+      utxoInventory.value = []
     }
   } catch (error) {
     console.error('Failed to fetch xpub balance', error)
     xpubBalance.value.error = '잔액 조회에 실패했습니다.'
     props.showError?.('잔액 조회에 실패했습니다.')
+    latestAddressDetails.value = []
+    utxoInventory.value = []
   } finally {
     xpubBalance.value.loading = false
-  }
-}
-
-async function broadcastTimeCapsuleTx() {
-  if (!mnemonicState.value.hasMnemonic) {
-    props.showError?.('니모닉이 없으면 전송할 수 없습니다.')
-    return
-  }
-  if (broadcastForm.value.sending) return
-  if (!txPreview.value?.raw_tx) {
-    props.showError?.('먼저 트랜잭션을 생성하세요.')
-    return
-  }
-
-  const feeRate = Number(broadcastForm.value.feeRate)
-  const amount = Number(broadcastForm.value.amountSats)
-  if (!Number.isFinite(feeRate) || feeRate <= 0) {
-    props.showError?.('유효한 수수료율을 입력하세요.')
-    return
-  }
-  if (!Number.isFinite(amount) || amount <= 0) {
-    props.showError?.('유효한 금액을 입력하세요.')
-    return
-  }
-
-  broadcastForm.value.sending = true
-  broadcastResult.value = {
-    txid: '',
-    feeSats: null,
-    vsize: null,
-    rawTx: '',
-    broadcastUrl: '',
-    error: '',
-  }
-
-  let resetAfterSend = false
-  try {
-    const username = getAdminUsername()
-    const params = new URLSearchParams(username ? { username } : {})
-    const response = await fetch(`${API_BASE_URL}/api/time-capsule/admin/broadcast-tx?${params}`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        raw_tx: txPreview.value.raw_tx,
-        fee_sats: txPreview.value.fee_sats,
-        fee_rate_sats_vb: feeRate,
-      }),
-    })
-    const data = await response.json()
-    if (response.ok && data.ok) {
-      broadcastResult.value = {
-        txid: data.txid,
-        feeSats: data.fee_sats,
-        vsize: data.vsize,
-        rawTx: data.raw_tx,
-        broadcastUrl: data.broadcast_url,
-        error: '',
-      }
-      props.showSuccess?.('트랜잭션을 전파했습니다.')
-      txPreview.value = null
-      resetAfterSend = true
-    } else {
-      broadcastResult.value.error = data.error || '트랜잭션 전파에 실패했습니다.'
-      props.showError?.(broadcastResult.value.error)
-    }
-  } catch (error) {
-    console.error('Failed to broadcast transaction', error)
-    broadcastResult.value.error = '트랜잭션 전파 중 오류가 발생했습니다.'
-    props.showError?.('트랜잭션 전파 중 오류가 발생했습니다.')
-  } finally {
-    broadcastForm.value.sending = false
-    if (resetAfterSend) {
-      resetBroadcastForm()
-    }
   }
 }
 
@@ -1811,38 +1390,17 @@ async function copyCapsuleEncryptedMessage(capsule) {
   }
 }
 
-const textEncoder = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null
-
-function getUtf8ByteLength(text) {
-  if (!text) return 0
-  if (textEncoder) {
-    return textEncoder.encode(text).length
-  }
-  try {
-    return new Blob([text]).size
-  } catch (error) {
-    return encodeURIComponent(text).replace(/%[A-F\d]{2}/g, 'x').length
-  }
-}
-
 function formatSats(sats) {
   if (sats === null || sats === undefined) return '- sats'
   const value = Number.isFinite(Number(sats)) ? Number(sats) : 0
   return `${numberFormatter.format(Math.floor(value))} sats`
 }
 
-function formatFeeRate(rate) {
-  if (rate === null || rate === undefined) return '-'
-  const numeric = Number(rate)
-  if (!Number.isFinite(numeric)) return '-'
-  const fixed = numeric.toFixed(6)
-  return fixed.replace(/\.?0+$/, '')
-}
-
-function formatVsize(vsize) {
-  const numeric = Number(vsize)
-  if (!Number.isFinite(numeric) || numeric <= 0) return '---'
-  return `${numeric} vB`
+function shortenTxid(txid, prefix = 6, suffix = 4) {
+  const normalized = (txid || '').trim()
+  if (!normalized) return ''
+  if (normalized.length <= prefix + suffix + 3) return normalized
+  return `${normalized.slice(0, prefix)}...${normalized.slice(-suffix)}`
 }
 
 function formatBtc(sats) {
@@ -1860,15 +1418,6 @@ function copyMnemonic() {
   })
 }
 
-function copyRawTx() {
-  if (!broadcastResult.value.rawTx) return
-  navigator.clipboard?.writeText(broadcastResult.value.rawTx).then(() => {
-    props.showSuccess?.('Raw 트랜잭션이 복사되었습니다.')
-  }).catch(() => {
-    props.showError?.('복사에 실패했습니다.')
-  })
-}
-
 function copyXpub() {
   if (!xpubState.value.value) return
   navigator.clipboard?.writeText(xpubState.value.value).then(() => {
@@ -1876,11 +1425,6 @@ function copyXpub() {
   }).catch(() => {
     props.showError?.('복사에 실패했습니다.')
   })
-}
-
-function explorerUrlForTx(txid) {
-  if (!txid) return 'https://mempool.space/tx/'
-  return `https://mempool.space/tx/${txid}`
 }
 
 function confirmDelete(capsule) {
@@ -1936,33 +1480,6 @@ async function deleteCapsule() {
   }
 }
 
-function toggleSelectAll(event) {
-  if (event?.target?.checked) {
-    selectedCapsuleIds.value = capsules.value.map(c => c.id)
-  } else {
-    selectedCapsuleIds.value = []
-  }
-}
-
-function goSelectedCapsulePage(delta) {
-  setSelectedCapsulePage(selectedCapsuleActivePage.value + delta)
-}
-
-function setSelectedCapsulePage(page) {
-  const total = selectedCapsuleTotalPages.value || 1
-  const next = Math.min(Math.max(page, 1), total)
-  selectedCapsuleActivePage.value = next
-}
-
-function handleCapsuleCheckboxChange(event, capsule) {
-  if (!event?.target) return
-  if (event.target.checked) {
-    pendingActiveSelectedCapsuleId.value = capsule.id
-  } else if (activeSelectedCapsuleId.value === capsule.id) {
-    pendingActiveSelectedCapsuleId.value = null
-  }
-}
-
 onMounted(() => {
   fetchMnemonicStatus()
   fetchTimeCapsules()
@@ -1973,50 +1490,9 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (capsuleCopyTimer) clearTimeout(capsuleCopyTimer)
 })
-watch(selectedCapsuleTargets, targets => {
-  if (!targets.length) {
-    activeSelectedCapsuleId.value = null
-    selectedCapsuleActivePage.value = 1
-    return
-  }
-  let desiredId = pendingActiveSelectedCapsuleId.value || activeSelectedCapsuleId.value
-  pendingActiveSelectedCapsuleId.value = null
-  if (!desiredId || !targets.some(t => t.id === desiredId)) {
-    desiredId = targets[0].id
-  }
-  const idx = targets.findIndex(t => t.id === desiredId)
-  if (idx >= 0) {
-    selectedCapsuleActivePage.value = Math.floor(idx / SELECTED_CAPSULE_PAGE_SIZE) + 1
-  }
-  activeSelectedCapsuleId.value = desiredId
-})
-watch(activeSelectedCapsuleId, id => {
-  if (!id) return
-  const target = selectedCapsuleTargets.value.find(t => t.id === id)
-  if (target) {
-    applySelectedCapsuleToForm(target)
-  }
-})
-watch(selectedCapsuleTotalPages, total => {
-  if (!selectedCapsuleTargets.value.length) {
-    selectedCapsuleActivePage.value = 1
-    return
-  }
-  const next = Math.min(Math.max(selectedCapsuleActivePage.value, 1), total || 1)
-  if (next !== selectedCapsuleActivePage.value) {
-    selectedCapsuleActivePage.value = next
-  }
-})
-watch(
-  () => [broadcastForm.value.toAddress, broadcastForm.value.amountSats, broadcastForm.value.feeRate, broadcastForm.value.memo],
-  () => {
-    if (!broadcastForm.value.sending && !buildingTx.value) {
-      txPreview.value = null
-    }
-  }
-)
-watch(capsules, newCapsules => {
-  const validIds = new Set(newCapsules.map(c => c.id))
-  selectedCapsuleIds.value = selectedCapsuleIds.value.filter(id => validIds.has(id))
+
+watch(capsules, () => {
+  if (!latestAddressDetails.value.length) return
+  utxoInventory.value = buildUtxoInventory(latestAddressDetails.value)
 })
 </script>
