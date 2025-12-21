@@ -70,7 +70,7 @@ from .prompts import (
 
 TIME_CAPSULE_MNEMONIC_USERNAME = 'timecapsule'
 DUST_LIMIT = 294  # standard dust threshold for native segwit outputs (P2WPKH)
-OP_RETURN_MAX_BYTES = 80
+OP_RETURN_MAX_BYTES = 220  # Bitcoin Core allows up to 220 bytes for OP_RETURN (standard relay policy: 83 bytes, but most nodes accept more)
 MIN_TIME_CAPSULE_FEE_RATE = 0.5
 TIME_CAPSULE_GAP_LIMIT = 20
 TIME_CAPSULE_MAX_SCAN_ADDRESSES = 1000

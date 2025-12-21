@@ -1892,20 +1892,30 @@ async function generateKeyPairFromSeed(seed) {
 }
 
 // Compression utilities using browser's native CompressionStream API
+// Returns { data: Uint8Array, compressed: boolean }
 async function compressData(data) {
-  if (typeof CompressionStream === 'undefined') {
-    // Fallback for older browsers: return uncompressed
-    return textEncoder.encode(data)
+  const original = textEncoder.encode(data)
+
+  // For very short messages, compression overhead is not worth it
+  if (original.byteLength < 50 || typeof CompressionStream === 'undefined') {
+    return { data: original, compressed: false }
   }
 
   try {
     const stream = new Blob([data]).stream()
     const compressedStream = stream.pipeThrough(new CompressionStream('gzip'))
     const blob = await new Response(compressedStream).blob()
-    return new Uint8Array(await blob.arrayBuffer())
+    const compressed = new Uint8Array(await blob.arrayBuffer())
+
+    // Only use compression if it actually reduces size
+    if (compressed.byteLength < original.byteLength) {
+      return { data: compressed, compressed: true }
+    } else {
+      return { data: original, compressed: false }
+    }
   } catch (error) {
     console.warn('Compression failed, using uncompressed data:', error)
-    return textEncoder.encode(data)
+    return { data: original, compressed: false }
   }
 }
 
@@ -1958,46 +1968,50 @@ async function deriveEncryptionKey(secret, algorithm = 'AES-CTR') {
   )
 }
 
-// Encryption using Compression + AES-CTR
-// Format: IV(16 bytes) + encrypted compressed data → base64
-// This allows ~65 characters with OP_RETURN 80-byte limit
+// Encryption using smart compression + AES-CTR
+// Format: FLAG(1 byte) + IV(12 bytes) + encrypted data → base64
+// FLAG: 0x01 = compressed, 0x00 = uncompressed
+// This keeps most messages under 80 bytes for OP_RETURN
 async function encryptMessage(message, secret) {
   if (!globalThis.crypto || !globalThis.crypto.subtle) {
     throw new Error('Web Crypto API not supported')
   }
 
-  // Step 1: Compress the message
-  const compressed = await compressData(message)
+  // Step 1: Smart compression (only compress if beneficial)
+  const { data, compressed } = await compressData(message)
 
   // Step 2: Derive encryption key from secret (AES-CTR)
   const key = await deriveEncryptionKey(secret, 'AES-CTR')
 
-  // Step 3: Generate random IV (16 bytes for AES-CTR)
-  const iv = globalThis.crypto.getRandomValues(new Uint8Array(16))
+  // Step 3: Generate random IV (12 bytes - optimized for size)
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12))
 
-  // Step 4: Create counter from IV
+  // Step 4: Create counter from IV (pad to 16 bytes for AES-CTR)
   const counter = new Uint8Array(16)
   counter.set(iv)
 
-  // Step 5: Encrypt compressed data
+  // Step 5: Encrypt data
   const encrypted = await globalThis.crypto.subtle.encrypt(
     { name: 'AES-CTR', counter, length: 128 },
     key,
-    compressed
+    data
   )
 
-  // Step 6: Combine IV + encrypted data directly (no JSON structure)
-  const combined = new Uint8Array(16 + encrypted.byteLength)
-  combined.set(iv, 0)
-  combined.set(new Uint8Array(encrypted), 16)
+  // Step 6: Combine FLAG + IV + encrypted data
+  // FLAG byte: 0x01 if compressed, 0x00 if not
+  const combined = new Uint8Array(1 + 12 + encrypted.byteLength)
+  combined[0] = compressed ? 0x01 : 0x00
+  combined.set(iv, 1)
+  combined.set(new Uint8Array(encrypted), 13)
 
   return arrayBufferToBase64(combined)
 }
 
 // Decryption - supports multiple formats for backward compatibility
-// 1. New format: Compression + AES-CTR (16-byte IV)
-// 2. Previous format: AES-GCM optimized (12-byte IV)
-// 3. Old format: AES-GCM JSON format
+// 1. Latest format: FLAG(1) + IV(12) + encrypted data with smart compression
+// 2. Previous format: IV(16) + encrypted compressed data (AES-CTR)
+// 3. Older format: IV(12) + encrypted data (AES-GCM optimized)
+// 4. Old format: JSON format with AES-GCM
 async function decryptMessage(encryptedData, secret) {
   if (!globalThis.crypto || !globalThis.crypto.subtle) {
     throw new Error('Web Crypto API not supported')
@@ -2009,10 +2023,9 @@ async function decryptMessage(encryptedData, secret) {
   try {
     const combined = base64ToArrayBuffer(encryptedData)
 
-    // Check if it's JSON format (old format)
+    // Check if it's JSON format (old format #4)
     const possibleJson = new TextDecoder().decode(combined)
     if (possibleJson.startsWith('{') && possibleJson.includes('"iv"')) {
-      // Old JSON format with AES-GCM
       const data = JSON.parse(possibleJson)
       const key = await deriveEncryptionKey(secret, 'AES-GCM')
       const iv = base64ToArrayBuffer(data.iv)
@@ -2027,7 +2040,41 @@ async function decryptMessage(encryptedData, secret) {
       return new TextDecoder().decode(decrypted)
     }
 
-    // Try new format: Compression + AES-CTR (16-byte IV)
+    // Try latest format: FLAG + IV(12) + encrypted data (#1)
+    if (combined.byteLength >= 13) {
+      const flag = combined[0]
+
+      // Check if flag looks valid (0x00 or 0x01)
+      if (flag === 0x00 || flag === 0x01) {
+        try {
+          const key = await deriveEncryptionKey(secret, 'AES-CTR')
+          const iv = combined.slice(1, 13)
+          const ciphertext = combined.slice(13)
+
+          const counter = new Uint8Array(16)
+          counter.set(iv)
+
+          decrypted = await globalThis.crypto.subtle.decrypt(
+            { name: 'AES-CTR', counter, length: 128 },
+            key,
+            ciphertext
+          )
+
+          const decryptedData = new Uint8Array(decrypted)
+
+          // If compressed, decompress
+          if (flag === 0x01) {
+            return await decompressData(decryptedData)
+          } else {
+            return new TextDecoder().decode(decryptedData)
+          }
+        } catch (err) {
+          // Fall through to try other formats
+        }
+      }
+    }
+
+    // Try format #2: IV(16) + compressed data (previous AES-CTR format)
     if (combined.byteLength >= 16) {
       try {
         const key = await deriveEncryptionKey(secret, 'AES-CTR')
@@ -2043,25 +2090,26 @@ async function decryptMessage(encryptedData, secret) {
           ciphertext
         )
 
-        // Decompress the decrypted data
+        // Try to decompress (format #2)
         return await decompressData(new Uint8Array(decrypted))
       } catch (ctrError) {
-        // If CTR fails, try GCM format (12-byte IV)
-        if (combined.byteLength >= 12) {
-          const key = await deriveEncryptionKey(secret, 'AES-GCM')
-          const iv = combined.slice(0, 12)
-          const ciphertext = combined.slice(12)
-
-          decrypted = await globalThis.crypto.subtle.decrypt(
-            { name: 'AES-GCM', iv },
-            key,
-            ciphertext
-          )
-
-          return new TextDecoder().decode(decrypted)
-        }
-        throw ctrError
+        // Fall through to try GCM format
       }
+    }
+
+    // Try format #3: IV(12) + encrypted data (AES-GCM)
+    if (combined.byteLength >= 12) {
+      const key = await deriveEncryptionKey(secret, 'AES-GCM')
+      const iv = combined.slice(0, 12)
+      const ciphertext = combined.slice(12)
+
+      decrypted = await globalThis.crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        ciphertext
+      )
+
+      return new TextDecoder().decode(decrypted)
     }
 
     throw new Error('Invalid encrypted data format')

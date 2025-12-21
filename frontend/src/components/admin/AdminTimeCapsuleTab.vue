@@ -779,7 +779,7 @@ const xpubAddressEntries = computed(() => {
 const utxoInventory = ref([])
 const latestAddressDetails = ref([])
 const availableUtxoEntries = computed(() =>
-  utxoInventory.value.filter(entry => entry.balanceSats > 0 && entry.utxos.length && !entry.assignedCapsuleId)
+  utxoInventory.value.filter(entry => entry.balanceSats > 0 && entry.balanceSats < 3000 && entry.utxos.length && !entry.assignedCapsuleId)
 )
 
 const getAdminUsername = () => {
