@@ -3,6 +3,54 @@
 from django.db import migrations, models
 
 
+def safe_remove_old_indexes(apps, schema_editor):
+    """Safely remove old indexes if they exist"""
+    try:
+        # Check if the table exists first
+        with schema_editor.connection.cursor() as cursor:
+            if schema_editor.connection.vendor == 'sqlite':
+                cursor.execute("""
+                    SELECT name FROM sqlite_master
+                    WHERE type='table' AND name='blocks_compatibilityagentcache'
+                """)
+                if not cursor.fetchone():
+                    return  # Table doesn't exist, skip
+
+                # Get all indexes on the table
+                cursor.execute("""
+                    SELECT name FROM sqlite_master
+                    WHERE type='index' AND tbl_name='blocks_compatibilityagentcache'
+                """)
+                existing_indexes = {row[0] for row in cursor.fetchall()}
+
+                # Drop old indexes if they exist
+                old_indexes = [
+                    'blocks_comp_category_0c2b59_idx',
+                    'blocks_comp_subject_172a70_idx',
+                    'blocks_comp_target__a9e5a2_idx',
+                    'blocks_comp_updated_6e8ba1_idx',
+                ]
+                for index_name in old_indexes:
+                    if index_name in existing_indexes:
+                        cursor.execute(f'DROP INDEX {index_name}')
+            else:
+                # PostgreSQL/MySQL: Use DROP INDEX IF EXISTS
+                old_indexes = [
+                    'blocks_comp_category_0c2b59_idx',
+                    'blocks_comp_subject_172a70_idx',
+                    'blocks_comp_target__a9e5a2_idx',
+                    'blocks_comp_updated_6e8ba1_idx',
+                ]
+                for index_name in old_indexes:
+                    try:
+                        cursor.execute(f'DROP INDEX IF EXISTS {index_name}')
+                    except Exception:
+                        pass  # Ignore if index doesn't exist
+    except Exception as e:
+        # If anything goes wrong, just continue - new indexes will be created
+        print(f"Warning: Could not remove old indexes: {e}")
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -14,25 +62,27 @@ class Migration(migrations.Migration):
             name='timecapsulebroadcastsetting',
             options={'verbose_name': 'Time Capsule Broadcast Setting', 'verbose_name_plural': 'Time Capsule Broadcast Settings'},
         ),
-        migrations.RenameIndex(
-            model_name='compatibilityagentcache',
-            new_name='blocks_comp_categor_490c32_idx',
-            old_name='blocks_comp_category_0c2b59_idx',
+        # Remove old indexes if they exist (safe removal)
+        migrations.RunPython(
+            safe_remove_old_indexes,
+            reverse_code=migrations.RunPython.noop,
         ),
-        migrations.RenameIndex(
+        # Add new indexes
+        migrations.AddIndex(
             model_name='compatibilityagentcache',
-            new_name='blocks_comp_subject_d0fddc_idx',
-            old_name='blocks_comp_subject_172a70_idx',
+            index=models.Index(fields=['category'], name='blocks_comp_categor_490c32_idx'),
         ),
-        migrations.RenameIndex(
+        migrations.AddIndex(
             model_name='compatibilityagentcache',
-            new_name='blocks_comp_target__e44da2_idx',
-            old_name='blocks_comp_target__a9e5a2_idx',
+            index=models.Index(fields=['subject_name'], name='blocks_comp_subject_d0fddc_idx'),
         ),
-        migrations.RenameIndex(
+        migrations.AddIndex(
             model_name='compatibilityagentcache',
-            new_name='blocks_comp_updated_059bda_idx',
-            old_name='blocks_comp_updated_6e8ba1_idx',
+            index=models.Index(fields=['target_name'], name='blocks_comp_target__e44da2_idx'),
+        ),
+        migrations.AddIndex(
+            model_name='compatibilityagentcache',
+            index=models.Index(fields=['updated_at'], name='blocks_comp_updated_059bda_idx'),
         ),
         migrations.AlterField(
             model_name='compatibilityagentcache',
