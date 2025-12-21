@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>새 암호화 방식 테스트</title>
+  <style>
+    body { font-family: monospace; padding: 20px; max-width: 900px; margin: 0 auto; }
+    .result { margin: 10px 0; padding: 10px; background: #f0f0f0; border-radius: 4px; }
+    .pass { background: #d4edda; border-left: 4px solid #28a745; }
+    .fail { background: #f8d7da; border-left: 4px solid #dc3545; }
+    .info { background: #d1ecf1; border-left: 4px solid #17a2b8; }
+    input, button { padding: 8px; margin: 5px; font-size: 14px; }
+    .message-input { width: 100%; max-width: 500px; }
+    .details { font-size: 12px; color: #666; margin-top: 5px; }
+    pre { background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>타임캡슐 새 암호화 방식 테스트</h1>
+
+  <div>
+    <label>메시지: <input type="text" id="message" class="message-input" value="2026년 부자되세요!" /></label><br>
+    <label>비밀키: <input type="text" id="secret" value="test-secret-key" /></label><br>
+    <button onclick="testEncryption()">암호화 테스트</button>
+  </div>
+
+  <div id="results"></div>
+
+  <script>
+    const textEncoder = new TextEncoder()
+
+    function arrayBufferToBase64(buffer) {
+      const bytes = new Uint8Array(buffer)
+      let binary = ''
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i])
+      }
+      return btoa(binary)
+    }
+
+    function base64ToArrayBuffer(base64) {
+      const binary = atob(base64)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i)
+      }
+      return bytes
+    }
+
+    // Smart compression - same as in TimeCapsulePage.vue
+    async function compressData(data) {
+      const original = textEncoder.encode(data)
+
+      if (original.byteLength < 50 || typeof CompressionStream === 'undefined') {
+        return { data: original, compressed: false }
+      }
+
+      try {
+        const stream = new Blob([data]).stream()
+        const compressedStream = stream.pipeThrough(new CompressionStream('gzip'))
+        const blob = await new Response(compressedStream).blob()
+        const compressed = new Uint8Array(await blob.arrayBuffer())
+
+        if (compressed.byteLength < original.byteLength) {
+          return { data: compressed, compressed: true }
+        } else {
+          return { data: original, compressed: false }
+        }
+      } catch (error) {
+        console.warn('Compression failed, using uncompressed data:', error)
+        return { data: original, compressed: false }
+      }
+    }
+
+    async function decompressData(compressedData) {
+      if (typeof DecompressionStream === 'undefined') {
+        return new TextDecoder().decode(compressedData)
+      }
+
+      try {
+        const stream = new Blob([compressedData]).stream()
+        const decompressedStream = stream.pipeThrough(new DecompressionStream('gzip'))
+        const blob = await new Response(decompressedStream).blob()
+        const decompressed = new Uint8Array(await blob.arrayBuffer())
+        return new TextDecoder().decode(decompressed)
+      } catch (error) {
+        try {
+          return new TextDecoder().decode(compressedData)
+        } catch (decodeError) {
+          throw new Error('Failed to decompress data')
+        }
+      }
+    }
+
+    async function deriveEncryptionKey(secret, algorithm = 'AES-CTR') {
+      const keyMaterial = await globalThis.crypto.subtle.importKey(
+        'raw',
+        textEncoder.encode(secret),
+        { name: 'PBKDF2' },
+        false,
+        ['deriveBits', 'deriveKey']
+      )
+
+      const salt = textEncoder.encode('timecapsule-salt-2024')
+      return await globalThis.crypto.subtle.deriveKey(
+        {
+          name: 'PBKDF2',
+          salt,
+          iterations: 100000,
+          hash: 'SHA-256'
+        },
+        keyMaterial,
+        { name: algorithm, length: 256 },
+        false,
+        ['encrypt', 'decrypt']
+      )
+    }
+
+    // New encryption format: FLAG(1) + IV(12) + encrypted data
+    async function encryptMessage(message, secret) {
+      // Step 1: Smart compression
+      const { data, compressed } = await compressData(message)
+
+      // Step 2: Derive encryption key
+      const key = await deriveEncryptionKey(secret, 'AES-CTR')
+
+      // Step 3: Generate random IV (12 bytes)
+      const iv = globalThis.crypto.getRandomValues(new Uint8Array(12))
+
+      // Step 4: Create counter from IV
+      const counter = new Uint8Array(16)
+      counter.set(iv)
+
+      // Step 5: Encrypt data
+      const encrypted = await globalThis.crypto.subtle.encrypt(
+        { name: 'AES-CTR', counter, length: 128 },
+        key,
+        data
+      )
+
+      // Step 6: Combine FLAG + IV + encrypted data
+      const combined = new Uint8Array(1 + 12 + encrypted.byteLength)
+      combined[0] = compressed ? 0x01 : 0x00
+      combined.set(iv, 1)
+      combined.set(new Uint8Array(encrypted), 13)
+
+      return {
+        base64: arrayBufferToBase64(combined),
+        compressed: compressed,
+        originalSize: textEncoder.encode(message).byteLength,
+        compressedSize: data.byteLength,
+        encryptedSize: encrypted.byteLength,
+        totalSize: combined.byteLength
+      }
+    }
+
+    async function decryptMessage(encryptedData, secret) {
+      const combined = base64ToArrayBuffer(encryptedData)
+
+      if (combined.byteLength < 13) {
+        throw new Error('Invalid encrypted data')
+      }
+
+      const flag = combined[0]
+      const key = await deriveEncryptionKey(secret, 'AES-CTR')
+      const iv = combined.slice(1, 13)
+      const ciphertext = combined.slice(13)
+
+      const counter = new Uint8Array(16)
+      counter.set(iv)
+
+      const decrypted = await globalThis.crypto.subtle.decrypt(
+        { name: 'AES-CTR', counter, length: 128 },
+        key,
+        ciphertext
+      )
+
+      const decryptedData = new Uint8Array(decrypted)
+
+      if (flag === 0x01) {
+        return await decompressData(decryptedData)
+      } else {
+        return new TextDecoder().decode(decryptedData)
+      }
+    }
+
+    async function testEncryption() {
+      const message = document.getElementById('message').value
+      const secret = document.getElementById('secret').value
+      const results = document.getElementById('results')
+
+      try {
+        const result = await encryptMessage(message, secret)
+        const decrypted = await decryptMessage(result.base64, secret)
+
+        const success = decrypted === message
+        const base64Size = result.base64.length
+        const within80 = base64Size < 80
+
+        results.innerHTML = `
+          <div class="result ${success ? 'pass' : 'fail'}">
+            <strong>암호화/복호화 테스트:</strong> ${success ? '✅ 성공' : '❌ 실패'}
+            <div class="details">
+              원본 메시지: "${message}"<br>
+              복호화된 메시지: "${decrypted}"
+            </div>
+          </div>
+
+          <div class="result info">
+            <strong>크기 분석:</strong>
+            <div class="details">
+              원본 크기: ${result.originalSize} bytes<br>
+              ${result.compressed ?
+                `압축 후 크기: ${result.compressedSize} bytes (${((result.compressedSize/result.originalSize)*100).toFixed(1)}%)` :
+                '압축: 스킵됨 (짧은 메시지)'}
+              <br>
+              암호화된 데이터: ${result.encryptedSize} bytes<br>
+              총 바이너리 크기: ${result.totalSize} bytes (FLAG 1 + IV 12 + 데이터 ${result.encryptedSize})
+            </div>
+          </div>
+
+          <div class="result ${within80 ? 'pass' : 'fail'}">
+            <strong>Base64 인코딩 결과:</strong>
+            <div class="details">
+              Base64 크기: <strong>${base64Size} bytes</strong><br>
+              OP_RETURN 제한: 80 bytes<br>
+              ${within80 ?
+                `✅ ${80 - base64Size} bytes 여유` :
+                `❌ ${base64Size - 80} bytes 초과`}
+            </div>
+          </div>
+
+          <div class="result info">
+            <strong>암호화된 데이터 (Base64):</strong>
+            <pre style="word-break: break-all; white-space: pre-wrap; font-size: 11px;">${result.base64}</pre>
+          </div>
+
+          <div class="result pass">
+            <strong>✅ 개선 효과:</strong>
+            <div class="details">
+              <strong>이전 방식 (16 byte IV + 무조건 압축):</strong><br>
+              - "2026년 부자되세요!" → 약 81+ bytes (OP_RETURN 초과 ❌)<br>
+              <br>
+              <strong>새 방식 (12 byte IV + 스마트 압축):</strong><br>
+              - "2026년 부자되세요!" → ${base64Size} bytes ${within80 ? '(OP_RETURN 통과 ✅)' : ''}<br>
+              <br>
+              <strong>최적화 포인트:</strong><br>
+              1. IV 크기: 16 → 12 bytes (-4 bytes, Base64로 -6 bytes)<br>
+              2. 짧은 메시지는 압축 스킵 (gzip 오버헤드 18 bytes 절약)<br>
+              3. 플래그 1 byte 추가로 압축 여부 표시
+            </div>
+          </div>
+        `
+      } catch (error) {
+        results.innerHTML = `<div class="result fail"><strong>오류:</strong> ${error.message}<br><pre>${error.stack}</pre></div>`
+        console.error(error)
+      }
+    }
+
+    // 자동 실행
+    window.addEventListener('load', () => {
+      testEncryption()
+    })
+  </script>
+</body>
+</html>
