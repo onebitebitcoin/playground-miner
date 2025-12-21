@@ -51,6 +51,45 @@ def safe_remove_old_indexes(apps, schema_editor):
         print(f"Warning: Could not remove old indexes: {e}")
 
 
+def safe_add_new_indexes(apps, schema_editor):
+    """Safely add new indexes if they don't exist"""
+    try:
+        with schema_editor.connection.cursor() as cursor:
+            if schema_editor.connection.vendor == 'sqlite':
+                # Get existing indexes
+                cursor.execute("""
+                    SELECT name FROM sqlite_master
+                    WHERE type='index' AND tbl_name='blocks_compatibilityagentcache'
+                """)
+                existing_indexes = {row[0] for row in cursor.fetchall()}
+
+                # Add new indexes if they don't exist
+                new_indexes = {
+                    'blocks_comp_categor_490c32_idx': 'CREATE INDEX blocks_comp_categor_490c32_idx ON blocks_compatibilityagentcache (category)',
+                    'blocks_comp_subject_d0fddc_idx': 'CREATE INDEX blocks_comp_subject_d0fddc_idx ON blocks_compatibilityagentcache (subject_name)',
+                    'blocks_comp_target__e44da2_idx': 'CREATE INDEX blocks_comp_target__e44da2_idx ON blocks_compatibilityagentcache (target_name)',
+                    'blocks_comp_updated_059bda_idx': 'CREATE INDEX blocks_comp_updated_059bda_idx ON blocks_compatibilityagentcache (updated_at)',
+                }
+                for index_name, create_sql in new_indexes.items():
+                    if index_name not in existing_indexes:
+                        cursor.execute(create_sql)
+            else:
+                # PostgreSQL/MySQL: Use CREATE INDEX IF NOT EXISTS (PostgreSQL) or check first
+                new_indexes = {
+                    'blocks_comp_categor_490c32_idx': 'CREATE INDEX blocks_comp_categor_490c32_idx ON blocks_compatibilityagentcache (category)',
+                    'blocks_comp_subject_d0fddc_idx': 'CREATE INDEX blocks_comp_subject_d0fddc_idx ON blocks_compatibilityagentcache (subject_name)',
+                    'blocks_comp_target__e44da2_idx': 'CREATE INDEX blocks_comp_target__e44da2_idx ON blocks_compatibilityagentcache (target_name)',
+                    'blocks_comp_updated_059bda_idx': 'CREATE INDEX blocks_comp_updated_059bda_idx ON blocks_compatibilityagentcache (updated_at)',
+                }
+                for index_name, create_sql in new_indexes.items():
+                    try:
+                        cursor.execute(create_sql)
+                    except Exception:
+                        pass  # Index already exists
+    except Exception as e:
+        print(f"Warning: Could not add new indexes: {e}")
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -67,22 +106,10 @@ class Migration(migrations.Migration):
             safe_remove_old_indexes,
             reverse_code=migrations.RunPython.noop,
         ),
-        # Add new indexes
-        migrations.AddIndex(
-            model_name='compatibilityagentcache',
-            index=models.Index(fields=['category'], name='blocks_comp_categor_490c32_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='compatibilityagentcache',
-            index=models.Index(fields=['subject_name'], name='blocks_comp_subject_d0fddc_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='compatibilityagentcache',
-            index=models.Index(fields=['target_name'], name='blocks_comp_target__e44da2_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='compatibilityagentcache',
-            index=models.Index(fields=['updated_at'], name='blocks_comp_updated_059bda_idx'),
+        # Add new indexes if they don't exist (safe addition)
+        migrations.RunPython(
+            safe_add_new_indexes,
+            reverse_code=migrations.RunPython.noop,
         ),
         migrations.AlterField(
             model_name='compatibilityagentcache',
