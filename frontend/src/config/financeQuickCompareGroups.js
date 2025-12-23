@@ -7,6 +7,7 @@ export const defaultFinanceQuickCompareGroups = [
     assets: [
       '서울 아파트',
       '서울 아파트 (LTV 50%)',
+      '한국 M2 통화량',
       '금',
       '미국 10년물 국채',
       'S&P 500',

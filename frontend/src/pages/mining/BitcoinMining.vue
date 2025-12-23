@@ -37,10 +37,6 @@
       @close="showPeersModal = false"
     />
 
-    <NotificationOverlay
-      :notifications="blockchain.notifications"
-      @dismiss="blockchain.dismissNotification"
-    />
   </div>
 </template>
 
@@ -53,7 +49,6 @@ import MiningPanel from './components/MiningPanel.vue'
 import BlockPanel from './components/BlockPanel.vue'
 import BlocksModal from './components/BlocksModal.vue'
 import PeersModal from './components/PeersModal.vue'
-import NotificationOverlay from './components/NotificationOverlay.vue'
 import type { Block } from '@/types'
 
 const miner = ref(localStorage.getItem('nickname') || 'guest')

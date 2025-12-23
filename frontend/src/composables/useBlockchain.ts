@@ -3,7 +3,6 @@ import type { Ref } from 'vue'
 import { apiService } from '@/services/ApiService'
 import { useWebSocket } from './useWebSocket'
 import { usePolling } from './usePolling'
-import { useNotifications } from './useNotifications'
 import type { BlockchainStatus, Block, WebSocketMessage } from '@/types'
 
 export function useBlockchain(nickname?: Ref<string> | string) {
@@ -15,14 +14,11 @@ export function useBlockchain(nickname?: Ref<string> | string) {
   const blocks = ref<Block[]>([])
   const peers = ref<string[]>([])
   const broadcastMsg = ref('')
-  const previousPeerCount = ref(0)
   const isActive = ref(false)
   const nicknameRef = isRef(nickname) ? nickname : ref(nickname || '')
 
   const { connect, disconnect, isConnected } = useWebSocket()
   const { startPolling, stopPolling } = usePolling()
-  const { notifications, showUserJoinNotification, removeNotification } = useNotifications()
-
   const totalPeerCount = computed(() => {
     const peerCount = peers.value.length
     const currentNickname = nicknameRef.value || ''
@@ -92,14 +88,7 @@ export function useBlockchain(nickname?: Ref<string> | string) {
 
       case 'peers': {
         if (Array.isArray(payload.peers)) {
-          const newPeerCount = payload.peers.length
-          const oldPeerCount = previousPeerCount.value
-          if (newPeerCount > oldPeerCount && oldPeerCount > 0) {
-            const newUsers = payload.peers.filter((p) => !peers.value.includes(p))
-            if (newUsers.length > 0) showUserJoinNotification(newUsers[0])
-          }
           peers.value = payload.peers
-          previousPeerCount.value = newPeerCount
         }
         break
       }
@@ -161,7 +150,6 @@ export function useBlockchain(nickname?: Ref<string> | string) {
     stopPolling()
     peers.value = []
     broadcastMsg.value = ''
-    previousPeerCount.value = 0
   }
 
   return {
@@ -169,13 +157,11 @@ export function useBlockchain(nickname?: Ref<string> | string) {
     blocks: readonly(blocks),
     peers: readonly(peers),
     broadcastMsg: readonly(broadcastMsg),
-    notifications,
     totalPeerCount,
     isConnected,
     initialize,
     cleanup,
     addOrUpdateBlock,
     applyStatus,
-    dismissNotification: removeNotification,
   }
 }

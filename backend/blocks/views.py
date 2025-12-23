@@ -511,6 +511,25 @@ SAFE_ASSETS = {
         'category': '통화',
         'aliases': ['달러지수', 'dxy', 'dollar index', '달러 인덱스']
     },
+    'm2_korea': {
+        'label': '한국 M2 통화량',
+        'ticker': 'M2-KR',
+        'stooq_symbol': None,
+        'unit': 'KRW',
+        'category': '통화량',
+        'aliases': [
+            '한국 m2',
+            '한국 m2 통화량',
+            '한국의 m2',
+            'korean m2',
+            'korea m2',
+            'm2 korea',
+            'm2-kr',
+            'm2 kr',
+            'korean m2 money supply',
+            'korea m2 money supply'
+        ]
+    },
     'seoul_apartment': {
         'id': 'seoul_apartment',
         'label': '서울 아파트 평균 매매가격',
@@ -580,6 +599,7 @@ DEFAULT_FINANCE_QUICK_COMPARE_GROUPS = [
         'assets': [
             '서울 아파트',
             '서울 아파트 (LTV 50%)',
+            '한국 M2 통화량',
             '금',
             '미국 10년물 국채',
             'S&P 500',
@@ -693,7 +713,64 @@ def _ensure_default_finance_quick_compare_groups():
         if resolved_assets:
             _ensure_assets_cached(resolved_assets, group_key=group.key)
 
-    return created
+    updated = _sync_default_finance_quick_compare_group_assets()
+    return created or updated
+
+
+def _sync_default_finance_quick_compare_group_assets():
+    """
+    Ensure existing default quick-compare groups include any newly added default assets.
+    """
+    if not DEFAULT_FINANCE_QUICK_COMPARE_GROUPS:
+        return False
+
+    default_map = {
+        entry.get('key'): [asset for asset in entry.get('assets', []) if asset]
+        for entry in DEFAULT_FINANCE_QUICK_COMPARE_GROUPS
+        if entry.get('key')
+    }
+    default_keys = [key for key, assets in default_map.items() if assets]
+    if not default_keys:
+        return False
+
+    any_updates = False
+    groups = FinanceQuickCompareGroup.objects.filter(key__in=default_keys)
+    for group in groups:
+        required_assets = [asset for asset in default_map.get(group.key, []) if asset not in (group.assets or [])]
+        if not required_assets:
+            continue
+
+        updated_assets = list(group.assets or [])
+        updated_assets.extend(required_assets)
+
+        resolved_assets = list(group.resolved_assets or [])
+        existing_ids = set()
+        for asset in resolved_assets:
+            ticker = (asset.get('ticker') or asset.get('id') or '').strip().lower()
+            if ticker:
+                existing_ids.add(ticker)
+
+        new_resolved = _resolve_assets(required_assets)
+        appended_assets = []
+        for asset in new_resolved:
+            ticker = (asset.get('ticker') or asset.get('id') or '').strip().lower()
+            if ticker and ticker in existing_ids:
+                continue
+            appended_assets.append(asset)
+            if ticker:
+                existing_ids.add(ticker)
+
+        if appended_assets:
+            resolved_assets.extend(appended_assets)
+            _ensure_assets_cached(appended_assets, group_key=group.key)
+
+        group.assets = updated_assets
+        group.resolved_assets = resolved_assets
+        group.save(update_fields=['assets', 'resolved_assets'])
+        any_updates = True
+        logger.info("Updated quick compare group %s with %d new default assets", group.key, len(required_assets))
+
+    return any_updates
 
 
 def _ensure_assets_cached(resolved_assets, group_key=None):
