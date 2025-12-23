@@ -8,6 +8,7 @@ import threading
 import hashlib
 import uuid
 import os
+import contextvars
 from datetime import datetime, timedelta
 import requests
 from . import yahoo_finance
@@ -64,6 +65,18 @@ from .prompts import (
     COMPATIBILITY_PAIR_AGENT_PROMPT,
     HIGHLIGHT_ANALYZER_PROMPT,
 )
+
+_finance_log_callback = contextvars.ContextVar('finance_log_callback', default=None)
+
+
+def _emit_finance_log(message):
+    callback = _finance_log_callback.get()
+    if not callable(callback) or not message:
+        return
+    try:
+        callback(message)
+    except Exception:
+        pass
 
 
 
@@ -3880,13 +3893,12 @@ def _fetch_asset_history(cfg, start_year, end_year):
         category == '국내 주식' or
         (ticker and (ticker.endswith('.KS') or ticker.endswith('.KQ') or ticker.endswith('.KL')))
     )
-    allow_global_sources = not is_korean_stock
-
     # 한국 주식은 반드시 pykrx 사용 (설치/요청 실패 시 오류 처리)
     if is_korean_stock and ticker:
         if pykrx_stock is None:
             message = 'pykrx: 패키지가 설치되어 있지 않아 데이터를 가져올 수 없습니다.'
             logger.error('[%s] %s (Ticker: %s)', label, message, ticker)
+            _emit_finance_log(f"[데이터 수집] ✗ {label}: {message}")
             raise RuntimeError(message)
 
         logger.info('[%s] 한국 주식 감지 (Category: %s, Ticker: %s) → pykrx 사용', label, category, ticker)
@@ -3896,16 +3908,20 @@ def _fetch_asset_history(cfg, start_year, end_year):
                 logger.info('[%s] pykrx에서 데이터 가져오기 성공: %d개', label, len(history))
                 return history, 'pykrx'
             errors.append('pykrx: 데이터 없음')
-            logger.error('[%s] pykrx에서 데이터를 찾지 못했습니다.', label)
+            message = 'pykrx: 데이터를 찾지 못했습니다.'
+            logger.error('[%s] %s', label, message)
+            _emit_finance_log(f"[데이터 수집] ✗ {label}: {message}")
         except Exception as exc:
             errors.append(f'pykrx: {exc}')
             logger.error('[%s] pykrx 실패: %s', label, exc)
+            _emit_finance_log(f"[데이터 수집] ✗ {label}: pykrx 오류 - {exc}")
         error_msg = '; '.join(errors) if errors else 'pykrx 데이터를 가져올 수 없습니다.'
         logger.error('[%s] 한국 주식 데이터 가져오기 실패: %s', label, error_msg)
+        _emit_finance_log(f"[데이터 수집] ✗ {label}: {error_msg}")
         raise RuntimeError(error_msg)
 
     # 1. Yahoo Finance 시도
-    if ticker and allow_global_sources:
+    if ticker and not is_korean_stock:
         try:
             logger.info('[%s] Yahoo Finance에서 데이터 가져오기 시도: %s', label, ticker)
             history = _fetch_yfinance_history(ticker, start_year, end_year)
@@ -3920,7 +3936,7 @@ def _fetch_asset_history(cfg, start_year, end_year):
             logger.warning('[%s] Yahoo Finance 실패: %s', label, exc)
 
     # 2. Stooq 시도 (한국 주식 제외)
-    if stooq_symbol and allow_global_sources:
+    if stooq_symbol and not is_korean_stock:
         try:
             logger.info('[%s] Stooq에서 데이터 가져오기 시도: %s', label, stooq_symbol)
             history = _fetch_stooq_history(stooq_symbol, start_year, end_year)
@@ -5692,140 +5708,147 @@ def finance_historical_returns_view(request):
                     result_data = event.get('data')
             return result_data
 
-        append_log(f"시스템: {start_year}-{end_year} 멀티 에이전트 분석 시작")
+        def execute_request():
+            append_log(f"시스템: {start_year}-{end_year} 멀티 에이전트 분석 시작")
 
-        # --- Multi-Agent Workflow ---
+            # --- Multi-Agent Workflow ---
 
-        # Agent 1: Intent Classifier
-        backend_logger.info("STEP 1: Running IntentClassifierAgent")
-        intent_agent = IntentClassifierAgent()
-        intent_result = consume_agent_stream(intent_agent.stream(prompt, quick_requests))
-        if intent_result is None:
-            intent_result = {'allowed': False, 'error': '자산 추출 중 오류가 발생했습니다.'}
+            # Agent 1: Intent Classifier
+            backend_logger.info("STEP 1: Running IntentClassifierAgent")
+            intent_agent = IntentClassifierAgent()
+            intent_result = consume_agent_stream(intent_agent.stream(prompt, quick_requests))
+            if intent_result is None:
+                intent_result = {'allowed': False, 'error': '자산 추출 중 오류가 발생했습니다.'}
 
-        backend_logger.info("Intent Result: %s", intent_result)
+            backend_logger.info("Intent Result: %s", intent_result)
 
-        if not intent_result.get('allowed'):
-            backend_logger.warning("Request blocked by guardrail")
+            if not intent_result.get('allowed'):
+                backend_logger.warning("Request blocked by guardrail")
+                processing_time_ms = int((time.time() - start_time) * 1000)
+                _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
+                                 intent_result.get('error', 'Request blocked'), 0, processing_time_ms)
+                stream_error(intent_result.get('error', 'Request blocked'))
+                stream_complete('error')
+                return JsonResponse({
+                    'ok': False,
+                    'error': intent_result.get('error', 'Request blocked'),
+                    'logs': all_logs
+                }, status=400)
+
+            assets = intent_result.get('assets', [])
+            calculation_method = intent_result.get('calculation_method', 'cagr')
+            backend_logger.info("Extracted Assets (%d): %s", len(assets), assets)
+            backend_logger.info("Calculation Method: %s", calculation_method)
+
+            if not assets:
+                backend_logger.error("No assets found - returning 400")
+                processing_time_ms = int((time.time() - start_time) * 1000)
+                _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
+                                 '분석할 자산을 찾을 수 없습니다.', 0, processing_time_ms)
+                stream_error('분석할 자산을 찾을 수 없습니다.')
+                stream_complete('error')
+                return JsonResponse({
+                    'ok': False,
+                    'error': '분석할 자산을 찾을 수 없습니다.',
+                    'logs': all_logs
+                }, status=400)
+
+            manual_assets = _build_manual_assets(custom_assets, calculation_method)
+            if manual_assets:
+                merged_assets, added_assets = _merge_asset_lists(assets, manual_assets)
+                if added_assets:
+                    assets = merged_assets
+                    intent_result['assets'] = assets
+                    added_labels = ', '.join(a.get('label', a.get('id', '')) for a in added_assets)
+                    append_log(f"[의도 분석] 사용자 지정 자산 추가: {added_labels}")
+            validated_assets = assets
+
+            # Agent 2: Price Retriever
+            backend_logger.info("STEP 2: Running PriceRetrieverAgent")
+            retriever_agent = PriceRetrieverAgent()
+            price_data_map = consume_agent_stream(retriever_agent.stream(validated_assets, start_year, end_year)) or {}
+
+            backend_logger.info("Price Data Map Keys: %s", list(price_data_map.keys()) if price_data_map else "EMPTY")
+
+            if not price_data_map:
+                backend_logger.error("No price data retrieved - returning 502")
+                processing_time_ms = int((time.time() - start_time) * 1000)
+                _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
+                                 '자산 데이터를 가져올 수 없습니다.', len(assets), processing_time_ms)
+                stream_error('자산 데이터를 가져올 수 없습니다. (티커를 확인해주세요)')
+                stream_complete('error')
+                return JsonResponse({
+                    'ok': False,
+                    'error': '자산 데이터를 가져올 수 없습니다. (티커를 확인해주세요)',
+                    'logs': all_logs
+                }, status=502)
+
+            # Agent 3: Calculator
+            backend_logger.info("STEP 3: Running CalculatorAgent with method: %s", calculation_method)
+            calculator_agent = CalculatorAgent()
+            calc_result = consume_agent_stream(
+                calculator_agent.stream(price_data_map, start_year, end_year, calculation_method, include_dividends=include_dividends)
+            ) or {}
+            series_data = calc_result.get('series', [])
+            chart_data_table = calc_result.get('table', [])
+            summary = calc_result.get('summary', '')
+
+            if not series_data:
+                processing_time_ms = int((time.time() - start_time) * 1000)
+                _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
+                                 '유효한 수익률 데이터를 계산할 수 없습니다.', len(assets), processing_time_ms)
+                stream_error('유효한 수익률 데이터를 계산할 수 없습니다.')
+                stream_complete('error')
+                return JsonResponse({
+                    'ok': False,
+                    'error': '유효한 수익률 데이터를 계산할 수 없습니다.',
+                    'logs': all_logs
+                }, status=502)
+
+            # Agent 4: Analysis (Generate narrative summary)
+            backend_logger.info("STEP 4: Running AnalysisAgent")
+            analysis_agent = AnalysisAgent()
+            combined_prompt_for_analysis = ' '.join(([prompt] if prompt else []) + quick_requests)
+            analysis_summary = consume_agent_stream(
+                analysis_agent.stream(series_data, start_year, end_year, calculation_method, combined_prompt_for_analysis)
+            ) or ''
+
+            # Cache Result (if context_key is present)
+            usd_krw_rate = get_cached_usdkrw_rate()
+            if context_key in ['safe_assets', 'us_bigtech']:
+                _save_to_cache(context_key, start_year, end_year, series_data, usd_krw_rate)
+
+            # Log successful query
             processing_time_ms = int((time.time() - start_time) * 1000)
-            _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                             intent_result.get('error', 'Request blocked'), 0, processing_time_ms)
-            stream_error(intent_result.get('error', 'Request blocked'))
-            stream_complete('error')
-            return JsonResponse({
-                'ok': False,
-                'error': intent_result.get('error', 'Request blocked'),
-                'logs': all_logs
-            }, status=400)
+            _log_finance_query(user_identifier, prompt, quick_requests, context_key, True,
+                             '', len(assets), processing_time_ms)
+            stream_complete('ok')
 
-        assets = intent_result.get('assets', [])
-        calculation_method = intent_result.get('calculation_method', 'cagr')
-        backend_logger.info("Extracted Assets (%d): %s", len(assets), assets)
-        backend_logger.info("Calculation Method: %s", calculation_method)
+            # Construct Response
+            response_payload = {
+                'ok': True,
+                'series': series_data,
+                'chart_data_table': chart_data_table,  # Chart values as table (replaces yearly_prices)
+                'analysis_summary': analysis_summary,  # AI-generated narrative analysis
+                'start_year': start_year,
+                'end_year': end_year,
+                'summary': summary,
+                'notes': "본 분석은 AI 에이전트가 실시간 데이터를 수집하여 계산했습니다.",
+                'fx_rate': usd_krw_rate,
+                'logs': all_logs,
+                'prompt': prompt,
+                'quick_requests': quick_requests,
+                'calculation_method': calculation_method,
+                'include_dividends': include_dividends,
+            }
 
-        if not assets:
-            backend_logger.error("No assets found - returning 400")
-            processing_time_ms = int((time.time() - start_time) * 1000)
-            _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                             '분석할 자산을 찾을 수 없습니다.', 0, processing_time_ms)
-            stream_error('분석할 자산을 찾을 수 없습니다.')
-            stream_complete('error')
-            return JsonResponse({
-                'ok': False,
-                'error': '분석할 자산을 찾을 수 없습니다.',
-                'logs': all_logs
-            }, status=400)
+            return JsonResponse(response_payload)
 
-        manual_assets = _build_manual_assets(custom_assets, calculation_method)
-        if manual_assets:
-            merged_assets, added_assets = _merge_asset_lists(assets, manual_assets)
-            if added_assets:
-                assets = merged_assets
-                intent_result['assets'] = assets
-                added_labels = ', '.join(a.get('label', a.get('id', '')) for a in added_assets)
-                append_log(f"[의도 분석] 사용자 지정 자산 추가: {added_labels}")
-        validated_assets = assets
-
-        # Agent 2: Price Retriever
-        backend_logger.info("STEP 2: Running PriceRetrieverAgent")
-        retriever_agent = PriceRetrieverAgent()
-        price_data_map = consume_agent_stream(retriever_agent.stream(validated_assets, start_year, end_year)) or {}
-
-        backend_logger.info("Price Data Map Keys: %s", list(price_data_map.keys()) if price_data_map else "EMPTY")
-
-        if not price_data_map:
-            backend_logger.error("No price data retrieved - returning 502")
-            processing_time_ms = int((time.time() - start_time) * 1000)
-            _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                             '자산 데이터를 가져올 수 없습니다.', len(assets), processing_time_ms)
-            stream_error('자산 데이터를 가져올 수 없습니다. (티커를 확인해주세요)')
-            stream_complete('error')
-            return JsonResponse({
-                'ok': False,
-                'error': '자산 데이터를 가져올 수 없습니다. (티커를 확인해주세요)',
-                'logs': all_logs
-            }, status=502)
-
-        # Agent 3: Calculator
-        backend_logger.info("STEP 3: Running CalculatorAgent with method: %s", calculation_method)
-        calculator_agent = CalculatorAgent()
-        calc_result = consume_agent_stream(
-            calculator_agent.stream(price_data_map, start_year, end_year, calculation_method, include_dividends=include_dividends)
-        ) or {}
-        series_data = calc_result.get('series', [])
-        chart_data_table = calc_result.get('table', [])
-        summary = calc_result.get('summary', '')
-
-        if not series_data:
-            processing_time_ms = int((time.time() - start_time) * 1000)
-            _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                             '유효한 수익률 데이터를 계산할 수 없습니다.', len(assets), processing_time_ms)
-            stream_error('유효한 수익률 데이터를 계산할 수 없습니다.')
-            stream_complete('error')
-            return JsonResponse({
-                'ok': False,
-                'error': '유효한 수익률 데이터를 계산할 수 없습니다.',
-                'logs': all_logs
-            }, status=502)
-
-        # Agent 4: Analysis (Generate narrative summary)
-        backend_logger.info("STEP 4: Running AnalysisAgent")
-        analysis_agent = AnalysisAgent()
-        combined_prompt_for_analysis = ' '.join(([prompt] if prompt else []) + quick_requests)
-        analysis_summary = consume_agent_stream(
-            analysis_agent.stream(series_data, start_year, end_year, calculation_method, combined_prompt_for_analysis)
-        ) or ''
-
-        # Cache Result (if context_key is present)
-        usd_krw_rate = get_cached_usdkrw_rate()
-        if context_key in ['safe_assets', 'us_bigtech']:
-            _save_to_cache(context_key, start_year, end_year, series_data, usd_krw_rate)
-
-        # Log successful query
-        processing_time_ms = int((time.time() - start_time) * 1000)
-        _log_finance_query(user_identifier, prompt, quick_requests, context_key, True,
-                         '', len(assets), processing_time_ms)
-        stream_complete('ok')
-
-        # Construct Response
-        response_payload = {
-            'ok': True,
-            'series': series_data,
-            'chart_data_table': chart_data_table,  # Chart values as table (replaces yearly_prices)
-            'analysis_summary': analysis_summary,  # AI-generated narrative analysis
-            'start_year': start_year,
-            'end_year': end_year,
-            'summary': summary,
-            'notes': "본 분석은 AI 에이전트가 실시간 데이터를 수집하여 계산했습니다.",
-            'fx_rate': usd_krw_rate,
-            'logs': all_logs,
-            'prompt': prompt,
-            'quick_requests': quick_requests,
-            'calculation_method': calculation_method,
-            'include_dividends': include_dividends,
-        }
-
-        return JsonResponse(response_payload)
+        log_token = _finance_log_callback.set(append_log)
+        try:
+            return execute_request()
+        finally:
+            _finance_log_callback.reset(log_token)
 
 
 def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key, start_year, end_year, user_identifier, start_time, include_dividends=False):
