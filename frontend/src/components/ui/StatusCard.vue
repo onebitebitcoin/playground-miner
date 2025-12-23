@@ -55,8 +55,8 @@ const props = defineProps({
   },
   color: {
     type: String,
-    default: 'blue',
-    validator: (value) => ['orange', 'blue', 'green', 'slate'].includes(value)
+    default: 'slate',
+    validator: (value) => ['amber', 'emerald', 'slate'].includes(value)
   },
   clickable: {
     type: Boolean,
@@ -71,17 +71,13 @@ const props = defineProps({
 defineEmits(['click'])
 
 const colorMap = {
-  orange: {
-    bg: 'bg-orange-100',
-    text: 'text-orange-600'
+  amber: {
+    bg: 'bg-amber-100',
+    text: 'text-amber-600'
   },
-  blue: {
-    bg: 'bg-blue-100',
-    text: 'text-blue-600'
-  },
-  green: {
-    bg: 'bg-green-100',
-    text: 'text-green-600'
+  emerald: {
+    bg: 'bg-emerald-100',
+    text: 'text-emerald-600'
   },
   slate: {
     bg: 'bg-slate-100',
@@ -89,8 +85,8 @@ const colorMap = {
   }
 }
 
-const iconClasses = computed(() => colorMap[props.color]?.bg || 'bg-blue-100')
-const iconColorClasses = computed(() => colorMap[props.color]?.text || 'text-blue-600')
+const iconClasses = computed(() => colorMap[props.color]?.bg || colorMap.slate.bg)
+const iconColorClasses = computed(() => colorMap[props.color]?.text || colorMap.slate.text)
 
 const isNumeric = computed(() => typeof props.value === 'number')
 

@@ -5,6 +5,20 @@ import { useWebSocket } from './useWebSocket'
 import { usePolling } from './usePolling'
 import type { BlockchainStatus, Block, WebSocketMessage } from '@/types'
 
+type PeerPayload = string | { nickname?: string | null } | null | undefined
+
+function normalizePeers(peerList: PeerPayload[] = []): string[] {
+  return peerList
+    .map((peer) => {
+      if (typeof peer === 'string') return peer
+      if (peer && typeof peer === 'object' && typeof peer.nickname === 'string') {
+        return peer.nickname
+      }
+      return ''
+    })
+    .filter((name): name is string => Boolean(name))
+}
+
 export function useBlockchain(nickname?: Ref<string> | string) {
   const status = reactive<BlockchainStatus>({
     height: 0,
@@ -57,7 +71,7 @@ export function useBlockchain(nickname?: Ref<string> | string) {
       case 'snapshot': {
         if (payload.blocks) setBlocksSortedUnique(payload.blocks)
         if (payload.status) applyStatus(payload.status)
-        if (payload.peers) peers.value = payload.peers
+        if (payload.peers) peers.value = normalizePeers(payload.peers as PeerPayload[])
         if (payload.me?.nickname) {
           nicknameRef.value = payload.me.nickname
           localStorage.setItem('nickname', payload.me.nickname)
@@ -88,7 +102,7 @@ export function useBlockchain(nickname?: Ref<string> | string) {
 
       case 'peers': {
         if (Array.isArray(payload.peers)) {
-          peers.value = payload.peers
+          peers.value = normalizePeers(payload.peers as PeerPayload[])
         }
         break
       }

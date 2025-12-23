@@ -880,7 +880,7 @@ async function ensureDefaultSelection({ reapply = false } = {}) {
     selectedContextKey.value = 'safe_assets'
     return
   }
-  if (!reapply && !vo) {
+  if (reapply || !vo) {
     vo = true
     await applyQuickCompare(def.key, { autoRun: false })
   } else {

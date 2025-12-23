@@ -4,11 +4,11 @@
       <div
         v-for="notification in notifications"
         :key="notification.id"
-        class="bg-white border border-green-200 rounded-lg shadow-lg p-4 max-w-sm pointer-events-auto"
+        class="bg-white border border-emerald-200 rounded-lg shadow-lg p-4 max-w-sm pointer-events-auto"
       >
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
-            <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0">
+            <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
             </svg>
           </div>

@@ -3,8 +3,8 @@
     <div class="bg-white rounded-xl sm:rounded-2xl shadow-2xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col">
       <div class="flex items-center justify-between p-4 sm:p-6 border-b border-slate-200">
         <div class="flex items-center gap-3">
-          <div class="w-8 h-8 sm:w-10 sm:h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="w-8 h-8 sm:w-10 sm:h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
@@ -18,7 +18,7 @@
       </div>
 
       <div class="flex-1 overflow-y-auto p-3 sm:p-6">
-        <div v-if="broadcastMsg" class="mb-4 p-3 sm:p-4 rounded-xl border border-orange-200 bg-orange-50 text-orange-700 text-sm">
+        <div v-if="broadcastMsg" class="mb-4 p-3 sm:p-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 text-sm">
           {{ broadcastMsg }}
         </div>
 
@@ -30,8 +30,8 @@
           >
             <div class="flex items-center justify-between mb-3">
               <div class="flex items-center gap-2">
-                <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <span class="text-blue-600 text-sm font-bold">#</span>
+                <div class="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
+                  <span class="text-amber-600 text-sm font-bold">#</span>
                 </div>
                 <span class="font-bold text-lg text-slate-800">{{ block.height }}</span>
               </div>

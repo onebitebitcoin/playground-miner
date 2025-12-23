@@ -8,10 +8,10 @@
       <div class="flex items-center gap-1 sm:gap-2 pr-2 min-w-max">
         <template v-for="(b, idx) in displayed" :key="b.height">
           <div
-            class="relative w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 lg:w-10 lg:h-10 rounded shadow-sm bg-gradient-to-br from-indigo-200 to-indigo-400 border border-indigo-500/40 animate-pop-in flex-shrink-0"
+            class="relative w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 lg:w-10 lg:h-10 rounded shadow-sm bg-gradient-to-br from-amber-200 to-amber-400 border border-amber-500/40 animate-pop-in flex-shrink-0"
             :title="`#${b.height} — 난이도 ${b.difficulty}\n${new Date(b.timestamp).toLocaleString()}`"
           >
-            <div class="absolute inset-0 grid place-items-center text-[9px] sm:text-[10px] md:text-[11px] lg:text-[12px] text-indigo-900/80 font-semibold">
+            <div class="absolute inset-0 grid place-items-center text-[9px] sm:text-[10px] md:text-[11px] lg:text-[12px] text-amber-900/80 font-semibold">
               {{ b.height }}
             </div>
           </div>
