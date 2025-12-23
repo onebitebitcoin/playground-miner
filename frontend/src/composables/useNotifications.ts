@@ -1,4 +1,4 @@
-import { ref, nextTick } from 'vue'
+import { ref, readonly } from 'vue'
 import type { NotificationState } from '@/types'
 
 export function useNotifications() {

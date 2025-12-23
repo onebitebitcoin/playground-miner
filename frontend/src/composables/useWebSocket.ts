@@ -1,4 +1,4 @@
-import { ref, onUnmounted } from 'vue'
+import { ref, readonly, onUnmounted } from 'vue'
 import type { WebSocketMessage } from '@/types'
 
 export function useWebSocket() {

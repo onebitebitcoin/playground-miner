@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref, computed, readonly } from 'vue'
 import { apiService } from '@/services/ApiService'
 import type { MiningState } from '@/types'
 

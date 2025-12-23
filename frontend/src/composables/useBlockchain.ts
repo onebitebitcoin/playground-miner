@@ -1,135 +1,119 @@
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, readonly, isRef, watch } from 'vue'
+import type { Ref } from 'vue'
 import { apiService } from '@/services/ApiService'
 import { useWebSocket } from './useWebSocket'
 import { usePolling } from './usePolling'
 import { useNotifications } from './useNotifications'
 import type { BlockchainStatus, Block, WebSocketMessage } from '@/types'
 
-export function useBlockchain(nickname?: string) {
-  // State
-  const status = reactive<BlockchainStatus>({ 
-    height: 0, 
-    difficulty: 10000, 
-    reward: 100 
+export function useBlockchain(nickname?: Ref<string> | string) {
+  const status = reactive<BlockchainStatus>({
+    height: 0,
+    difficulty: 10000,
+    reward: 100,
   })
-  
   const blocks = ref<Block[]>([])
   const peers = ref<string[]>([])
   const broadcastMsg = ref('')
-  const highlighted = new Set<number>()
   const previousPeerCount = ref(0)
+  const isActive = ref(false)
+  const nicknameRef = isRef(nickname) ? nickname : ref(nickname || '')
 
-  // Composables
   const { connect, disconnect, isConnected } = useWebSocket()
   const { startPolling, stopPolling } = usePolling()
-  const { notifications, showUserJoinNotification } = useNotifications()
+  const { notifications, showUserJoinNotification, removeNotification } = useNotifications()
 
-  // Computed
   const totalPeerCount = computed(() => {
     const peerCount = peers.value.length
-    const includesSelf = nickname && peers.value.includes(nickname)
+    const currentNickname = nicknameRef.value || ''
+    const includesSelf = currentNickname && peers.value.includes(currentNickname)
     return includesSelf ? peerCount : peerCount + 1
   })
 
-  // Block management
   function setBlocksSortedUnique(blockList: Block[]) {
-    const map = new Map()
+    const map = new Map<number, Block>()
     for (const block of blockList) {
       if (!map.has(block.height)) {
         map.set(block.height, block)
       }
     }
-    // Sort by height descending (latest first)
     blocks.value = Array.from(map.values()).sort((a, b) => b.height - a.height)
   }
 
   function addOrUpdateBlock(block: Block) {
     setBlocksSortedUnique([block, ...blocks.value])
-    
-    // Highlight animation
-    try {
-      highlighted.add(block.height)
-      setTimeout(() => highlighted.delete(block.height), 1200)
-    } catch (error) {
-      console.warn('Failed to add highlight:', error)
-    }
   }
 
-  // Status management
   function applyStatus(newStatus: Partial<BlockchainStatus>) {
-    // Ensure block height is monotonically increasing
-    if (newStatus.height !== undefined) {
+    if (typeof newStatus.height === 'number') {
       status.height = Math.max(status.height, newStatus.height)
     }
-    if (newStatus.difficulty !== undefined) {
+    if (typeof newStatus.difficulty === 'number') {
       status.difficulty = newStatus.difficulty
     }
-    if (newStatus.reward !== undefined) {
+    if (typeof newStatus.reward === 'number') {
       status.reward = newStatus.reward
     }
   }
 
-  // WebSocket message handler
   function handleMessage(payload: WebSocketMessage) {
-    console.log('WebSocket message received:', payload)
-    
     switch (payload.type) {
-      case 'snapshot':
+      case 'snapshot': {
         if (payload.blocks) setBlocksSortedUnique(payload.blocks)
         if (payload.status) applyStatus(payload.status)
         if (payload.peers) peers.value = payload.peers
-        stopPolling() // Stop polling when real-time connection works
+        if (payload.me?.nickname) {
+          nicknameRef.value = payload.me.nickname
+          localStorage.setItem('nickname', payload.me.nickname)
+        }
+        stopPolling()
         break
-        
-      case 'block':
+      }
+
+      case 'block': {
         if (payload.block) {
           addOrUpdateBlock(payload.block)
           status.height = Math.max(status.height, payload.block.height)
         }
         if (payload.status) applyStatus(payload.status)
-        
-        // Show broadcast message
         if (payload.notice) {
           broadcastMsg.value = payload.notice
-          setTimeout(() => { broadcastMsg.value = '' }, 3500)
+          setTimeout(() => {
+            broadcastMsg.value = ''
+          }, 3500)
         }
         break
-        
-      case 'status':
+      }
+
+      case 'status': {
         if (payload.status) applyStatus(payload.status)
         break
-        
-      case 'peers':
+      }
+
+      case 'peers': {
         if (Array.isArray(payload.peers)) {
           const newPeerCount = payload.peers.length
           const oldPeerCount = previousPeerCount.value
-          
-          // Show notification for new users
           if (newPeerCount > oldPeerCount && oldPeerCount > 0) {
-            const newUsers = payload.peers.filter(p => !peers.value.includes(p))
-            if (newUsers.length > 0) {
-              showUserJoinNotification(newUsers[0])
-            }
+            const newUsers = payload.peers.filter((p) => !peers.value.includes(p))
+            if (newUsers.length > 0) showUserJoinNotification(newUsers[0])
           }
-          
           peers.value = payload.peers
           previousPeerCount.value = newPeerCount
         }
         break
+      }
     }
   }
 
-  // Polling fallback
   async function pollForUpdates() {
     try {
       const [statusResponse, blocksResponse] = await Promise.all([
         apiService.getStatus(),
-        apiService.getBlocks()
+        apiService.getBlocks(),
       ])
-      
       const prevHeight = status.height
       applyStatus(statusResponse)
-      
       if (status.height !== prevHeight) {
         setBlocksSortedUnique(blocksResponse.blocks)
       }
@@ -138,55 +122,60 @@ export function useBlockchain(nickname?: string) {
     }
   }
 
-  // Initialize connection
+  watch(isConnected, (connected) => {
+    if (!isActive.value) return
+    if (connected) {
+      stopPolling()
+    } else {
+      startPolling(pollForUpdates, 2000)
+    }
+  })
+
   async function initialize() {
+    if (isActive.value) return
+    isActive.value = true
+    startPolling(pollForUpdates, 2000)
+
     try {
-      // Load initial data
       const [statusResponse, blocksResponse] = await Promise.all([
         apiService.getStatus(),
-        apiService.getBlocks()
+        apiService.getBlocks(),
       ])
-      
       applyStatus(statusResponse)
       setBlocksSortedUnique(blocksResponse.blocks)
-
-      // Try to establish real-time connection
-      try {
-        connect(handleMessage, nickname)
-      } catch (error) {
-        console.warn('WebSocket connection failed, using polling:', error)
-        startPolling(pollForUpdates, 2000)
-      }
     } catch (error) {
       console.error('Failed to initialize blockchain data:', error)
-      // Still try polling as fallback
-      startPolling(pollForUpdates, 2000)
+    }
+
+    try {
+      const nicknameValue = nicknameRef.value || undefined
+      connect(handleMessage, nicknameValue)
+    } catch (error) {
+      console.warn('WebSocket connection failed, continuing with polling:', error)
     }
   }
 
-  // Cleanup
   function cleanup() {
+    isActive.value = false
     disconnect()
     stopPolling()
-    highlighted.clear()
+    peers.value = []
+    broadcastMsg.value = ''
+    previousPeerCount.value = 0
   }
 
   return {
-    // State
     status: readonly(status),
     blocks: readonly(blocks),
     peers: readonly(peers),
     broadcastMsg: readonly(broadcastMsg),
     notifications,
-    
-    // Computed
     totalPeerCount,
     isConnected,
-    
-    // Methods  
     initialize,
     cleanup,
     addOrUpdateBlock,
-    applyStatus
+    applyStatus,
+    dismissNotification: removeNotification,
   }
 }

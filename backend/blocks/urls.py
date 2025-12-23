@@ -1,5 +1,5 @@
 from django.urls import path, re_path
-from . import views
+from . import views, timecapsule
 
 urlpatterns = [
     path('status', views.status_view, name='status'),
@@ -84,19 +84,19 @@ urlpatterns = [
     path('finance/admin/price-cache', views.admin_price_cache_view, name='admin_price_cache'),
     path('finance/admin/price-cache/<int:pk>', views.admin_price_cache_detail_view, name='admin_price_cache_detail'),
     # Time Capsule endpoints
-    path('time-capsule/save', views.time_capsule_save_view, name='time_capsule_save'),
-    path('time-capsule/admin/list', views.admin_time_capsules_view, name='admin_time_capsules'),
-    path('time-capsule/admin/mnemonic', views.admin_time_capsule_mnemonic_view, name='admin_time_capsule_mnemonic'),
-    path('time-capsule/admin/broadcast-settings', views.admin_time_capsule_broadcast_settings_view, name='admin_time_capsule_broadcast_settings'),
-    path('time-capsule/admin/broadcast-test', views.admin_time_capsule_broadcast_test_view, name='admin_time_capsule_broadcast_test'),
-    path('time-capsule/admin/build-tx', views.admin_time_capsule_build_transaction_view, name='admin_time_capsule_build_tx'),
-    path('time-capsule/admin/xpub', views.admin_time_capsule_xpub_view, name='admin_time_capsule_xpub'),
-    path('time-capsule/admin/xpub/balance', views.admin_time_capsule_xpub_balance_view, name='admin_time_capsule_xpub_balance'),
-    path('time-capsule/admin/broadcast-tx', views.admin_time_capsule_broadcast_transaction_view, name='admin_time_capsule_broadcast_tx'),
-    path('time-capsule/admin/broadcast-record/<int:pk>', views.admin_time_capsule_record_broadcast_view, name='admin_time_capsule_record_broadcast'),
-    path('time-capsule/admin/fee-estimates', views.admin_time_capsule_fee_estimates_view, name='admin_time_capsule_fee_estimates'),
-    path('time-capsule/admin/assign-address/<int:pk>', views.admin_time_capsule_assign_address_view, name='admin_time_capsule_assign_address'),
-    path('time-capsule/admin/unassign-address/<int:pk>', views.admin_time_capsule_unassign_address_view, name='admin_time_capsule_unassign_address'),
-    path('time-capsule/admin/update-coupon/<int:pk>', views.admin_time_capsule_update_coupon_view, name='admin_time_capsule_update_coupon'),
-    path('time-capsule/admin/delete/<int:pk>', views.admin_time_capsule_delete_view, name='admin_time_capsule_delete'),
+    path('time-capsule/save', timecapsule.time_capsule_save_view, name='time_capsule_save'),
+    path('time-capsule/admin/list', timecapsule.admin_time_capsules_view, name='admin_time_capsules'),
+    path('time-capsule/admin/mnemonic', timecapsule.admin_time_capsule_mnemonic_view, name='admin_time_capsule_mnemonic'),
+    path('time-capsule/admin/broadcast-settings', timecapsule.admin_time_capsule_broadcast_settings_view, name='admin_time_capsule_broadcast_settings'),
+    path('time-capsule/admin/broadcast-test', timecapsule.admin_time_capsule_broadcast_test_view, name='admin_time_capsule_broadcast_test'),
+    path('time-capsule/admin/build-tx', timecapsule.admin_time_capsule_build_transaction_view, name='admin_time_capsule_build_tx'),
+    path('time-capsule/admin/xpub', timecapsule.admin_time_capsule_xpub_view, name='admin_time_capsule_xpub'),
+    path('time-capsule/admin/xpub/balance', timecapsule.admin_time_capsule_xpub_balance_view, name='admin_time_capsule_xpub_balance'),
+    path('time-capsule/admin/broadcast-tx', timecapsule.admin_time_capsule_broadcast_transaction_view, name='admin_time_capsule_broadcast_tx'),
+    path('time-capsule/admin/broadcast-record/<int:pk>', timecapsule.admin_time_capsule_record_broadcast_view, name='admin_time_capsule_record_broadcast'),
+    path('time-capsule/admin/fee-estimates', timecapsule.admin_time_capsule_fee_estimates_view, name='admin_time_capsule_fee_estimates'),
+    path('time-capsule/admin/assign-address/<int:pk>', timecapsule.admin_time_capsule_assign_address_view, name='admin_time_capsule_assign_address'),
+    path('time-capsule/admin/unassign-address/<int:pk>', timecapsule.admin_time_capsule_unassign_address_view, name='admin_time_capsule_unassign_address'),
+    path('time-capsule/admin/update-coupon/<int:pk>', timecapsule.admin_time_capsule_update_coupon_view, name='admin_time_capsule_update_coupon'),
+    path('time-capsule/admin/delete/<int:pk>', timecapsule.admin_time_capsule_delete_view, name='admin_time_capsule_delete'),
 ]
