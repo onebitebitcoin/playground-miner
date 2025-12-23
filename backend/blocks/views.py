@@ -3880,9 +3880,15 @@ def _fetch_asset_history(cfg, start_year, end_year):
         category == '국내 주식' or
         (ticker and (ticker.endswith('.KS') or ticker.endswith('.KQ') or ticker.endswith('.KL')))
     )
+    allow_global_sources = not is_korean_stock
 
-    # 한국 주식은 pykrx만 사용
+    # 한국 주식은 반드시 pykrx 사용 (설치/요청 실패 시 오류 처리)
     if is_korean_stock and ticker:
+        if pykrx_stock is None:
+            message = 'pykrx: 패키지가 설치되어 있지 않아 데이터를 가져올 수 없습니다.'
+            logger.error('[%s] %s (Ticker: %s)', label, message, ticker)
+            raise RuntimeError(message)
+
         logger.info('[%s] 한국 주식 감지 (Category: %s, Ticker: %s) → pykrx 사용', label, category, ticker)
         try:
             history = _fetch_korean_stock_history(ticker, start_year, end_year)
@@ -3890,7 +3896,7 @@ def _fetch_asset_history(cfg, start_year, end_year):
                 logger.info('[%s] pykrx에서 데이터 가져오기 성공: %d개', label, len(history))
                 return history, 'pykrx'
             errors.append('pykrx: 데이터 없음')
-            logger.warning('[%s] pykrx에서 데이터를 찾지 못함', label)
+            logger.error('[%s] pykrx에서 데이터를 찾지 못했습니다.', label)
         except Exception as exc:
             errors.append(f'pykrx: {exc}')
             logger.error('[%s] pykrx 실패: %s', label, exc)
@@ -3899,7 +3905,7 @@ def _fetch_asset_history(cfg, start_year, end_year):
         raise RuntimeError(error_msg)
 
     # 1. Yahoo Finance 시도
-    if ticker and not is_korean_stock:
+    if ticker and allow_global_sources:
         try:
             logger.info('[%s] Yahoo Finance에서 데이터 가져오기 시도: %s', label, ticker)
             history = _fetch_yfinance_history(ticker, start_year, end_year)
@@ -3914,7 +3920,7 @@ def _fetch_asset_history(cfg, start_year, end_year):
             logger.warning('[%s] Yahoo Finance 실패: %s', label, exc)
 
     # 2. Stooq 시도 (한국 주식 제외)
-    if stooq_symbol:
+    if stooq_symbol and allow_global_sources:
         try:
             logger.info('[%s] Stooq에서 데이터 가져오기 시도: %s', label, stooq_symbol)
             history = _fetch_stooq_history(stooq_symbol, start_year, end_year)
