@@ -734,7 +734,10 @@ def _sync_default_finance_quick_compare_group_assets():
         return False
 
     any_updates = False
-    groups = FinanceQuickCompareGroup.objects.filter(key__in=default_keys)
+    groups = FinanceQuickCompareGroup.objects.filter(
+        key__in=default_keys,
+        auto_sync_enabled=True
+    )
     for group in groups:
         required_assets = [asset for asset in default_map.get(group.key, []) if asset not in (group.assets or [])]
         if not required_assets:
@@ -7824,6 +7827,7 @@ def admin_finance_quick_compare_groups_view(request):
         key = (payload.get('key') or '').strip()
         label = (payload.get('label') or '').strip()
         assets = _sanitize_asset_names(payload.get('assets'))
+        auto_sync_enabled = bool(payload.get('auto_sync_enabled', False))
 
         if not key or not label:
             return JsonResponse({'ok': False, 'error': 'key와 label은 필수입니다.'}, status=400)
@@ -7858,6 +7862,7 @@ def admin_finance_quick_compare_groups_view(request):
                 resolved_assets=resolved_assets,
                 sort_order=int(sort_order),
                 is_active=bool(payload.get('is_active', True)),
+                auto_sync_enabled=auto_sync_enabled,
             )
         except Exception as exc:
             return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
@@ -7882,6 +7887,7 @@ def admin_finance_quick_compare_group_detail_view(request, pk):
         if payload is None:
             return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
 
+        assets_updated = False
         if 'key' in payload and payload['key'] is not None:
             key = str(payload['key']).strip()
             if not key:
@@ -7897,6 +7903,7 @@ def admin_finance_quick_compare_group_detail_view(request, pk):
             if not assets:
                 return JsonResponse({'ok': False, 'error': '최소 1개 이상의 비교 종목이 필요합니다.'}, status=400)
             group.assets = assets
+            assets_updated = True
             # Resolve assets to get ticker and label
             resolved_assets = _resolve_assets(assets)
             group.resolved_assets = resolved_assets
@@ -7915,6 +7922,10 @@ def admin_finance_quick_compare_group_detail_view(request, pk):
             group.sort_order = int(payload['sort_order'])
         if 'is_active' in payload:
             group.is_active = bool(payload['is_active'])
+        if 'auto_sync_enabled' in payload:
+            group.auto_sync_enabled = bool(payload['auto_sync_enabled'])
+        elif assets_updated:
+            group.auto_sync_enabled = False
 
         try:
             group.save()

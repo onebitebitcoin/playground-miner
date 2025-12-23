@@ -566,6 +566,10 @@ class FinanceQuickCompareGroup(models.Model):
     resolved_assets = models.JSONField(default=list, blank=True, help_text='Pre-resolved asset information with label, ticker, id, category')
     sort_order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
+    auto_sync_enabled = models.BooleanField(
+        default=True,
+        help_text='자동 기본 자산 동기화를 유지할지 여부'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -601,6 +605,7 @@ class FinanceQuickCompareGroup(models.Model):
             'resolved_assets': resolved_assets_with_cache,
             'sort_order': self.sort_order,
             'is_active': self.is_active,
+            'auto_sync_enabled': self.auto_sync_enabled,
         }
 
 
