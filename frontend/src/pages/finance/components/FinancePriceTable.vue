@@ -6,7 +6,7 @@
     <div class="text-sm font-semibold text-slate-900 px-1">
       {{ analysisResultType === 'price' ? '연도별 가격 비교' : analysisResultType === 'cumulative' ? '연도별 누적 수익률 비교' : analysisResultType === 'yearly_growth' ? '연도별 전년 대비 증감률 비교' : '연도별 연평균 상승률 비교' }}
     </div>
-    <div class="overflow-x-auto -mx-3 sm:-mx-4 md:-mx-6 px-3 sm:px-4 md:px-6">
+    <div class="overflow-x-auto px-2 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6">
       <table class="min-w-full table-fixed text-[11px] sm:text-xs text-slate-600 border-collapse">
         <thead>
           <tr class="bg-slate-50 text-slate-500">

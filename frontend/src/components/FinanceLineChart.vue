@@ -1,6 +1,6 @@
 <template>
   <div class="w-full bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-    <div class="p-4 border-b border-slate-100 flex items-center justify-between gap-4">
+    <div class="p-4 border-b border-slate-100 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
       <div class="flex flex-col gap-1 flex-1 min-w-0">
         <div class="flex items-center gap-2">
           <h3 class="text-base font-semibold text-slate-900">{{ chartTitle }}</h3>
@@ -19,7 +19,7 @@
       </div>
 
       <!-- 시작 연도 조절 -->
-      <div v-if="showYearSlider" class="flex items-center gap-3 flex-wrap">
+      <div v-if="showYearSlider" class="flex flex-wrap items-center gap-3 sm:gap-4 w-full md:w-auto md:justify-end">
         <button
           @click="decrementYear"
           :disabled="!canDecrement"
@@ -38,7 +38,7 @@
           :min="originalStartYear"
           :max="endYear - 1"
           step="1"
-          class="w-24 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-900"
+          class="flex-1 min-w-[140px] w-full max-w-xs h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-900"
         />
 
         <button
@@ -56,69 +56,65 @@
 
         <div
           v-if="showTaxToggle || showDividendToggle"
-          class="flex items-center gap-4 pl-3 border-l border-slate-200 flex-wrap"
+          class="flex flex-row gap-2 w-full sm:gap-3 sm:w-auto sm:flex-wrap sm:items-center md:pl-3 md:border-l md:border-slate-200"
         >
-          <div v-if="showTaxToggle" class="flex items-center gap-2">
-            <div class="flex items-center gap-1 text-xs font-medium text-slate-600 whitespace-nowrap">
-              <span>세금 포함</span>
-              <button
-                type="button"
-                class="text-slate-400 hover:text-slate-700 transition"
-                aria-label="해외 주식 양도소득세 계산식 안내"
-                @click.stop="showTaxInfo = true"
-              >
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 12v4m0-8h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </button>
-            </div>
+          <div class="flex items-center gap-1.5 flex-shrink-0" v-if="showTaxToggle">
+            <span class="text-xs font-medium text-slate-600 whitespace-nowrap">세금</span>
             <button
               type="button"
-              class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
-              :class="taxIncluded ? 'bg-slate-900' : 'bg-slate-200'"
+              class="text-slate-400 hover:text-slate-700 transition flex-shrink-0"
+              aria-label="해외 주식 양도소득세 계산식 안내"
+              @click.stop="showTaxInfo = true"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 12v4m0-8h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              :class="taxIncluded ? 'bg-blue-600' : 'bg-gray-300'"
               @click="toggleTax"
             >
               <span
-                class="inline-block h-4 w-4 transform rounded-full bg-white transition"
-                :class="taxIncluded ? 'translate-x-4' : 'translate-x-1'"
+                class="inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-200"
+                :class="taxIncluded ? 'translate-x-5' : 'translate-x-0.5'"
               ></span>
             </button>
           </div>
-          <div v-if="showDividendToggle" class="flex items-center gap-2">
-            <div class="flex items-center gap-1 text-xs font-medium text-slate-600 whitespace-nowrap">
-              <span>배당 포함</span>
-              <button
-                type="button"
-                class="text-slate-400 hover:text-slate-700 transition"
-                aria-label="배당 재투자 계산식 안내"
-                @click.stop="showDividendInfo = true"
-              >
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 12v4m0-8h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </button>
-            </div>
+          <div class="flex items-center gap-1.5 flex-shrink-0" v-if="showDividendToggle">
+            <span class="text-xs font-medium text-slate-600 whitespace-nowrap">배당</span>
             <button
               type="button"
-              class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
+              class="text-slate-400 hover:text-slate-700 transition flex-shrink-0"
+              aria-label="배당 재투자 계산식 안내"
+              @click.stop="showDividendInfo = true"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 12v4m0-8h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               :class="[
-                dividendIncluded ? 'bg-slate-900' : 'bg-slate-200',
+                dividendIncluded ? 'bg-blue-600' : 'bg-gray-300',
                 dividendTogglePending ? 'cursor-wait opacity-60' : ''
               ]"
               @click="toggleDividends"
               :aria-disabled="dividendTogglePending"
             >
               <span
-                class="inline-block h-4 w-4 transform rounded-full bg-white transition"
-                :class="dividendIncluded ? 'translate-x-4' : 'translate-x-1'"
+                class="inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-200"
+                :class="dividendIncluded ? 'translate-x-5' : 'translate-x-0.5'"
               ></span>
             </button>
-            <div v-if="dividendTogglePending" class="flex items-center gap-1 text-[10px] text-slate-400">
+            <div v-if="dividendTogglePending" class="flex items-center gap-1 text-[10px] text-slate-400 flex-shrink-0">
               <svg class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke-width="3"></circle>
                 <path class="opacity-75" stroke-width="3" d="M4 12a8 8 0 018-8"></path>
               </svg>
-              <span>데이터 준비 중</span>
+              <span class="hidden sm:inline">데이터 준비 중</span>
             </div>
           </div>
         </div>
@@ -126,41 +122,43 @@
     </div>
 
     <div class="p-4">
-      <div v-if="chart.lines.length || loading" class="relative w-full h-[400px]">
-        <!-- 로딩 오버레이 -->
-        <div
-          v-if="loading"
-          class="absolute inset-0 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center z-10 rounded-xl"
-        >
-          <div class="w-full max-w-md px-6 space-y-4">
-            <p class="text-sm font-semibold text-slate-700 text-center">
-              {{ loading && loadingProgress >= 80 ? '계산 중...' : '데이터 로딩 중...' }}
-            </p>
-            <p class="text-xs text-slate-500 text-center">
-              1~2분 정도 소요됩니다
-            </p>
+      <div v-if="chart.lines.length || loading" class="-mx-2 sm:mx-0">
+        <div class="overflow-x-auto px-2 sm:px-0">
+          <div class="relative w-full min-w-[640px] h-[320px] sm:h-[360px] md:h-[420px]">
+            <!-- 로딩 오버레이 -->
+            <div
+              v-if="loading"
+              class="absolute inset-0 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center z-10 rounded-xl"
+            >
+              <div class="w-full max-w-md px-6 space-y-4">
+                <p class="text-sm font-semibold text-slate-700 text-center">
+                  {{ loading && loadingProgress >= 80 ? '계산 중...' : '데이터 로딩 중...' }}
+                </p>
+                <p class="text-xs text-slate-500 text-center">
+                  1~2분 정도 소요됩니다
+                </p>
 
-            <!-- Progress bar -->
-            <div class="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
-              <div
-                class="bg-blue-500 h-full rounded-full transition-all duration-300 ease-out"
-                :class="{ 'animate-pulse': loadingProgress >= 100 }"
-                :style="{ width: `${loadingProgress}%` }"
-              ></div>
+                <!-- Progress bar -->
+                <div class="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                  <div
+                    class="bg-blue-500 h-full rounded-full transition-all duration-300 ease-out"
+                    :class="{ 'animate-pulse': loadingProgress >= 100 }"
+                    :style="{ width: `${loadingProgress}%` }"
+                  ></div>
+                </div>
+
+                <!-- Progress percentage -->
+                <p class="text-xs font-mono text-slate-600 text-center">{{ loadingProgress }}%</p>
+              </div>
             </div>
 
-            <!-- Progress percentage -->
-            <p class="text-xs font-mono text-slate-600 text-center">{{ loadingProgress }}%</p>
-          </div>
-        </div>
-
-        <svg
-          :viewBox="`0 0 ${dimensions.width} ${dimensions.height}`"
-          role="img"
-          class="w-full h-full"
-          preserveAspectRatio="xMidYMid meet"
-          @mouseleave="hideTooltip"
-        >
+            <svg
+              :viewBox="`0 0 ${dimensions.width} ${dimensions.height}`"
+              role="img"
+              class="w-full h-full"
+              preserveAspectRatio="xMidYMid meet"
+              @mouseleave="hideTooltip"
+            >
           <defs>
             <filter id="bitcoin-glow">
               <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
@@ -242,19 +240,21 @@
             </text>
 
           </g>
-        </svg>
-        <div
-          v-if="tooltip.show"
-          class="absolute pointer-events-none bg-slate-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg"
-          :style="{
-            left: tooltip.left + '%',
-            top: tooltip.top + '%',
-            transform: 'translate(-50%, -120%)'
-          }"
-        >
-          <div class="font-semibold">{{ tooltip.label }}</div>
-          <div class="font-mono">{{ tooltip.valueText }}</div>
-          <div class="text-[10px] text-slate-300">{{ tooltip.year }}년</div>
+            </svg>
+            <div
+              v-if="tooltip.show"
+              class="absolute pointer-events-none bg-slate-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg"
+              :style="{
+                left: tooltip.left + '%',
+                top: tooltip.top + '%',
+                transform: 'translate(-50%, -120%)'
+              }"
+            >
+              <div class="font-semibold">{{ tooltip.label }}</div>
+              <div class="font-mono">{{ tooltip.valueText }}</div>
+              <div class="text-[10px] text-slate-300">{{ tooltip.year }}년</div>
+            </div>
+          </div>
         </div>
       </div>
 
