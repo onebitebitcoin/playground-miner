@@ -72,13 +72,13 @@
             </button>
             <button
               type="button"
-              class="relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-1"
+              class="relative inline-flex h-4 w-7 flex-shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-1"
               :class="taxIncluded ? 'bg-slate-900' : 'bg-slate-200'"
               @click="toggleTax"
             >
               <span
-                class="inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200"
-                :class="taxIncluded ? 'translate-x-[1.125rem]' : 'translate-x-0.5'"
+                class="inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform duration-200"
+                :class="taxIncluded ? 'translate-x-3.5' : 'translate-x-0.5'"
               ></span>
             </button>
           </div>
@@ -96,7 +96,7 @@
             </button>
             <button
               type="button"
-              class="relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-1"
+              class="relative inline-flex h-4 w-7 flex-shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-1"
               :class="[
                 dividendIncluded ? 'bg-slate-900' : 'bg-slate-200',
                 dividendTogglePending ? 'cursor-wait opacity-60' : ''
@@ -105,8 +105,8 @@
               :aria-disabled="dividendTogglePending"
             >
               <span
-                class="inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200"
-                :class="dividendIncluded ? 'translate-x-[1.125rem]' : 'translate-x-0.5'"
+                class="inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform duration-200"
+                :class="dividendIncluded ? 'translate-x-3.5' : 'translate-x-0.5'"
               ></span>
             </button>
             <div v-if="dividendTogglePending" class="flex items-center gap-1 text-[10px] text-slate-400 flex-shrink-0">
