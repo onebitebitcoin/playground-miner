@@ -8,10 +8,11 @@
       <div class="flex items-center gap-1 sm:gap-2 pr-2 min-w-max">
         <template v-for="(b, idx) in displayed" :key="b.height">
           <div
-            class="relative w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 lg:w-10 lg:h-10 rounded shadow-sm bg-gradient-to-br from-amber-200 to-amber-400 border border-amber-500/40 animate-pop-in flex-shrink-0"
+            class="block-item relative w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 lg:w-10 lg:h-10 rounded shadow-sm bg-gradient-to-br from-amber-500 via-yellow-500 to-amber-600 border border-amber-600/60 animate-pop-in flex-shrink-0"
             :title="`#${b.height} — 난이도 ${b.difficulty}\n${new Date(b.timestamp).toLocaleString()}`"
           >
-            <div class="absolute inset-0 grid place-items-center text-[9px] sm:text-[10px] md:text-[11px] lg:text-[12px] text-amber-900/80 font-semibold">
+            <div class="absolute inset-0 bg-gradient-to-br from-transparent via-white/20 to-transparent opacity-50"></div>
+            <div class="absolute inset-0 grid place-items-center text-[9px] sm:text-[10px] md:text-[11px] lg:text-[12px] text-amber-950 font-bold drop-shadow-sm">
               {{ b.height }}
             </div>
           </div>
@@ -42,9 +43,37 @@ const displayed = computed(() => (props.blocks || []).slice(0, props.limit))
 
 <style scoped>
 @keyframes popIn {
-  0% { transform: scale(0.6); opacity: 0.1; }
-  70% { transform: scale(1.08); opacity: 1; }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(0.6) rotate(-10deg);
+    opacity: 0.1;
+  }
+  70% {
+    transform: scale(1.12) rotate(5deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
 }
-.animate-pop-in { animation: popIn 300ms ease-out; }
+
+.animate-pop-in {
+  animation: popIn 400ms cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.block-item {
+  box-shadow:
+    0 4px 6px rgba(251, 191, 36, 0.3),
+    0 1px 3px rgba(0, 0, 0, 0.1),
+    inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  transition: all 0.2s ease;
+}
+
+.block-item:hover {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow:
+    0 8px 12px rgba(251, 191, 36, 0.5),
+    0 2px 6px rgba(0, 0, 0, 0.15),
+    inset 0 1px 2px rgba(255, 255, 255, 0.4),
+    0 0 20px rgba(251, 191, 36, 0.4);
+}
 </style>

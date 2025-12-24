@@ -3,17 +3,17 @@
     <StatusBar
       :status="blockchain.status"
       :my-reward="myReward"
-      :total-peer-count="blockchain.totalPeerCount"
+      :total-peer-count="blockchain.totalPeerCount.value"
       @show-peers="showPeersModal = true"
     />
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
       <MiningPanel
         v-model:miner="miner"
-        :mining-state="mining.miningState"
-        :last-attempt="mining.lastAttempt"
-        :message="mining.message"
-        :message-type="mining.messageType"
+        :mining-state="mining.miningState.value"
+        :last-attempt="mining.lastAttempt.value"
+        :message="mining.message.value"
+        :message-type="mining.messageType.value"
         @mine="handleMine"
       />
 

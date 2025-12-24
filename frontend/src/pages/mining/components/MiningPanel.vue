@@ -1,26 +1,13 @@
 <template>
   <div class="bg-white rounded-2xl shadow-lg border border-slate-200 p-4 sm:p-6">
-    <div class="flex items-center gap-3 mb-4">
-      <div class="w-10 h-10 sm:w-12 sm:h-12 bg-slate-800 rounded-xl flex items-center justify-center">
-        <svg class="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-        </svg>
-      </div>
+    <div class="flex items-center justify-between mb-4 gap-3">
       <h3 class="text-lg sm:text-xl font-bold text-slate-800">채굴 시작</h3>
+      <span id="miner-label" class="text-sm font-medium text-slate-600">
+        {{ miner || 'guest' }}
+      </span>
     </div>
 
-    <label class="block mb-4">
-      <span class="text-sm font-medium text-slate-700 mb-2 block">채굴자 닉네임</span>
-      <input
-        :value="miner"
-        @input="$emit('update:miner', $event.target?.value || '')"
-        class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all"
-        placeholder="예: satoshi"
-        inputmode="text"
-      />
-    </label>
-
-    <div class="bg-amber-50 rounded-xl p-3 sm:p-4 mb-4 border border-amber-100 text-xs sm:text-sm text-amber-800 leading-relaxed">
+    <div class="bg-slate-800/5 rounded-xl p-3 sm:p-4 mb-4 border border-slate-200 text-xs sm:text-sm text-slate-800 leading-relaxed">
       1~100,000 범위의 난수 중 현재 난이도 이하가 나오면 블록을 채굴할 수 있습니다. 10블록마다 난이도는 절반으로 낮아집니다.
     </div>
 
@@ -58,10 +45,20 @@
 
     <div
       v-if="message"
-      class="p-4 rounded-xl"
-      :class="messageType === 'ok' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'"
+      :class="[
+        'p-4 rounded-xl border transition-all duration-300',
+        messageType === 'ok'
+          ? 'bg-gradient-to-br from-amber-50 via-yellow-50 to-amber-100 border-amber-300 text-amber-900 font-semibold shadow-lg shadow-amber-200/50'
+          : 'border-slate-200 bg-slate-800/5 text-slate-800'
+      ]"
     >
-      {{ message }}
+      <div v-if="messageType === 'ok'" class="flex items-center gap-2">
+        <svg class="w-5 h-5 text-amber-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+        </svg>
+        <span>{{ message }}</span>
+      </div>
+      <div v-else>{{ message }}</div>
     </div>
   </div>
 </template>

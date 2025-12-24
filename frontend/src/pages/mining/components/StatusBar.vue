@@ -5,16 +5,12 @@
         title="블록 높이"
         :value="status.height"
         subtitle="블록 높이"
-        icon="block"
-        color="amber"
       />
 
       <StatusCard
         title="난이도"
         :value="status.difficulty"
         subtitle="난이도"
-        icon="difficulty"
-        color="slate"
         prefix="≤ "
       />
 
@@ -22,24 +18,18 @@
         title="블록 보상"
         :value="status.reward"
         subtitle="블록 보상"
-        icon="reward"
-        color="emerald"
       />
 
       <StatusCard
         title="내 보상"
         :value="myReward"
         subtitle="내 보상"
-        icon="reward"
-        color="emerald"
       />
 
       <StatusCard
         title="접속자"
         :value="totalPeerCount"
         subtitle="접속자"
-        icon="users"
-        color="amber"
         :clickable="true"
         @click="$emit('showPeers')"
       />
