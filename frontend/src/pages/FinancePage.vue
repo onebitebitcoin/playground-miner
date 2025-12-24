@@ -516,8 +516,12 @@ const filteredSeries = computed(() => {
   var _analysis$value, _analysis$value$serie
   if (!((_analysis$value = analysis.value) != null && (_analysis$value$serie = _analysis$value.series) != null && _analysis$value$serie.length)) return []
   const startY = displayStartYear.value || analysis.value.start_year
-  const series = analysis.value.series.filter((s) => isBitcoinLabel(s.label) || !isKoreanEquitySeries(s))
-  
+  const series = analysis.value.series.filter((s) =>
+    isBitcoinLabel(s.label) ||
+    !isKoreanEquitySeries(s) ||
+    selectedContextKey.value === 'kr_equity'
+  )
+
   if (!startY) return series
 
   const isPrice = analysisResultType.value === 'price'

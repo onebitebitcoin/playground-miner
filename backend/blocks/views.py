@@ -857,15 +857,16 @@ PRESET_STOCK_GROUPS = {
     ],
     'kr_equity': [
         {'id': '005930.KS', 'label': '삼성전자(005930)', 'ticker': '005930.KS', 'stooq_symbol': '005930.kr', 'category': '국내 주식', 'unit': 'KRW', 'aliases': ['samsung electronics', '삼성전자', 'samsung', '005930']},
-        {'id': '000660.KS', 'label': 'SK하이닉스(000660)', 'ticker': '000660.KS', 'stooq_symbol': '000660.kr', 'category': '국내 주식', 'unit': 'KRW', 'aliases': ['sk hynix', 'sk하이닉스', 'hynix', '000660']},
+        {'id': '000660.KS', 'label': 'SK하이닉스(000660)', 'ticker': '000660.KS', 'stooq_symbol': '000660.kr', 'category': '국내 주식', 'unit': 'KRW', 'aliases': ['sk hynix', 'sk하이닉스', 'sk 하이닉스', 'hynix', '000660']},
         {'id': '035420.KS', 'label': 'NAVER(035420)', 'ticker': '035420.KS', 'stooq_symbol': '035420.kr', 'category': '국내 주식', 'unit': 'KRW', 'aliases': ['naver', '네이버', '035420']},
         {'id': '035720.KS', 'label': '카카오(035720)', 'ticker': '035720.KS', 'stooq_symbol': '035720.kr', 'category': '국내 주식', 'unit': 'KRW', 'aliases': ['kakao', '카카오', '035720']},
-        {'id': '373220.KS', 'label': 'LG에너지솔루션(373220)', 'ticker': '373220.KS', 'stooq_symbol': '373220.kr', 'category': '국내 주식', 'unit': 'KRW', 'aliases': ['lg energy solution', 'lg에너지솔루션', 'lg energy', '373220']},
+        {'id': '373220.KS', 'label': 'LG에너지솔루션(373220)', 'ticker': '373220.KS', 'stooq_symbol': '373220.kr', 'category': '국내 주식', 'unit': 'KRW', 'aliases': ['lg energy solution', 'lg에너지솔루션', 'lg 에너지솔루션', 'lg energy', '373220']},
         {'id': '005380.KS', 'label': '현대차(005380)', 'ticker': '005380.KS', 'stooq_symbol': '005380.kr', 'category': '국내 주식', 'unit': 'KRW', 'aliases': ['hyundai motor', '현대차', 'hyundai', '005380']},
         {'id': '000270.KS', 'label': '기아(000270)', 'ticker': '000270.KS', 'stooq_symbol': '000270.kr', 'category': '국내 주식', 'unit': 'KRW', 'aliases': ['kia', '기아', 'kia motors', '000270']},
-        {'id': '207940.KS', 'label': '삼성바이오로직스(207940)', 'ticker': '207940.KS', 'stooq_symbol': '207940.kr', 'category': '국내 주식', 'unit': 'KRW', 'aliases': ['samsung biologics', '삼성바이오로직스', 'samsung bio', '207940']},
+        {'id': '207940.KS', 'label': '삼성바이오로직스(207940)', 'ticker': '207940.KS', 'stooq_symbol': '207940.kr', 'category': '국내 주식', 'unit': 'KRW', 'aliases': ['samsung biologics', '삼성바이오로직스', '삼성 바이오로직스', 'samsung bio', '207940']},
         {'id': '006400.KS', 'label': '삼성SDI(006400)', 'ticker': '006400.KS', 'stooq_symbol': '006400.kr', 'category': '국내 주식', 'unit': 'KRW', 'aliases': ['samsung sdi', '삼성sdi', '삼성에스디아이', '006400']},
-        {'id': '005490.KS', 'label': '포스코홀딩스(005490)', 'ticker': '005490.KS', 'stooq_symbol': '005490.kr', 'category': '국내 주식', 'unit': 'KRW', 'aliases': ['posco holdings', '포스코홀딩스', 'posco', '005490']}
+        {'id': '005490.KS', 'label': '포스코홀딩스(005490)', 'ticker': '005490.KS', 'stooq_symbol': '005490.kr', 'category': '국내 주식', 'unit': 'KRW', 'aliases': ['posco holdings', '포스코홀딩스', 'posco', '005490']},
+        {'id': '105560.KS', 'label': 'KB금융(105560)', 'ticker': '105560.KS', 'stooq_symbol': '105560.kr', 'category': '국내 주식', 'unit': 'KRW', 'aliases': ['kb financial', 'kb financial group', 'kb금융', 'kb 금융', '105560']}
     ]
 }
 
@@ -3553,10 +3554,23 @@ def _find_known_asset_config(asset_id=None, label=None):
             ticker = (cfg.get('ticker') or '').strip().lower()
             stooq_symbol = (cfg.get('stooq_symbol') or '').strip().lower()
             label_norm = _normalize_asset_label_text(cfg.get('label'))
+
+            # Check ID, ticker, stooq_symbol
             if normalized_id and normalized_id in {cfg_id_normalized, ticker, stooq_symbol}:
                 return _clone_asset_config(cfg, cfg_id or normalized_id)
+
+            # Check label
             if normalized_label and label_norm == normalized_label:
                 return _clone_asset_config(cfg, cfg_id or label_norm)
+
+            # Check aliases - IMPORTANT for matching Korean stock names
+            cfg_aliases = cfg.get('aliases') or []
+            if isinstance(cfg_aliases, list):
+                aliases_normalized = [_normalize_asset_label_text(a) for a in cfg_aliases if a]
+                # Check both normalized_id (from ticker field) and normalized_label
+                for check_val in [normalized_id, normalized_label, normalized_asset_text]:
+                    if check_val and check_val in aliases_normalized:
+                        return _clone_asset_config(cfg, cfg_id or check_val)
 
     # Fallback: Check if the asset_id or label looks like a Korean stock ticker (e.g. 005930.KS)
     candidates = [asset_id, label]
