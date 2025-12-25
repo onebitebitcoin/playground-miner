@@ -1,6 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gray-50 p-4">
-    <div class="max-w-6xl mx-auto">
+  <section class="space-y-6">
       <!-- Header -->
       <div class="mb-8">
         <h1 class="text-3xl font-bold text-gray-900 mb-2">수수료 계산기</h1>
@@ -817,9 +816,7 @@
           <p class="text-red-700">{{ error }}</p>
         </div>
       </div>
-    </div>
-
-  </div>
+  </section>
 </template>
 
 <script setup>
