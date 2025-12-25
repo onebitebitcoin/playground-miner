@@ -9,108 +9,78 @@ import FinancePage from '../pages/FinancePage.vue'
 import CompatibilityPage from '../pages/CompatibilityPage.vue'
 import TimeCapsulePage from '../pages/TimeCapsulePage.vue'
 import AdminPage from '../pages/AdminPage.vue'
-import NicknameSetup from '../pages/NicknameSetup.vue'
+import HomePage from '../pages/HomePage.vue'
 
 const routes = [
   {
     path: '/',
-    redirect: () => {
-      // Check if nickname is set, if not redirect to nickname setup
-      const nickname = localStorage.getItem('nickname')
-      return nickname ? '/mining' : '/nickname'
-    }
+    redirect: '/home'
   },
   {
-    path: '/nickname',
-    name: 'nickname',
-    component: NicknameSetup,
-    meta: { requiresNoNickname: true }
+    path: '/home',
+    name: 'home',
+    component: HomePage
   },
   {
     path: '/learn',
     name: 'learn',
-    component: Learn,
-    meta: { requiresNickname: true }
+    component: Learn
   },
   {
     path: '/mining',
     name: 'mining',
-    component: BitcoinMining,
-    meta: { requiresNickname: true }
+    component: BitcoinMining
   },
   {
     path: '/utxo',
     name: 'utxo',
-    component: UTXOPage,
-    meta: { requiresNickname: true }
+    component: UTXOPage
   },
   {
     path: '/wallet',
     name: 'wallet',
-    redirect: '/wallet/kingstone',
-    meta: { requiresNickname: true }
+    redirect: '/wallet/kingstone'
   },
   {
     path: '/wallet/kingstone',
     name: 'wallet-kingstone',
-    component: WalletKingstonePage,
-    meta: { requiresNickname: true }
+    component: WalletKingstonePage
   },
   {
     path: '/wallet/kingstone/:id',
     name: 'wallet-kingstone-detail',
-    component: WalletKingstoneDetailPage,
-    meta: { requiresNickname: true }
+    component: WalletKingstoneDetailPage
   },
   {
     path: '/fee',
     name: 'fee',
-    component: FeePage,
-    meta: { requiresNickname: true }
+    component: FeePage
   },
   {
     path: '/finance',
     name: 'finance',
-    component: FinancePage,
-    meta: { requiresNickname: true }
+    component: FinancePage
   },
   {
     path: '/compatibility',
     name: 'compatibility',
-    component: CompatibilityPage,
-    meta: { requiresNickname: true }
+    component: CompatibilityPage
   },
   {
     path: '/timecapsule',
     name: 'timecapsule',
-    component: TimeCapsulePage,
-    meta: { requiresNickname: true }
+    component: TimeCapsulePage
   },
   {
     path: '/admin',
     name: 'admin',
-    component: AdminPage,
-    meta: { requiresNickname: true }
+    component: AdminPage
   }
 ]
 
 const router = createRouter({
   history: createWebHistory(),
   routes
-})
-
-// Navigation guard to handle nickname requirement
-router.beforeEach((to, from, next) => {
-  const nickname = localStorage.getItem('nickname')
-  const isAdmin = nickname === 'admin' && localStorage.getItem('isAdmin') === 'true'
-
-  if (to.meta.requiresNickname && !nickname) {
-    next('/nickname')
-  } else if (to.meta.requiresNoNickname && nickname) {
-    next('/mining')
-  } else {
-    next()
-  }
 })
 
 export default router

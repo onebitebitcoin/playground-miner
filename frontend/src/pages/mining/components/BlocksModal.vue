@@ -3,8 +3,8 @@
     <div class="bg-white rounded-xl sm:rounded-2xl shadow-2xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col">
       <div class="flex items-center justify-between p-4 sm:p-6 border-b border-slate-200">
         <div class="flex items-center gap-3">
-          <div class="w-8 h-8 sm:w-10 sm:h-10 bg-slate-800/10 rounded-lg flex items-center justify-center">
-            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-slate-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center border border-amber-600/60 bg-gradient-to-br from-amber-500 via-yellow-500 to-amber-600 shadow-sm">
+            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
@@ -30,8 +30,8 @@
           >
             <div class="flex items-center justify-between mb-3">
               <div class="flex items-center gap-2">
-                <div class="w-8 h-8 bg-slate-800/10 rounded-lg flex items-center justify-center">
-                  <span class="text-slate-800 text-sm font-bold">#</span>
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center border border-amber-600/60 bg-gradient-to-br from-amber-500 via-yellow-500 to-amber-600 shadow-sm">
+                  <span class="text-white text-sm font-bold">#</span>
                 </div>
                 <span class="font-bold text-lg text-slate-800">{{ block.height }}</span>
               </div>
@@ -55,6 +55,15 @@
                 <div class="text-xs text-slate-500 mb-1">보상</div>
                 <div class="font-semibold text-slate-800">{{ block.reward || 0 }} sats</div>
               </div>
+              <div
+                v-if="block.note"
+                class="bg-white rounded-lg p-3 col-span-2 md:col-span-4"
+              >
+                <div class="text-xs text-slate-500 mb-1">메시지</div>
+                <div class="text-sm text-slate-800 whitespace-pre-line">
+                  {{ block.note }}
+                </div>
+              </div>
             </div>
           </div>
         </TransitionGroup>
@@ -66,8 +75,10 @@
 <script setup lang="ts">
 import type { Block } from '@/types'
 
+type BlockWithNote = Block & { note?: string }
+
 const props = defineProps<{
-  blocks: Block[]
+  blocks: BlockWithNote[]
   broadcastMsg?: string
 }>()
 

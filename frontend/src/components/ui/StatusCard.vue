@@ -8,8 +8,11 @@
     }"
     @click="clickable && $emit('click')"
   >
-    <div class="text-[10px] sm:text-xs font-medium text-slate-500 uppercase tracking-wide">
-      {{ title }}
+    <div class="flex items-center gap-2">
+      <component v-if="icon" :is="icon" class="w-4 h-4 sm:w-5 sm:h-5 text-slate-500 flex-shrink-0" />
+      <div class="text-[10px] sm:text-xs font-medium text-slate-500 uppercase tracking-wide">
+        {{ title }}
+      </div>
     </div>
     <div
       class="mt-1 text-xl sm:text-2xl font-bold text-slate-900 leading-tight"
@@ -49,6 +52,14 @@ const props = defineProps({
   prefix: {
     type: String,
     default: ''
+  },
+  suffix: {
+    type: String,
+    default: ''
+  },
+  icon: {
+    type: Object,
+    default: null
   }
 })
 
@@ -58,7 +69,8 @@ const isNumeric = computed(() => typeof props.value === 'number')
 
 const formattedValue = computed(() => {
   const val = props.value
-  return props.prefix + (typeof val === 'number' ? val.toLocaleString() : val)
+  const suffix = props.suffix ? ` ${props.suffix}` : ''
+  return props.prefix + (typeof val === 'number' ? val.toLocaleString() : val) + suffix
 })
 
 const showSubtitle = computed(() => Boolean(props.subtitle && props.subtitle !== props.title))
