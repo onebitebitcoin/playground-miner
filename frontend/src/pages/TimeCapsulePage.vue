@@ -1,5 +1,10 @@
 <template>
 <section class="space-y-6">
+  <div>
+    <h1 class="text-3xl font-bold text-gray-900 mb-2">타임캡슐</h1>
+    <p class="text-gray-600">비밀 키와 메시지를 봉인하거나 해제하며 타임캡슐을 관리하세요.</p>
+  </div>
+
   <div
     v-if="toastSuccess || toastError"
     class="fixed top-4 left-1/2 -translate-x-1/2 transform z-[10000] flex flex-col items-center space-y-2 w-full max-w-md px-4"

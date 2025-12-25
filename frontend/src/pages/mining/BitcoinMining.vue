@@ -1,5 +1,10 @@
 <template>
   <div class="space-y-6">
+    <div>
+      <h1 class="text-3xl font-bold text-gray-900 mb-2">비트코인 채굴</h1>
+      <p class="text-gray-600">난이도와 보상을 확인하며 버튼 한 번으로 채굴 체험을 즐겨보세요.</p>
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
       <MiningPanel
         v-model:miner="miner"

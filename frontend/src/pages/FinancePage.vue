@@ -1,43 +1,32 @@
 <template>
   <div class="space-y-6">
-    <section class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6">
-      <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 class="text-lg font-semibold text-slate-900">재무 관리</h2>
-          <p class="text-sm text-slate-500 mt-1">
-            비트코인과 주요 자산군의 과거/미래 수익률을 한 화면에서 비교하세요.
-          </p>
-        </div>
-        <div class="flex rounded-xl bg-slate-100 p-full md:w-auto">
-          <button
-            v-for="tab in tabs"
-            :key="tab.key"
-            class="flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            :class="activeTab === tab.key
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-500'"
-            :disabled="tab.disabled"
-            :aria-disabled="tab.disabled ? 'true' : 'false'"
-            :title="tab.disabled ? tab.disabledLabel || '현재 비활성화된 탭입니다' : undefined"
-            @click="handleTabClick(tab)"
-          >
-            {{ tab.label }}
-          </button>
-        </div>
+    <header class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">재무 관리</h1>
+        <p class="text-gray-600">
+          비트코인과 주요 자산군의 과거/미래 수익률을 한 화면에서 비교하세요.
+        </p>
       </div>
-    </section>
+      <div class="flex rounded-xl bg-slate-100 p-full md:w-auto">
+        <button
+          v-for="tab in tabs"
+          :key="tab.key"
+          class="flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          :class="activeTab === tab.key
+            ? 'bg-white text-slate-900 shadow-sm'
+            : 'text-slate-500'"
+          :disabled="tab.disabled"
+          :aria-disabled="tab.disabled ? 'true' : 'false'"
+          :title="tab.disabled ? tab.disabledLabel || '현재 비활성화된 탭입니다' : undefined"
+          @click="handleTabClick(tab)"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
+    </header>
 
     <section v-if="activeTab === 'historical'" class="space-y-6">
-      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-5">
-        <div class="flex flex-col gap-1">
-          <h3 class="text-base font-semibold text-slate-900">
-            {{ analysisResultType === 'price' ? '자산의 가격 분석' : analysisResultType === 'cumulative' ? '자산의 누적 수익률 분석' : analysisResultType === 'yearly_growth' ? '자산의 전년 대비 증감률 분석' : '비트코인을 다른 자산과 비교해보자' }}
-          </h3>
-          <p class="text-xs text-slate-500 mt-1">
-            아래 텍스트의 숫자는 선택하여 수정할 수 있습니다.
-          </p>
-        </div>
-
+      <div class="space-y-5">
         <div class="space-y-4">
           <FinanceHeroSection
             v-model:years="investmentYearsAgo"

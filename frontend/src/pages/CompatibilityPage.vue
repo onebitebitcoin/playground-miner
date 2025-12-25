@@ -1,5 +1,10 @@
 <template>
   <div class="space-y-6">
+    <div>
+      <h1 class="text-3xl font-bold text-gray-900 mb-2">궁합 분석</h1>
+      <p class="text-gray-600">비트코인을 매개로 다양한 궁합 시나리오를 확인해 보세요.</p>
+    </div>
+
     <!-- Bitcoin Saju Overview Section -->
     <BitcoinSajuSection
       :selectedHighlight="selectedBitcoinHighlight"

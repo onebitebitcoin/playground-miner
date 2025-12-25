@@ -1,8 +1,8 @@
 <template>
   <div class="space-y-6">
     <div>
-      <h1 class="text-2xl font-semibold text-slate-800 mb-2">UTXO 시뮬레이션</h1>
-      <p class="text-slate-600">비트코인 거래와 UTXO 모델을 체험해보세요</p>
+      <h1 class="text-3xl font-bold text-gray-900 mb-2">UTXO 시뮬레이션</h1>
+      <p class="text-gray-600">비트코인 거래와 UTXO 모델을 체험해보세요</p>
     </div>
 
     <!-- Transaction Simulator -->
