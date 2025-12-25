@@ -3970,12 +3970,13 @@ def _fetch_asset_history(cfg, start_year, end_year):
     raise RuntimeError(error_msg)
 
 
-def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculation_method='cagr'):
+def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculation_method='cagr', source=None):
     """
     Build asset series for charting.
 
     Args:
         calculation_method: 'cagr' (연평균 상승률) or 'cumulative' (누적 상승률)
+        source: Data source (e.g., 'pykrx', 'Yahoo Finance', 'Stooq')
     """
     if not history:
         return None
@@ -4010,8 +4011,9 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculati
     scale_factor = 1.0
 
     # 데이터 소스 판별을 위한 플래그
-    # Stooq는 원화 그대로 제공
-    # Yahoo Finance는 100원 단위로 제공
+    # pykrx: 원화 그대로 제공 (스케일 팩터 불필요)
+    # Stooq: 원화 그대로 제공 (스케일 팩터 불필요)
+    # Yahoo Finance: 100원 단위로 제공 (100배 스케일 필요)
     if is_krw_asset and history:
         is_korean_stock = (
             ticker.endswith('.KS') or
@@ -4021,24 +4023,31 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculati
         )
 
         if is_korean_stock:
-            sample_prices = [v for _, v in history if v and v > 0]
-            if sample_prices:
-                recent_prices = sample_prices[-min(3, len(sample_prices)):]
-                avg_price = sum(recent_prices) / len(recent_prices)
+            # source 정보로 먼저 판별 (가장 정확)
+            if source and 'pykrx' in source.lower():
+                # pykrx는 원화 그대로 제공 - 스케일 불필요
+                scale_factor = 1.0
+                logger.info('[%s] 한국 주식 스케일 팩터 적용 안함 (pykrx 데이터)', cfg.get('label', 'Unknown'))
+            else:
+                # source 정보가 없거나 pykrx가 아닌 경우, 가격 범위로 판별 (fallback)
+                sample_prices = [v for _, v in history if v and v > 0]
+                if sample_prices:
+                    recent_prices = sample_prices[-min(3, len(sample_prices)):]
+                    avg_price = sum(recent_prices) / len(recent_prices)
 
-                # 가격 범위로 데이터 소스 판별
-                # Stooq: 10,000원 이상 (원화 그대로)
-                # Yahoo Finance: 1,000원 미만 (100원 단위)
-                if avg_price < 10000:
-                    # Yahoo Finance 데이터로 추정 - 100배 스케일 필요
-                    scale_factor = 100.0
-                    logger.info('[%s] 한국 주식 스케일 팩터 100x 적용 (Yahoo Finance: %.2f → %.2f원)',
-                               cfg.get('label', 'Unknown'), avg_price, avg_price * scale_factor)
-                else:
-                    # Stooq 데이터로 추정 - 스케일 불필요
-                    scale_factor = 1.0
-                    logger.info('[%s] 한국 주식 스케일 팩터 적용 안함 (Stooq: %.2f원)',
-                               cfg.get('label', 'Unknown'), avg_price)
+                    # 가격 범위로 데이터 소스 판별
+                    # Stooq: 10,000원 이상 (원화 그대로)
+                    # Yahoo Finance: 10,000원 미만 (100원 단위)
+                    if avg_price < 10000:
+                        # Yahoo Finance 데이터로 추정 - 100배 스케일 필요
+                        scale_factor = 100.0
+                        logger.info('[%s] 한국 주식 스케일 팩터 100x 적용 (Yahoo Finance: %.2f → %.2f원)',
+                                   cfg.get('label', 'Unknown'), avg_price, avg_price * scale_factor)
+                    else:
+                        # Stooq 데이터로 추정 - 스케일 불필요
+                        scale_factor = 1.0
+                        logger.info('[%s] 한국 주식 스케일 팩터 적용 안함 (Stooq: %.2f원)',
+                                   cfg.get('label', 'Unknown'), avg_price)
 
     for index, year in enumerate(ordered_years):
         price = yearly_prices[year][1]
@@ -4175,12 +4184,16 @@ def _fetch_safe_asset_series(asset_keys, start_year, end_year):
         if not cfg:
             continue
         try:
-            history = _fetch_asset_history(cfg, start_year, end_year)
-            series = _build_asset_series(key, cfg, history, start_year, end_year)
-            if series:
-                results.append(series)
+            result = _fetch_asset_history(cfg, start_year, end_year)
+            if result:
+                history, source = result
+                series = _build_asset_series(key, cfg, history, start_year, end_year, source=source)
+                if series:
+                    results.append(series)
+                else:
+                    errors.append(f"{cfg.get('label')} 데이터가 부족합니다.")
             else:
-                errors.append(f"{cfg.get('label')} 데이터가 부족합니다.")
+                errors.append(f"{cfg.get('label')} 데이터를 가져올 수 없습니다.")
         except Exception as exc:
             logger.warning('Failed to fetch safe asset %s: %s', key, exc)
             errors.append(f"{cfg.get('label')} 오류: {exc}")
@@ -4193,12 +4206,16 @@ def _fetch_preset_group(group_name, start_year, end_year):
     errors = []
     for cfg in configs[:FINANCE_MAX_SERIES]:
         try:
-            history = _fetch_asset_history(cfg, start_year, end_year)
-            series = _build_asset_series(cfg.get('id'), cfg, history, start_year, end_year)
-            if series:
-                results.append(series)
+            result = _fetch_asset_history(cfg, start_year, end_year)
+            if result:
+                history, source = result
+                series = _build_asset_series(cfg.get('id'), cfg, history, start_year, end_year, source=source)
+                if series:
+                    results.append(series)
+                else:
+                    errors.append(f"{cfg.get('label')} 데이터가 부족합니다.")
             else:
-                errors.append(f"{cfg.get('label')} 데이터가 부족합니다.")
+                errors.append(f"{cfg.get('label')} 데이터를 가져올 수 없습니다.")
         except Exception as exc:
             logger.warning('Failed to fetch preset asset %s: %s', cfg.get('label'), exc)
             errors.append(f"{cfg.get('label')} 오류: {exc}")
@@ -5118,7 +5135,7 @@ class CalculatorAgent:
             asset_calc_method = data.get('calculation_method', calculation_method)
 
             try:
-                series_obj = _build_asset_series(config['id'], config, history, start_year, end_year, asset_calc_method)
+                series_obj = _build_asset_series(config['id'], config, history, start_year, end_year, asset_calc_method, source=source)
                 if series_obj:
                     series_obj['id'] = config['id']
                     series_obj['calculation_method'] = asset_calc_method
@@ -8041,3 +8058,143 @@ def admin_price_cache_detail_view(request, pk):
         return JsonResponse({'ok': True, 'message': f'Cache for {asset_id} deleted'})
 
     return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def finance_add_single_asset_view(request):
+    """
+    Add a single asset to existing analysis without re-running full multi-agent workflow.
+    This allows incremental addition of assets to the chart.
+
+    POST body:
+    {
+        "asset_id": "AAPL",
+        "start_year": 2015,
+        "end_year": 2024,
+        "calculation_method": "cagr",  # or "price", "cumulative", "yearly_growth"
+        "include_dividends": false
+    }
+
+    Returns:
+    {
+        "ok": true,
+        "series": {...},
+        "chart_data_table_entry": {...}
+    }
+    """
+    import logging
+    logger = logging.getLogger('backend')
+
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+
+    payload = _load_json_body(request)
+    if not payload:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
+
+    asset_id = (payload.get('asset_id') or '').strip()
+    start_year = payload.get('start_year')
+    end_year = payload.get('end_year')
+    calculation_method = (payload.get('calculation_method') or 'cagr').strip()
+    include_dividends = bool(payload.get('include_dividends', False))
+
+    if not asset_id:
+        return JsonResponse({'ok': False, 'error': 'asset_id required'}, status=400)
+
+    if not start_year or not end_year:
+        return JsonResponse({'ok': False, 'error': 'start_year and end_year required'}, status=400)
+
+    try:
+        start_year = int(start_year)
+        end_year = int(end_year)
+    except (TypeError, ValueError):
+        return JsonResponse({'ok': False, 'error': 'Invalid year format'}, status=400)
+
+    logger.info(f"[Single Asset] Fetching {asset_id} from {start_year} to {end_year}")
+
+    # Try to resolve asset first to get proper metadata
+    resolved_asset = None
+    try:
+        resolved_asset = _resolve_single_custom_asset(asset_id)
+        if resolved_asset:
+            logger.info(f"[Single Asset] Resolved {asset_id} -> {resolved_asset.get('label', asset_id)}")
+    except Exception as e:
+        logger.warning(f"[Single Asset] Could not resolve {asset_id}: {e}")
+
+    # Build asset config
+    if resolved_asset:
+        cfg = {
+            'id': resolved_asset.get('id', asset_id),
+            'label': resolved_asset.get('label', asset_id),
+            'ticker': resolved_asset.get('ticker', asset_id),
+            'category': resolved_asset.get('category', ''),
+            'unit': resolved_asset.get('unit', 'usd')
+        }
+    else:
+        cfg = {
+            'id': asset_id,
+            'label': asset_id,
+            'ticker': asset_id
+        }
+
+    # Fetch history
+    try:
+        result = _fetch_asset_history(cfg, start_year, end_year)
+        if not result:
+            return JsonResponse({'ok': False, 'error': f'No data found for {asset_id}'}, status=404)
+
+        history, source = result
+        logger.info(f"[Single Asset] Fetched {len(history)} data points from {source}")
+
+        # Build series
+        series = _build_asset_series(asset_id, cfg, history, start_year, end_year, calculation_method, source=source)
+        if not series:
+            return JsonResponse({'ok': False, 'error': 'Failed to build series'}, status=500)
+
+        # Build chart data table entry for yearly prices
+        chart_entry = _build_chart_data_table_entry(asset_id, cfg, history, source, start_year, end_year)
+
+        logger.info(f"[Single Asset] Successfully built series for {asset_id}")
+
+        return JsonResponse({
+            'ok': True,
+            'series': series,
+            'chart_data_table_entry': chart_entry
+        })
+
+    except Exception as e:
+        logger.error(f"[Single Asset] Error: {str(e)}", exc_info=True)
+        return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
+
+def _build_chart_data_table_entry(asset_id, cfg, history, source, start_year, end_year):
+    """Build a chart_data_table entry for a single asset"""
+    entry = {
+        'id': asset_id,
+        'requested_id': asset_id,
+        'label': cfg.get('label', asset_id),
+        'category': cfg.get('category', ''),
+        'unit': cfg.get('unit', 'usd'),
+        'source': source,
+        'status': 'success',
+        'prices': [],
+        'alt_prices': {},
+        'alt_sources': {},
+        'aliases': [asset_id]
+    }
+
+    # Convert history to prices array
+    for raw_year, value in history:
+        if raw_year is None or value is None:
+            continue
+        year = raw_year
+        if isinstance(raw_year, datetime):
+            year = raw_year.year
+        try:
+            year = int(year)
+        except (TypeError, ValueError):
+            continue
+        if year >= start_year and year <= end_year:
+            entry['prices'].append({'year': year, 'value': value})
+
+    return entry

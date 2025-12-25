@@ -63,7 +63,7 @@
             <button
               type="button"
               class="text-slate-400 hover:text-slate-700 transition flex-shrink-0"
-              aria-label="해외 주식 양도소득세 계산식 안내"
+              aria-label="양도소득세 계산식 안내"
               @click.stop="showTaxInfo = true"
             >
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -349,7 +349,7 @@
     >
       <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[calc(100vh-3rem)] overflow-y-auto p-6 space-y-4">
         <div class="flex items-center justify-between">
-          <h4 class="text-base font-semibold text-slate-900">해외 주식 양도소득세 계산식</h4>
+          <h4 class="text-base font-semibold text-slate-900">양도소득세 계산식</h4>
           <button
             type="button"
             class="text-slate-400 hover:text-slate-700 transition"
@@ -361,16 +361,25 @@
             </svg>
           </button>
         </div>
-        <div class="space-y-2 text-sm text-slate-700">
-          <p>한국 거주자의 해외 주식 양도소득세는 다음과 같이 계산됩니다.</p>
-          <div class="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-2 text-xs font-mono text-slate-800">
-            <p>과세표준 = max(0, 양도차익 - 2,500,000원)</p>
-            <p>세액 = 과세표준 × (20% + 지방소득세 2%) = 과세표준 × 22%</p>
-            <p>세후 연평균 수익률 = 세전 연평균 수익률 × (1 - 0.22)</p>
-            <p>세후 배수 = (1 + 세후 연평균 수익률) ^ 투자기간</p>
+        <div class="space-y-3 text-sm text-slate-700">
+          <p>차트의 세금 토글을 켜면 해외/국내 주식 모두 아래 단순화된 양도소득세 모델을 적용해 세후 수익률을 추정합니다.</p>
+          <div class="space-y-3">
+            <div class="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-2 text-xs font-mono text-slate-800">
+              <p class="font-semibold text-slate-600">해외 주식</p>
+              <p>과세표준 = max(0, 양도차익 - 2,500,000원)</p>
+              <p>세액 = 과세표준 × (20% + 지방소득세 2%) = 과세표준 × 22%</p>
+              <p>세후 연평균 수익률 = 세전 연평균 수익률 × (1 - 0.22)</p>
+              <p>세후 배수 = (1 + 세후 연평균 수익률) ^ 투자기간</p>
+            </div>
+            <div class="bg-emerald-50 rounded-xl border border-emerald-200 p-4 space-y-2 text-xs font-mono text-emerald-900">
+              <p class="font-semibold text-emerald-700">국내 주식</p>
+              <p>과세표준 = max(0, 양도차익 - 50,000,000원)</p>
+              <p>세액 = 과세표준 × 22%</p>
+              <p>세후 배수 = (원금 + (양도차익 - 세액)) ÷ 원금</p>
+            </div>
           </div>
           <p class="text-xs text-slate-500">
-            차트에서는 미국 주식(USD 표기) 자산에만 위 세율을 적용하며, 비트코인과 디지털 자산·국내 자산에는 적용하지 않습니다. 기본공제액을 별도로 계산하지 않는 단순화 모델로, 동일 세율(22%)을 즉시 적용해 세후 성과를 추정합니다.
+            해외 주식(USD 표기)은 기본공제 250만원 이후 일괄 22% 세율을 적용하고, 국내 주식(KRW 표기)은 5천만원까지 비과세 후 동일 세율을 적용합니다. 실제 신고 절차와는 다를 수 있는 단순 모델이며, 비트코인·기타 자산에는 세금이 반영되지 않습니다.
           </p>
         </div>
         <div class="text-right">

@@ -3,8 +3,28 @@
     v-if="tableYears.length && sortedLegend.length"
     class="bg-white border border-slate-200 rounded-2xl shadow-sm p-3 sm:p-4 md:p-6 space-y-2 sm:space-y-3"
   >
-    <div class="text-sm font-semibold text-slate-900 px-1">
-      {{ analysisResultType === 'price' ? '연도별 가격 비교' : analysisResultType === 'cumulative' ? '연도별 누적 수익률 비교' : analysisResultType === 'yearly_growth' ? '연도별 전년 대비 증감률 비교' : '연도별 연평균 상승률 비교' }}
+    <div class="flex items-center justify-between gap-3 flex-wrap px-1">
+      <div class="text-sm font-semibold text-slate-900">
+        {{ analysisResultType === 'price' ? '연도별 가격 비교' : analysisResultType === 'cumulative' ? '연도별 누적 수익률 비교' : analysisResultType === 'yearly_growth' ? '연도별 전년 대비 증감률 비교' : '연도별 연평균 상승률 비교' }}
+      </div>
+      <div
+        v-if="analysisResultType === 'price'"
+        class="flex items-center gap-2 text-xs text-slate-500"
+      >
+        <span :class="priceTableMode === 'price' ? 'text-slate-900 font-semibold' : ''">가격</span>
+        <button
+          type="button"
+          class="relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-1"
+          :class="priceTableMode === 'multiple' ? 'bg-slate-900' : 'bg-slate-200'"
+          @click="$emit('update:priceTableMode', priceTableMode === 'price' ? 'multiple' : 'price')"
+        >
+          <span
+            class="inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform duration-200"
+            :class="priceTableMode === 'multiple' ? 'translate-x-3.5' : 'translate-x-0.5'"
+          ></span>
+        </button>
+        <span :class="priceTableMode === 'multiple' ? 'text-slate-900 font-semibold' : ''">배수</span>
+      </div>
     </div>
     <div class="overflow-x-auto px-2 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6">
       <table class="min-w-full table-fixed text-[11px] sm:text-xs text-slate-600 border-collapse">
@@ -64,6 +84,12 @@ const props = defineProps({
   getAssetUrl: Function,
   getLegendLabel: Function,
   formatValue: Function,
-  getCellClass: Function
+  getCellClass: Function,
+  priceTableMode: {
+    type: String,
+    default: 'price'
+  }
 })
+
+defineEmits(['update:priceTableMode'])
 </script>

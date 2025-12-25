@@ -416,3 +416,34 @@ export async function deleteAdminPriceCache(id, { signal } = {}) {
   }
   return true
 }
+
+export async function addSingleAsset({ assetId, startYear, endYear, calculationMethod, includeDividends, signal }) {
+  if (!assetId) {
+    throw new Error('자산 ID가 필요합니다.')
+  }
+
+  const body = {
+    asset_id: assetId,
+    start_year: startYear,
+    end_year: endYear,
+    calculation_method: calculationMethod || 'cagr',
+    include_dividends: Boolean(includeDividends)
+  }
+
+  const response = await fetch(`${BASE_URL}/api/finance/add-single-asset`, {
+    method: 'POST',
+    headers: defaultHeaders,
+    body: JSON.stringify(body),
+    signal
+  })
+
+  const data = await handleResponse(response)
+  if (!data.ok) {
+    throw new Error(data.error || '자산 데이터를 불러오지 못했습니다.')
+  }
+
+  return {
+    series: data.series,
+    chartDataTableEntry: data.chart_data_table_entry
+  }
+}

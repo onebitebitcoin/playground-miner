@@ -90,6 +90,7 @@
         </p>
 
         <FinanceLineChart
+          :key="chartRenderKey"
           :series="chartSeries"
           :colors="colorMap"
           :currency-mode="'usd'"
@@ -130,6 +131,7 @@
           :get-legend-label="getLegendLabel"
           :format-value="getReturnForYear"
           :get-cell-class="getReturnCellClass"
+          v-model:price-table-mode="priceTableMode"
         />
 
         <div class="flex items-center gap-2 text-xs text-slate-400 pt-3 border-t border-slate-100">
@@ -178,15 +180,17 @@ import FinancePriceTable from './finance/components/FinancePriceTable.vue'
 import FinanceLoadingPanel from './finance/components/FinanceLoadingPanel.vue'
 import FinanceFutureTab from './finance/components/FinanceFutureTab.vue'
 
-import { 
-  fetchHistoricalReturnsStream, 
-  fetchHistoricalReturns, 
-  resolveCustomAsset, 
-  fetchFinanceQuickCompareGroups 
+import {
+  fetchHistoricalReturnsStream,
+  fetchHistoricalReturns,
+  resolveCustomAsset,
+  fetchFinanceQuickCompareGroups,
+  addSingleAsset
 } from '@/services/financeService'
 import { defaultFinanceQuickCompareGroups } from '@/config/financeQuickCompareGroups'
 
 const TAX_RATE = 0.22
+const KR_EQUITY_TAX_FREE_ALLOWANCE = 50000000
 const HERO_ANIMATION_DURATION = 2800
 const MIN_DIVIDEND_YIELD_DISPLAY = 0.1
 const LOADING_STAGES = [
@@ -283,11 +287,16 @@ const futureScenarios = [
 // Historical Analysis State
 const investmentYearsAgo = ref(10)
 const investmentAmount = ref(100) // in 10k KRW
+const baseInvestmentWon = computed(() => {
+  const amount = Number(investmentAmount.value)
+  if (!Number.isFinite(amount) || amount <= 0) return 10000
+  return amount * 10000
+})
+const priceTableMode = ref('price')
 const heroAnimationKey = ref(0)
 const heroAnimationActive = ref(false)
 const searchButtonAttention = ref(false)
 const displayedHeroText = ref('')
-const analysisLogs = ref([])
 
 let typingInterval = null
 let heroAnimationTimer = null
@@ -307,8 +316,8 @@ const prompt = ref('')
 const selectedContextKey = ref('safe_assets')
 const hiddenSeries = ref(new Set())
 const customAssetError = ref('')
-const includeTax = ref(false)
-const includeDividends = ref(false)
+const includeTax = ref(true)
+const includeDividends = ref(true)
 const dividendCache = reactive({ true: null, false: null })
 const dividendPrefetchStatus = reactive({ true: false, false: false })
 const dividendTogglePending = ref(null)
@@ -334,6 +343,8 @@ const sliderMinYear = ref(null)
 
 let abortController = null
 const progressLogs = ref([])
+const analysisLogs = computed(() => progressLogs.value)
+const showDebugLogs = ref(false)
 
 function appendProgressLogs(...messages) {
   if (!messages.length) return
@@ -352,7 +363,6 @@ const quickCompareGroups = ref([])
 const quickCompareGroupsLoading = ref(false)
 const selectedQuickCompareGroup = ref('')
 const feKey = ref('')
-const showDebugLogs = ref(false)
 
 watch(loading, (val) => {
   if (!val && searchButtonAttention.value) {
@@ -512,14 +522,19 @@ function getCurrencySymbolForMode(mode) {
   return mode === 'krw' ? '₩' : '$'
 }
 
+const analysisContainsKoreanEquities = computed(() => {
+  return !!analysis.value?.series?.some((s) => isKoreanEquitySeries(s))
+})
+
 const filteredSeries = computed(() => {
   var _analysis$value, _analysis$value$serie
   if (!((_analysis$value = analysis.value) != null && (_analysis$value$serie = _analysis$value.series) != null && _analysis$value$serie.length)) return []
   const startY = displayStartYear.value || analysis.value.start_year
+  const allowKoreanEquities = selectedContextKey.value === 'kr_equity' || analysisContainsKoreanEquities.value
   const series = analysis.value.series.filter((s) =>
     isBitcoinLabel(s.label) ||
     !isKoreanEquitySeries(s) ||
-    selectedContextKey.value === 'kr_equity'
+    allowKoreanEquities
   )
 
   if (!startY) return series
@@ -529,28 +544,37 @@ const filteredSeries = computed(() => {
     const validPoints = s.points.filter((p) => p.year >= startY)
     if (validPoints.length < 2) return null
     const sortedPoints = [...validPoints].sort((a, b) => a.year - b.year)
-    const applyTax = includeTax.value && shouldApplyTax(s)
-    const taxFactor = applyTax ? (1 - TAX_RATE) : 1
+    const taxTreatment = includeTax.value ? resolveTaxTreatment(s) : null
+    const applyTax = Boolean(taxTreatment)
 
     if (isPrice) {
       const startV = resolvePointValue(sortedPoints[0])
       const lastV = resolvePointValue(sortedPoints[sortedPoints.length - 1])
       if (!Number.isFinite(startV) || !Number.isFinite(lastV) || startV <= 0 || lastV <= 0) return null
-      
+
       const duration = sortedPoints[sortedPoints.length - 1].year - sortedPoints[0].year
       let annualizedReturn = 0
       let multipleFromStart = lastV / startV
-      if (duration > 0) {
-        const cagr = (Math.pow(lastV / startV, 1 / duration) - 1) * taxFactor
-        annualizedReturn = cagr * 100
-        if (1 + cagr > 0) {
-          multipleFromStart = Math.pow(1 + cagr, duration)
+      if (duration > 0 && Number.isFinite(multipleFromStart) && multipleFromStart > 0) {
+        const adjustedMultiple = applyTax ? applyTaxToMultiple(multipleFromStart, duration, taxTreatment) : multipleFromStart
+        multipleFromStart = adjustedMultiple
+        const rate = Math.pow(adjustedMultiple, 1 / duration) - 1
+        if (Number.isFinite(rate)) {
+          annualizedReturn = rate * 100
         }
+      } else if (applyTax && Number.isFinite(multipleFromStart) && multipleFromStart > 0) {
+        multipleFromStart = applyTaxToMultiple(multipleFromStart, 0, taxTreatment)
       }
       const points = sortedPoints.map((p) => {
         const v = resolvePointValue(p)
         if (!Number.isFinite(v) || v <= 0) return null
-        const multiple = v / startV
+        let multiple = v / startV
+
+        if (applyTax) {
+          const yearsElapsed = p.year - sortedPoints[0].year
+          multiple = applyTaxToMultiple(multiple, yearsElapsed, taxTreatment)
+        }
+
         return { ...p, unit: s.unit || p.unit, multiple, value: multiple }
       }).filter(Boolean)
       if (points.length < 2) return null
@@ -562,13 +586,17 @@ const filteredSeries = computed(() => {
     const duration = sortedPoints[sortedPoints.length - 1].year - sortedPoints[0].year
     let annualizedReturn = 0
     let multipleFromStart = 1
-    if (startMultiple && endMultiple && duration > 0) {
-      const cagr = (Math.pow(endMultiple / startMultiple, 1 / duration) - 1) * taxFactor
-      annualizedReturn = cagr * 100
-      if (duration > 0 && 1 + cagr > 0) {
-        multipleFromStart = Math.pow(1 + cagr, duration)
-      } else {
-        multipleFromStart = endMultiple / startMultiple
+    if (Number.isFinite(startMultiple) && startMultiple > 0 && Number.isFinite(endMultiple) && endMultiple > 0) {
+      const baseMultiple = endMultiple / startMultiple
+      if (duration > 0 && Number.isFinite(baseMultiple) && baseMultiple > 0) {
+        const adjustedMultiple = applyTax ? applyTaxToMultiple(baseMultiple, duration, taxTreatment) : baseMultiple
+        multipleFromStart = adjustedMultiple
+        const rate = Math.pow(adjustedMultiple, 1 / duration) - 1
+        if (Number.isFinite(rate)) {
+          annualizedReturn = rate * 100
+        }
+      } else if (Number.isFinite(baseMultiple) && baseMultiple > 0) {
+        multipleFromStart = applyTax ? applyTaxToMultiple(baseMultiple, 0, taxTreatment) : baseMultiple
       }
     }
     const points = sortedPoints.map((p) => {
@@ -579,11 +607,14 @@ const filteredSeries = computed(() => {
       }
       if (!Number.isFinite(relativeMultiple) || relativeMultiple <= 0) relativeMultiple = 1
       const yearsElapsed = p.year - sortedPoints[0].year
+      if (applyTax) {
+        relativeMultiple = applyTaxToMultiple(relativeMultiple, yearsElapsed, taxTreatment)
+      }
       let cagr = 0
-      if (yearsElapsed > 0) {
+      if (yearsElapsed > 0 && relativeMultiple > 0) {
         const rate = Math.pow(relativeMultiple, 1 / yearsElapsed) - 1
         if (Number.isFinite(rate)) {
-          cagr = (applyTax ? rate * taxFactor : rate) * 100
+          cagr = rate * 100
         }
       }
       return { ...p, multiple: relativeMultiple, value: cagr }
@@ -636,6 +667,11 @@ const colorMap = computed(() => {
 })
 
 const fxRate = computed(() => (analysis.value?.fx_rate || 1300))
+
+const chartRenderKey = computed(() => {
+  return `chart-${includeTax.value}-${includeDividends.value}-${displayStartYear.value || ''}`
+})
+
 const dataSourcesText = computed(() => {
   const recordSource = (rec) => {
     if (!rec) return
@@ -737,14 +773,21 @@ async function appendResolvedAsset(name, { silent = false, targetList = null } =
   if (assetExistsInList(label, ticker, existingList)) return false
   
   const display = Io(label, ticker)
-  const entry = { label, display, ticker }
+  const entry = {
+    id: result?.id || ticker || label,
+    label,
+    display,
+    ticker,
+    category: result?.category || '',
+    unit: result?.unit || ''
+  }
   if (targetList) {
     targetList.push(entry)
   } else {
     customAssets.value = [...customAssets.value, entry]
   }
   if (!silent) customAssetError.value = ''
-  return true
+  return entry
 }
 
 function assetExistsInList(label, ticker, list = customAssets.value) {
@@ -778,7 +821,14 @@ async function loadResolvedAssets(assets = []) {
     const entries = assets.map((a) => {
       const label = a.label || a.id || ''
       const ticker = a.ticker || a.id || ''
-      return { label, ticker, display: Io(label, ticker) }
+      return {
+        id: a.id || ticker || label,
+        label,
+        ticker,
+        display: Io(label, ticker),
+        category: a.category || '',
+        unit: a.unit || ''
+      }
     }).filter((a) => a.label)
     if (id === Gt) {
       customAssets.value = entries
@@ -848,13 +898,14 @@ function normalizeGroups(raw = []) {
     const label = (g?.label || '').trim() || `그룹 ${i + 1}`
     const context = (g?.context_key || g?.contextKey || QUICK_COMPARE_CONTEXT_MAP[key] || '').trim()
     const resolved = Array.isArray(g?.resolved_assets) ? g.resolved_assets : []
+    const inferredContext = inferGroupContextKey(context, { resolved, assets })
     return {
       id: g?.id ?? i,
       key,
       label,
       assets,
       resolved_assets: resolved,
-      contextKey: context,
+      contextKey: inferredContext,
       sortOrder: Number.isFinite(g?.sort_order) ? Number(g.sort_order) : Number.isFinite(g?.sortOrder) ? Number(g.sortOrder) : i,
       isActive: g?.is_active !== false
     }
@@ -868,7 +919,9 @@ function loadDefaultGroups() {
 function resolveGroupContextKey(group) {
   if (!group) return 'safe_assets'
   const key = (group.contextKey || group.context_key || '').trim()
-  return key || QUICK_COMPARE_CONTEXT_MAP[group.key] || 'safe_assets'
+  const resolved = Array.isArray(group.resolved_assets) ? group.resolved_assets : []
+  const assets = Array.isArray(group.assets) ? group.assets : []
+  return inferGroupContextKey(key || QUICK_COMPARE_CONTEXT_MAP[group.key], { resolved, assets })
 }
 
 async function ensureDefaultSelection({ reapply = false } = {}) {
@@ -924,6 +977,50 @@ function clearAllCustomAssets() {
   feKey.value = ''
 }
 
+function determineContextKeyForAssets(list = customAssets.value) {
+  if (!Array.isArray(list) || !list.length) return 'safe_assets'
+  return list.some((asset) => isLikelyKoreanEquityAsset(asset)) ? 'kr_equity' : 'safe_assets'
+}
+
+function inferGroupContextKey(baseContext, meta = {}) {
+  const normalized = (baseContext || '').trim()
+  if (normalized && normalized !== 'safe_assets') return normalized
+  const resolvedAssets = Array.isArray(meta?.resolved) ? meta.resolved : []
+  if (resolvedAssets.some((asset) => isLikelyKoreanEquityAsset(asset))) {
+    return 'kr_equity'
+  }
+  const rawAssets = Array.isArray(meta?.assets) ? meta.assets : []
+  if (rawAssets.some(isLikelyKoreanAssetName)) {
+    return 'kr_equity'
+  }
+  return normalized || 'safe_assets'
+}
+
+function isLikelyKoreanAssetName(name) {
+  if (!name) return false
+  const text = name.toString().trim()
+  if (!text) return false
+  if (/[가-힣]/.test(text)) return true
+  if (/^\d{6}$/.test(text)) return true
+  if (/\.(KS|KQ|KR)$/i.test(text)) return true
+  return false
+}
+
+function isLikelyKoreanEquityAsset(asset) {
+  if (!asset) return false
+  const category = (asset.category || '').toString().toLowerCase()
+  if (category.includes('국내') || category.includes('korea') || category.includes('kospi') || category.includes('kosdaq')) {
+    return true
+  }
+  const unit = (asset.unit || '').toString().toLowerCase()
+  if (unit === 'krw') return true
+  const ticker = (asset.ticker || asset.id || '').toString().toUpperCase()
+  if (!ticker) return false
+  if (/\.K[QSLR]$/.test(ticker)) return true
+  const normalized = ticker.replace(/\.K[QSLR]$/, '')
+  return /^\d{6}$/.test(normalized)
+}
+
 async function addAsset() {
   const raw = (newAssetInput.value || '').trim()
   if (!raw || customAssetResolving.value || loading.value) return
@@ -935,8 +1032,64 @@ async function addAsset() {
     if (added) {
       newAssetInput.value = ''
       selectedQuickCompareGroup.value = ''
-      selectedContextKey.value = 'safe_assets'
+      selectedContextKey.value = determineContextKeyForAssets()
+
+      // Get the last added asset
+      const lastAsset = customAssets.value[customAssets.value.length - 1]
+      const assetId = lastAsset.ticker || lastAsset.id || lastAsset.label
+
+      // If there's existing analysis data, append the new asset incrementally
+      if (analysis.value && analysis.value.start_year && analysis.value.end_year) {
+        await appendAssetToExistingAnalysis(assetId)
+      } else {
+        // No existing analysis, run full analysis
+        prompt.value = buildPromptFromInputs()
+        requestAgentAnalysis()
+      }
     }
+  } finally {
+    customAssetResolving.value = false
+  }
+}
+
+async function appendAssetToExistingAnalysis(assetId) {
+  try {
+    customAssetResolving.value = true
+    appendProgressLogs(`새로운 자산 추가 중: ${assetId}`)
+
+    const result = await addSingleAsset({
+      assetId: assetId,
+      startYear: analysis.value.start_year,
+      endYear: analysis.value.end_year,
+      calculationMethod: analysisResultType.value,
+      includeDividends: includeDividends.value
+    })
+
+    if (result.series) {
+      // Add series to existing analysis
+      const currentSeries = analysis.value.series || []
+      analysis.value = {
+        ...analysis.value,
+        series: [...currentSeries, result.series]
+      }
+
+      // Add chart data table entry
+      if (result.chartDataTableEntry) {
+        const currentChartData = analysis.value.chart_data_table || []
+        analysis.value.chart_data_table = [...currentChartData, result.chartDataTableEntry]
+
+        // Process the new entry for price table (merge with existing data)
+        processYearlyPrices([result.chartDataTableEntry], { merge: true })
+      }
+
+      appendProgressLogs(`✓ ${assetId} 추가 완료`)
+    }
+  } catch (error) {
+    customAssetError.value = error.message || '자산 추가 중 오류가 발생했습니다.'
+    appendProgressLogs(`오류: ${error.message}`)
+    setTimeout(() => {
+      customAssetError.value = ''
+    }, 5000)
   } finally {
     customAssetResolving.value = false
   }
@@ -946,7 +1099,7 @@ function removeAsset(index) {
   customAssets.value = customAssets.value.filter((_, i) => i !== index)
   customAssetError.value = ''
   selectedQuickCompareGroup.value = ''
-  selectedContextKey.value = 'safe_assets'
+  selectedContextKey.value = determineContextKeyForAssets()
 }
 
 watch(
@@ -1338,8 +1491,12 @@ function getReturnForYear(series, year) {
   if (!series?.points) return '-'
   const point = series.points.find((p) => p.year === year)
   if (!point) return '-'
-
   if (analysisResultType.value === 'price') {
+    if (priceTableMode.value === 'multiple') {
+      const multiple = Number(point.multiple)
+      if (!Number.isFinite(multiple) || multiple <= 0) return '-'
+      return `${formatMultiple(multiple)}배`
+    }
     const displayCurrency = getSeriesDisplayCurrency(series)
     const { value } = resolvePriceValueForCurrency(series, point, year, displayCurrency)
     if (!Number.isFinite(value)) return '-'
@@ -1353,13 +1510,46 @@ function getReturnForYear(series, year) {
   return `${sign}${value.toFixed(1)}%`
 }
 
-function getReturnCellClass(series, year) {
-  if (analysisResultType.value === 'price') return 'text-slate-600'
+function determineYearlySign(series, year) {
+  if (!series) return 0
+  if (analysisResultType.value === 'price') {
+    return getPriceYearlySign(series, year)
+  }
   const point = series.points?.find((p) => p.year === year)
-  const value = Number(point?.value)
-  if (!Number.isFinite(value)) return 'text-slate-600'
-  if (value <= 0) return 'text-rose-600 font-semibold'
-  if (value >= 15) return 'text-emerald-600 font-semibold'
+  if (!point) return 0
+  const value = Number(point.value)
+  if (!Number.isFinite(value)) return 0
+  if (value > 0) return 1
+  if (value < 0) return -1
+  return 0
+}
+
+function getPriceYearlySign(series, year) {
+  const years = tableYears.value
+  const idx = years.indexOf(year)
+  if (idx <= 0) return 0
+  const prevYear = years[idx - 1]
+  const current = getPriceValueForYear(series, year)
+  const previous = getPriceValueForYear(series, prevYear)
+  if (!Number.isFinite(current) || !Number.isFinite(previous)) return 0
+  if (current > previous) return 1
+  if (current < previous) return -1
+  return 0
+}
+
+function getPriceValueForYear(series, year) {
+  if (!series?.points) return null
+  const point = series.points.find((p) => p.year === year)
+  if (!point) return null
+  const displayCurrency = getSeriesDisplayCurrency(series)
+  const { value } = resolvePriceValueForCurrency(series, point, year, displayCurrency)
+  return Number.isFinite(value) ? value : null
+}
+
+function getReturnCellClass(series, year) {
+  const sign = determineYearlySign(series, year)
+  if (sign > 0) return 'text-rose-600 font-semibold'
+  if (sign < 0) return 'text-blue-600 font-semibold'
   return 'text-slate-600'
 }
 
@@ -1379,9 +1569,15 @@ function isBitcoinLabel(label) {
   return lower.includes('비트코인') || lower.includes('bitcoin') || lower.includes('btc')
 }
 
-function shouldApplyTax(series) {
-  if (!series) return false
-  if (isBitcoinLabel(series.label)) return false
+function resolveTaxTreatment(series) {
+  if (!series || isBitcoinLabel(series.label)) return null
+  if (isKoreanEquitySeries(series)) {
+    return {
+      type: 'kr',
+      rate: TAX_RATE,
+      allowance: KR_EQUITY_TAX_FREE_ALLOWANCE
+    }
+  }
   const category = (series.category || '').toLowerCase()
   const unit = (series.unit || '').toLowerCase()
   const label = (series.label || '').toLowerCase()
@@ -1390,7 +1586,37 @@ function shouldApplyTax(series) {
     category.includes('미국') ||
     label.includes('미국') ||
     id.endsWith('.us')
-  return isUsEquity && unit === 'usd'
+  if (isUsEquity && unit === 'usd') {
+    return {
+      type: 'us',
+      rate: TAX_RATE
+    }
+  }
+  return null
+}
+
+function applyTaxToMultiple(multiple, yearsElapsed, taxTreatment) {
+  if (!taxTreatment) return multiple
+  if (!Number.isFinite(multiple) || multiple <= 0) return multiple
+  if (taxTreatment.type === 'us') {
+    if (!Number.isFinite(yearsElapsed) || yearsElapsed <= 0) return multiple
+    const cagr = Math.pow(multiple, 1 / yearsElapsed) - 1
+    if (!Number.isFinite(cagr)) return multiple
+    const adjusted = cagr * (1 - (taxTreatment.rate ?? TAX_RATE))
+    return Math.pow(1 + adjusted, yearsElapsed)
+  }
+  if (taxTreatment.type === 'kr') {
+    const principal = baseInvestmentWon.value
+    if (!Number.isFinite(principal) || principal <= 0) return multiple
+    const gain = (multiple - 1) * principal
+    if (gain <= 0) return multiple
+    const allowance = Number.isFinite(taxTreatment.allowance) ? taxTreatment.allowance : KR_EQUITY_TAX_FREE_ALLOWANCE
+    const taxableGain = Math.max(0, gain - allowance)
+    const afterTaxGain = (gain - taxableGain) + taxableGain * (1 - (taxTreatment.rate ?? TAX_RATE))
+    const afterTaxMultiple = (principal + afterTaxGain) / principal
+    return Math.max(afterTaxMultiple, 0)
+  }
+  return multiple
 }
 
 function startHeroTypewriterAnimation() {
@@ -1665,8 +1891,8 @@ function completeLoadingStageTracking() {
   stopLoadingStageTracking()
 }
 
-function processYearlyPrices(pricesData) {
-  const map = {}
+function processYearlyPrices(pricesData, { merge = false } = {}) {
+  const map = merge ? { ...yearlyPriceMap.value } : {}
   if (Array.isArray(pricesData)) {
     pricesData.forEach((entry) => {
       const priceMap = {}

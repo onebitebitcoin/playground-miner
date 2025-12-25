@@ -9,6 +9,7 @@ urlpatterns = [
     path('finance/historical-returns', views.finance_historical_returns_view, name='finance_historical_returns'),
     path('finance/yearly-closing-prices', views.finance_yearly_closing_prices_view, name='finance_yearly_closing_prices'),
     path('finance/custom-asset/resolve', views.finance_resolve_custom_asset_view, name='finance_resolve_custom_asset'),
+    path('finance/add-single-asset', views.finance_add_single_asset_view, name='finance_add_single_asset'),
     path('finance/quick-requests', views.finance_quick_requests_view, name='finance_quick_requests'),
     path('finance/quick-compare-groups', views.finance_quick_compare_groups_view, name='finance_quick_compare_groups'),
     path('finance/price-cache', views.finance_price_cache_view, name='finance_price_cache'),
