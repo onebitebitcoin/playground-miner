@@ -303,11 +303,12 @@ let typingInterval = null
 let heroAnimationTimer = null
 
 const lineColors = [
-  '#0f172a', '#2563eb', '#f97316', '#dc2626', '#059669',
-  '#7c3aed', '#ea580c', '#0891b2', '#be185d', '#4338ca'
+  '#0f172a', '#2563eb', '#1d4ed8', '#059669', '#0d9488',
+  '#0891b2', '#7c3aed', '#4338ca', '#4f46e5', '#8b5cf6'
 ]
 
 const BITCOIN_COLOR = '#FFD700'
+const KOREAN_M2_COLOR = '#dc2626'
 const assignedSeriesColors = ref({})
 let nextColorIndex = 0
 
@@ -374,6 +375,13 @@ function updateColorAssignments(seriesList, { reset = false } = {}) {
     if (isBitcoinLabel(series.label)) {
       if (baseMap[series.id] !== BITCOIN_COLOR) {
         baseMap[series.id] = BITCOIN_COLOR
+        changed = true
+      }
+      return
+    }
+    if (isKoreanM2Label(series.label)) {
+      if (baseMap[series.id] !== KOREAN_M2_COLOR) {
+        baseMap[series.id] = KOREAN_M2_COLOR
         changed = true
       }
       return
@@ -1597,6 +1605,13 @@ function isBitcoinLabel(label) {
   if (!label) return false
   const lower = label.toLowerCase()
   return lower.includes('비트코인') || lower.includes('bitcoin') || lower.includes('btc')
+}
+
+function isKoreanM2Label(label) {
+  if (!label) return false
+  const lower = label.toLowerCase()
+  const hasKorea = lower.includes('한국') || lower.includes('korea')
+  return hasKorea && lower.includes('m2')
 }
 
 function resolveTaxTreatment(series) {

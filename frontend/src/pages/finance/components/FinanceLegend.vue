@@ -15,7 +15,11 @@
           hiddenSeries.has(series.id)
             ? 'border-slate-200 text-slate-400 bg-slate-50'
             : 'border-slate-200 text-slate-800 hover:border-slate-400 active:bg-slate-50',
-          isBitcoinLegend(series) ? 'border-amber-400 shadow-[0_0_12px_rgba(255,215,0,0.6)]' : ''
+          isBitcoinLegend(series)
+            ? 'border-amber-400 shadow-[0_0_12px_rgba(255,215,0,0.6)]'
+            : isKoreanM2Legend(series)
+              ? 'border-rose-400 shadow-[0_0_12px_rgba(248,113,113,0.55)]'
+              : ''
         ]"
         @click="$emit('toggleSeries', series.id)"
       >
@@ -52,13 +56,14 @@
 </template>
 
 <script setup>
-import { 
-  isBitcoinLegend, 
-  getLegendLabel, 
-  formatAssetCategory, 
-  formatPercent, 
-  formatMultiple, 
-  getDividendYieldText 
+import {
+  isBitcoinLegend,
+  isKoreanM2Legend,
+  getLegendLabel,
+  formatAssetCategory,
+  formatPercent,
+  formatMultiple,
+  getDividendYieldText
 } from '../utils'
 
 const props = defineProps({

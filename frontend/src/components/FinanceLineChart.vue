@@ -161,10 +161,17 @@
             >
           <defs>
             <filter id="bitcoin-glow">
-              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+              <feGaussianBlur stdDeviation="3" result="coloredBlur" />
               <feMerge>
-                <feMergeNode in="coloredBlur"/>
-                <feMergeNode in="SourceGraphic"/>
+                <feMergeNode in="coloredBlur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <filter id="korea-m2-glow">
+              <feGaussianBlur stdDeviation="3.2" result="coloredBlur" />
+              <feMerge>
+                <feMergeNode in="coloredBlur" />
+                <feMergeNode in="SourceGraphic" />
               </feMerge>
             </filter>
           </defs>
@@ -188,13 +195,13 @@
               v-for="line in chart.lines"
               :key="line.id"
               :d="line.path"
-              :stroke="isBitcoinLine(line.label) ? '#FFD700' : line.color"
-              :stroke-width="isBitcoinLine(line.label) ? 4 : 3"
+              :stroke="getLineColor(line)"
+              :stroke-width="getLineStrokeWidth(line.label)"
               stroke-linecap="round"
               stroke-linejoin="round"
               fill="none"
               class="line-path"
-              :filter="isBitcoinLine(line.label) ? 'url(#bitcoin-glow)' : undefined"
+              :filter="getLineFilter(line.label)"
             />
           </g>
 
@@ -205,8 +212,8 @@
                 :key="`${line.id}-${point.year}`"
                 :cx="point.x"
                 :cy="point.y"
-                :fill="isBitcoinLine(line.label) ? '#FFD700' : line.color"
-                :r="isBitcoinLine(line.label) ? 5 : 4"
+                :fill="getLineColor(line)"
+                :r="getLinePointRadius(line.label)"
                 fill-opacity="0.9"
                 tabindex="0"
                 @mouseenter="showTooltip(line.label, point)"
@@ -214,7 +221,7 @@
                 @mouseleave="hideTooltip"
                 @blur="hideTooltip"
                 class="line-point"
-                :filter="isBitcoinLine(line.label) ? 'url(#bitcoin-glow)' : undefined"
+                :filter="getLineFilter(line.label)"
               />
             </g>
           </g>
@@ -961,6 +968,38 @@ function isBitcoinLine(label) {
   if (!label) return false
   const lowerLabel = label.toLowerCase()
   return lowerLabel.includes('비트코인') || lowerLabel.includes('bitcoin') || lowerLabel.includes('btc')
+}
+
+function isKoreanM2Line(label) {
+  if (!label) return false
+  const lowerLabel = label.toLowerCase()
+  const hasKorea = lowerLabel.includes('한국') || lowerLabel.includes('korea')
+  return hasKorea && lowerLabel.includes('m2')
+}
+
+function isHighlightedLine(label) {
+  return isBitcoinLine(label) || isKoreanM2Line(label)
+}
+
+function getLineColor(line) {
+  if (!line) return '#0f172a'
+  if (isBitcoinLine(line.label)) return '#FFD700'
+  if (isKoreanM2Line(line.label)) return '#dc2626'
+  return line.color
+}
+
+function getLineStrokeWidth(label) {
+  return isHighlightedLine(label) ? 4 : 3
+}
+
+function getLinePointRadius(label) {
+  return isHighlightedLine(label) ? 5 : 4
+}
+
+function getLineFilter(label) {
+  if (isBitcoinLine(label)) return 'url(#bitcoin-glow)'
+  if (isKoreanM2Line(label)) return 'url(#korea-m2-glow)'
+  return undefined
 }
 
 function tooltipValueFormatter(point) {

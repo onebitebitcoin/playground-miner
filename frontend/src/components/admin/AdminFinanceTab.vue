@@ -435,7 +435,7 @@
         <h3 class="text-lg font-semibold text-gray-900">재무 쿼리 로그</h3>
       </div>
 
-      <div v-if="financeLogsLoading" class="text-center py-12 text-gray-500">
+      <div v-if="financeLogsLoading && !hasLoadedFinanceLogs" class="text-center py-12 text-gray-500">
         로딩 중...
       </div>
 
@@ -443,7 +443,7 @@
         로그가 없습니다.
       </div>
 
-      <div v-else class="overflow-x-auto">
+      <div v-else class="relative overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
             <tr>
@@ -533,6 +533,12 @@
             </tr>
           </tbody>
         </table>
+        <div
+          v-if="financeLogsLoading"
+          class="absolute inset-0 bg-white/70 backdrop-blur-[1px] flex items-center justify-center text-gray-600 text-sm font-medium"
+        >
+          새 페이지 데이터를 불러오는 중입니다...
+        </div>
       </div>
 
       <div
@@ -595,6 +601,7 @@ const financeLogsLoading = ref(false)
 const financeLogsOffset = ref(0)
 const financeLogsLimit = ref(10)
 const financeLogsTotal = ref(0)
+const hasLoadedFinanceLogs = ref(false)
 const expandedLogPromptId = ref(null)
 const financeStats = ref({
   total_queries: 0,
@@ -668,6 +675,7 @@ const loadFinanceLogs = async () => {
   if (!props.isAdmin) {
     financeLogs.value = []
     financeLogsTotal.value = 0
+    hasLoadedFinanceLogs.value = true
     return
   }
 
@@ -698,6 +706,7 @@ const loadFinanceLogs = async () => {
     props.showError(error?.message || '로그 로딩 중 오류가 발생했습니다')
   } finally {
     financeLogsLoading.value = false
+    hasLoadedFinanceLogs.value = true
   }
 }
 

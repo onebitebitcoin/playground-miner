@@ -4,6 +4,13 @@ export function isBitcoinLegend(series) {
   return label.includes('비트코인') || label.includes('bitcoin') || label.includes('btc')
 }
 
+export function isKoreanM2Legend(series) {
+  if (!series || !series.label) return false
+  const label = series.label.toLowerCase()
+  const hasKorea = label.includes('한국') || label.includes('korea')
+  return hasKorea && label.includes('m2')
+}
+
 export function getLegendLabel(series) {
   if (!series) return ''
   // Try to find normalized label from price map if available, or use the series label
