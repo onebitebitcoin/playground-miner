@@ -26,7 +26,10 @@
         <span :class="priceTableMode === 'multiple' ? 'text-slate-900 font-semibold' : ''">배수</span>
       </div>
     </div>
-    <div class="overflow-x-auto px-2 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6">
+    <div
+      ref="tableWrapper"
+      class="overflow-x-auto px-2 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6"
+    >
       <table class="min-w-full table-fixed text-[11px] sm:text-xs text-slate-600 border-collapse">
         <thead>
           <tr class="bg-slate-50 text-slate-500">
@@ -77,6 +80,8 @@
 </template>
 
 <script setup>
+import { onMounted, ref, watch, nextTick } from 'vue'
+
 const props = defineProps({
   tableYears: Array,
   sortedLegend: Array,
@@ -92,4 +97,30 @@ const props = defineProps({
 })
 
 defineEmits(['update:priceTableMode'])
+
+const tableWrapper = ref(null)
+
+function scrollToLatestColumns(behavior = 'auto') {
+  if (!props.tableYears?.length) return
+  nextTick(() => {
+    const el = tableWrapper.value
+    if (el) {
+      el.scrollTo({
+        left: el.scrollWidth,
+        behavior
+      })
+    }
+  })
+}
+
+onMounted(() => {
+  scrollToLatestColumns('auto')
+})
+
+watch(
+  () => [props.tableYears, props.sortedLegend, props.analysisResultType],
+  () => {
+    scrollToLatestColumns('smooth')
+  }
+)
 </script>

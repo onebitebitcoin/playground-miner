@@ -306,6 +306,10 @@ const lineColors = [
   '#7c3aed', '#ea580c', '#0891b2', '#be185d', '#4338ca'
 ]
 
+const BITCOIN_COLOR = '#FFD700'
+const assignedSeriesColors = ref({})
+let nextColorIndex = 0
+
 const activeTab = ref('historical')
 const handleTabClick = (tab) => {
   if (tab.disabled) return
@@ -349,6 +353,38 @@ const showDebugLogs = ref(false)
 function appendProgressLogs(...messages) {
   if (!messages.length) return
   progressLogs.value = [...progressLogs.value, ...messages]
+}
+
+function resetColorAssignments() {
+  assignedSeriesColors.value = {}
+  nextColorIndex = 0
+}
+
+function updateColorAssignments(seriesList, { reset = false } = {}) {
+  if (!Array.isArray(seriesList)) {
+    if (reset) resetColorAssignments()
+    return
+  }
+  const baseMap = reset ? {} : { ...assignedSeriesColors.value }
+  if (reset) nextColorIndex = 0
+  let changed = false
+  seriesList.forEach((series) => {
+    if (!series || !series.id) return
+    if (isBitcoinLabel(series.label)) {
+      if (baseMap[series.id] !== BITCOIN_COLOR) {
+        baseMap[series.id] = BITCOIN_COLOR
+        changed = true
+      }
+      return
+    }
+    if (baseMap[series.id]) return
+    baseMap[series.id] = lineColors[nextColorIndex % lineColors.length]
+    nextColorIndex += 1
+    changed = true
+  })
+  if (changed || reset) {
+    assignedSeriesColors.value = baseMap
+  }
 }
 
 const loadingProgress = ref(0)
@@ -655,16 +691,7 @@ const tableYears = computed(() => {
   return Array.from(years).sort((a, b) => a - b)
 })
 
-const colorMap = computed(() => {
-  if (!(analysis.value && analysis.value.series)) return {}
-  const map = {}
-  analysis.value.series.forEach((s, i) => {
-    const labelLower = (s.label || '').toLowerCase()
-    const isBitcoin = labelLower.includes('비트코인') || labelLower.includes('bitcoin') || labelLower.includes('btc')
-    map[s.id] = isBitcoin ? '#FFD700' : lineColors[i % lineColors.length]
-  })
-  return map
-})
+const colorMap = computed(() => ({ ...assignedSeriesColors.value }))
 
 const fxRate = computed(() => (analysis.value?.fx_rate || 1300))
 
@@ -1072,6 +1099,7 @@ async function appendAssetToExistingAnalysis(assetId) {
         ...analysis.value,
         series: [...currentSeries, result.series]
       }
+      updateColorAssignments([result.series])
 
       // Add chart data table entry
       if (result.chartDataTableEntry) {
@@ -1707,6 +1735,7 @@ async function requestAgentAnalysis(options = {}) {
   displayStartYear.value = null
   sliderMinYear.value = null
   hiddenSeries.value = new Set()
+  resetColorAssignments()
   priceDisplayMode.value = isAutoApplyEnabled.value ? 'krw' : 'usd'
   yearlyPriceMap.value = {}
   errorMessage.value = ''
@@ -1744,7 +1773,7 @@ async function requestAgentAnalysis(options = {}) {
     }
 
     const result = await fetchHistoricalReturnsStream(streamOptions)
-    applyAnalysisResult(result, { shouldCache: true })
+    applyAnalysisResult(result, { shouldCache: true, resetColors: true })
     prefetchDividendVariant(!includeDividends.value)
     completeLoadingStageTracking()
 
@@ -1787,11 +1816,12 @@ function cancelDividendPrefetch() {
   }
 }
 
-function applyAnalysisResult(result, { shouldCache = true, preserveHidden = true } = {}) {
+function applyAnalysisResult(result, { shouldCache = true, preserveHidden = true, resetColors = false } = {}) {
   if (!result) return
   dividendTogglePending.value = null
   const prevHidden = preserveHidden ? new Set(hiddenSeries.value) : null
   const currentSeriesIds = new Set((result?.series || []).map((s) => s.id))
+  updateColorAssignments(result?.series || [], { reset: resetColors })
 
   analysis.value = result
   analysisResultType.value = result.calculation_method || 'cagr'
