@@ -155,6 +155,7 @@
       </div>
 
       <AdminPromptPanel
+        v-if="allowRealtimeLogs"
         class="mt-6"
         v-model:show-debug="showDebugLogs"
         :display-logs="analysisLogs"
@@ -399,6 +400,7 @@ const quickCompareGroups = ref([])
 const quickCompareGroupsLoading = ref(false)
 const selectedQuickCompareGroup = ref('')
 const feKey = ref('')
+const allowRealtimeLogs = import.meta.env.DEV
 
 watch(loading, (val) => {
   if (!val && searchButtonAttention.value) {
