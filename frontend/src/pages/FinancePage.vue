@@ -180,6 +180,7 @@ import {
 import { defaultFinanceQuickCompareGroups } from '@/config/financeQuickCompareGroups'
 
 const TAX_RATE = 0.22
+const KR_INTEREST_TAX_RATE = 0.154
 const KR_EQUITY_TAX_FREE_ALLOWANCE = 50000000
 const HERO_ANIMATION_DURATION = 2800
 const MIN_DIVIDEND_YIELD_DISPLAY = 0.1
@@ -798,14 +799,17 @@ async function appendResolvedAsset(name, { silent = false, targetList = null } =
   const ticker = result?.ticker?.trim() || result?.id?.trim()
   if (assetExistsInList(label, ticker, existingList)) return false
   
-  const display = Io(label, ticker)
+  const isSyntheticAsset = Boolean(result?.synthetic_asset)
+  const display = isSyntheticAsset ? label : Io(label, ticker)
   const entry = {
     id: result?.id || ticker || label,
     label,
     display,
     ticker,
     category: result?.category || '',
-    unit: result?.unit || ''
+    unit: result?.unit || '',
+    synthetic_asset: result?.synthetic_asset || '',
+    target_rate_pct: result?.target_rate_pct
   }
   if (targetList) {
     targetList.push(entry)
@@ -847,13 +851,16 @@ async function loadResolvedAssets(assets = []) {
     const entries = assets.map((a) => {
       const label = a.label || a.id || ''
       const ticker = a.ticker || a.id || ''
+      const isSyntheticAsset = Boolean(a?.synthetic_asset)
       return {
         id: a.id || ticker || label,
         label,
         ticker,
-        display: Io(label, ticker),
+        display: isSyntheticAsset ? label : Io(label, ticker),
         category: a.category || '',
-        unit: a.unit || ''
+        unit: a.unit || '',
+        synthetic_asset: a?.synthetic_asset || '',
+        target_rate_pct: a?.target_rate_pct
       }
     }).filter((a) => a.label)
     if (id === Gt) {
@@ -1069,6 +1076,7 @@ async function addAsset() {
         await appendAssetToExistingAnalysis(assetId)
       } else {
         // No existing analysis, run full analysis
+        searchButtonAttention.value = false
         prompt.value = buildPromptFromInputs()
         requestAgentAnalysis()
       }
@@ -1202,6 +1210,9 @@ function getAssetUrl(series) {
   if (!series) return null
   const ticker = series.ticker || series.id
   if (!ticker) return null
+  if (series?.metadata?.synthetic_asset || series?.synthetic_asset || /^SYNTH-(DEPOSIT|SAVINGS)-/i.test(ticker)) {
+    return null
+  }
   
   const symbol = ticker.toUpperCase()
   const entry = findPriceEntry(series)
@@ -1605,6 +1616,15 @@ function isKoreanM2Label(label) {
 
 function resolveTaxTreatment(series) {
   if (!series || isBitcoinLabel(series.label)) return null
+  const syntheticType = (series?.metadata?.synthetic_asset || series?.synthetic_asset || '').toLowerCase()
+  if (syntheticType === 'deposit') {
+    const targetRate = Number(series?.metadata?.target_rate_pct ?? series?.target_rate_pct)
+    return {
+      type: 'kr_deposit',
+      rate: KR_INTEREST_TAX_RATE,
+      targetRatePct: Number.isFinite(targetRate) ? targetRate : null
+    }
+  }
   if (isKoreanEquitySeries(series)) {
     return {
       type: 'kr',
@@ -1632,11 +1652,12 @@ function resolveTaxTreatment(series) {
 function applyTaxToMultiple(multiple, yearsElapsed, taxTreatment) {
   if (!taxTreatment) return multiple
   if (!Number.isFinite(multiple) || multiple <= 0) return multiple
-  if (taxTreatment.type === 'us') {
+  if (taxTreatment.type === 'us' || taxTreatment.type === 'kr_deposit') {
     if (!Number.isFinite(yearsElapsed) || yearsElapsed <= 0) return multiple
     const cagr = Math.pow(multiple, 1 / yearsElapsed) - 1
     if (!Number.isFinite(cagr)) return multiple
-    const adjusted = cagr * (1 - (taxTreatment.rate ?? TAX_RATE))
+    const rate = taxTreatment.rate ?? (taxTreatment.type === 'us' ? TAX_RATE : KR_INTEREST_TAX_RATE)
+    const adjusted = cagr * (1 - rate)
     return Math.pow(1 + adjusted, yearsElapsed)
   }
   if (taxTreatment.type === 'kr') {

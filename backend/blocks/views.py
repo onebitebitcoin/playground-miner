@@ -587,6 +587,91 @@ SAFE_ASSETS = {
             'Seoul apartment LTV 50',
             'SEOUL_APT_LTV50'
         ]
+    },
+    'usdkrw': {
+        'id': 'usdkrw',
+        'label': '원/달러 환율 (USD/KRW)',
+        'ticker': 'USDKRW=X',
+        'stooq_symbol': None,
+        'unit': 'KRW',
+        'category': '환율',
+        'aliases': [
+            '원달러',
+            '원/달러',
+            '달러원',
+            '달러/원',
+            'usd/krw',
+            'usdkrw',
+            'usd krw',
+            '원달러 환율',
+            '달러 환율',
+            'dollar won',
+            '미국 달러',
+            'us dollar krw'
+        ]
+    },
+    'jpykrw': {
+        'id': 'jpykrw',
+        'label': '원/엔 환율 (JPY/KRW)',
+        'ticker': 'JPYKRW=X',
+        'stooq_symbol': None,
+        'unit': 'KRW',
+        'category': '환율',
+        'aliases': [
+            '원엔',
+            '원/엔',
+            '엔원',
+            '엔/원',
+            'jpy/krw',
+            'jpykrw',
+            'jpy krw',
+            '엔화 환율',
+            '일본 엔',
+            'japanese yen krw',
+            'yen won'
+        ]
+    },
+    'eurkrw': {
+        'id': 'eurkrw',
+        'label': '원/유로 환율 (EUR/KRW)',
+        'ticker': 'EURKRW=X',
+        'stooq_symbol': None,
+        'unit': 'KRW',
+        'category': '환율',
+        'aliases': [
+            '원유로',
+            '원/유로',
+            '유로원',
+            '유로/원',
+            'eur/krw',
+            'eurkrw',
+            'eur krw',
+            '유로 환율',
+            'euro krw',
+            'euro won'
+        ]
+    },
+    'cnykrw': {
+        'id': 'cnykrw',
+        'label': '원/위안 환율 (CNY/KRW)',
+        'ticker': 'CNYKRW=X',
+        'stooq_symbol': None,
+        'unit': 'KRW',
+        'category': '환율',
+        'aliases': [
+            '원위안',
+            '원/위안',
+            '위안원',
+            '위안/원',
+            'cny/krw',
+            'cnykrw',
+            'cny krw',
+            '위안 환율',
+            '위안화 환율',
+            '중국 위안',
+            'chinese yuan krw',
+            'yuan won'
+        ]
     }
 }
 
@@ -802,6 +887,8 @@ def _ensure_asset_prices_cached(asset, group_key=None):
     Make sure a single asset has an entry inside AssetPriceCache.
     """
     try:
+        if (asset.get('synthetic_asset') or (asset.get('metadata') or {}).get('synthetic_asset')):
+            return False
         asset_id = (asset.get('ticker') or asset.get('id') or '').strip()
         label = (asset.get('label') or asset_id).strip()
         category = asset.get('category')
@@ -3545,6 +3632,12 @@ def _clone_asset_config(cfg, fallback_id=None):
 
 def _find_known_asset_config(asset_id=None, label=None):
     asset_id = (asset_id or '').strip()
+    synthetic_from_id = _parse_synthetic_deposit_identifier(asset_id)
+    if synthetic_from_id:
+        return synthetic_from_id
+    synthetic_from_label = _detect_synthetic_deposit_from_text(label or asset_id)
+    if synthetic_from_label:
+        return synthetic_from_label
     normalized_id = asset_id.lower()
     normalized_label = _normalize_asset_label_text(label)
     normalized_asset_text = _normalize_asset_label_text(asset_id)
@@ -4573,6 +4666,121 @@ def _sanitize_custom_assets(raw_assets):
     return sanitized
 
 
+SYNTHETIC_DEPOSIT_ID_PATTERN = re.compile(r'^SYNTH-(DEPOSIT|SAVINGS)-(\d{1,5})$')
+_INTEREST_KEYWORD_MAP = {
+    '퍼센트': '%',
+    'percent': '%',
+    'pct': '%',
+    '퍼': '%',
+    '프로': '%'
+}
+
+
+def _format_interest_rate(rate_pct):
+    formatted = f"{rate_pct:.2f}"
+    return formatted.rstrip('0').rstrip('.') or formatted
+
+
+def _clamp_interest_rate(rate_pct):
+    try:
+        value = float(rate_pct)
+    except (TypeError, ValueError):
+        return None
+    if value <= 0:
+        return None
+    return max(0.1, min(25.0, value))
+
+
+def _extract_interest_rate_hint(text):
+    if not text:
+        return None
+    normalized = str(text).lower()
+    for key, replacement in _INTEREST_KEYWORD_MAP.items():
+        normalized = normalized.replace(key, replacement)
+    normalized = re.sub(r'\s+', '', normalized)
+    match = re.search(r'(\d+(?:\.\d+)?)%(?:대)?', normalized)
+    if match:
+        value = _clamp_interest_rate(match.group(1))
+        if value is not None:
+            return value
+    # Fallback: pick first number if % keyword exists somewhere
+    if '%' in normalized:
+        match = re.search(r'(\d+(?:\.\d+)?)', normalized)
+        if match:
+            value = _clamp_interest_rate(match.group(1))
+            if value is not None:
+                return value
+    return None
+
+
+def _build_synthetic_deposit_config(rate_pct, product_type):
+    clamped_rate = _clamp_interest_rate(rate_pct)
+    if clamped_rate is None:
+        return None
+    basis_points = int(round(clamped_rate * 100))
+    product_code = 'SAVINGS' if product_type == 'savings' else 'DEPOSIT'
+    asset_id = f"SYNTH-{product_code}-{basis_points:04d}"
+    label_prefix = '적금' if product_type == 'savings' else '예금'
+    label = f"{label_prefix} {_format_interest_rate(clamped_rate)}%"
+    return {
+        'id': asset_id,
+        'label': label,
+        'ticker': asset_id,
+        'category': '예적금',
+        'unit': '%',
+        'yield_asset': True,
+        'synthetic_asset': 'deposit',
+        'product_type': product_type,
+        'target_rate_pct': clamped_rate
+    }
+
+
+def _parse_synthetic_deposit_identifier(value):
+    if not value:
+        return None
+    match = SYNTHETIC_DEPOSIT_ID_PATTERN.match(value.strip().upper())
+    if not match:
+        return None
+    product_code = match.group(1).lower()
+    basis_points = int(match.group(2))
+    rate_pct = basis_points / 100.0
+    product_type = 'savings' if product_code == 'savings' else 'deposit'
+    return _build_synthetic_deposit_config(rate_pct, product_type)
+
+
+def _detect_synthetic_deposit_from_text(text):
+    if not text:
+        return None
+    cleaned = str(text).strip()
+    if not cleaned:
+        return None
+    lowered = cleaned.lower()
+    if '예금' not in cleaned and '적금' not in cleaned and 'deposit' not in lowered and 'savings' not in lowered:
+        return None
+    rate_pct = _extract_interest_rate_hint(cleaned)
+    if rate_pct is None:
+        return None
+    product_type = 'savings' if '적금' in cleaned else 'deposit'
+    return _build_synthetic_deposit_config(rate_pct, product_type)
+
+
+def _build_synthetic_deposit_history(rate_pct, start_year, end_year):
+    clamped_rate = _clamp_interest_rate(rate_pct)
+    if clamped_rate is None:
+        return []
+    try:
+        start = int(start_year)
+        end = int(end_year)
+    except (TypeError, ValueError):
+        return []
+    if end < start:
+        end = start
+    history = []
+    for year in range(start, end + 1):
+        history.append((datetime(year, 12, 31), clamped_rate))
+    return history
+
+
 def _build_manual_assets(asset_names, calculation_method):
     manual_assets = []
     if not asset_names:
@@ -4584,20 +4792,28 @@ def _build_manual_assets(asset_names, calculation_method):
             continue
 
         known_config = _find_known_asset_config(label, label)
+        metadata = {}
         if known_config:
             asset_id = known_config.get('id') or label
             asset_label = known_config.get('label') or asset_id
             asset_type = known_config.get('category', 'asset')
+            if known_config.get('synthetic_asset') == 'deposit':
+                asset_type = 'synthetic_deposit'
+                metadata['synthetic_asset'] = 'deposit'
+                if known_config.get('target_rate_pct') is not None:
+                    metadata['target_rate_pct'] = known_config.get('target_rate_pct')
         else:
             asset_id = label
             asset_label = label
             asset_type = 'unknown'
+            metadata = {}
 
         manual_assets.append({
             'id': asset_id,
             'label': asset_label,
             'type': asset_type,
-            'calculation_method': calculation_method
+            'calculation_method': calculation_method,
+            'metadata': metadata or None
         })
 
     return manual_assets
@@ -4731,6 +4947,7 @@ def _lookup_ticker_with_llm(asset_id, label):
         "- For Korean Stocks: Use 6-digit code with .KS (KOSPI) or .KQ (KOSDAQ) suffix (e.g., 005930.KS).\n"
         "- For Indices: Use Yahoo Finance symbol (e.g., ^GSPC for S&P 500, ^DJI for Dow).\n"
         "- For Crypto: Use BTC-USD, ETH-USD format.\n"
+        "- For Exchange Rates (FX): Use format like USDKRW=X, JPYKRW=X, EURKRW=X, CNYKRW=X (e.g., '원달러' -> USDKRW=X, '엔화 환율' -> JPYKRW=X).\n"
         "- If uncertain or not found, return { \"found\": false }.\n"
         "- BE PRECISE. Incorrect tickers cause errors."
     )
@@ -5036,6 +5253,24 @@ class PriceRetrieverAgent:
                     config['stooq_symbol'] = _guess_stooq_symbol(asset_id)
 
                 yield {'type': 'log', 'message': f"[데이터 수집] {label}: 동적 config 생성 완료 (Category: {category}, Ticker: {asset_id})"}
+
+            if config and config.get('synthetic_asset') == 'deposit':
+                history = _build_synthetic_deposit_history(config.get('target_rate_pct'), start_year, end_year)
+                if not history:
+                    yield {'type': 'log', 'message': f"[데이터 수집] ✗ {label}: 고정 금리 시뮬레이션 데이터를 생성할 수 없습니다."}
+                    continue
+                base_metadata = dict(asset.get('metadata') or {})
+                base_metadata.setdefault('synthetic_asset', 'deposit')
+                base_metadata.setdefault('target_rate_pct', config.get('target_rate_pct'))
+                price_data_map[asset_id] = {
+                    'history': history,
+                    'config': config,
+                    'source': 'Synthetic (예적금 금리)',
+                    'calculation_method': asset.get('calculation_method', 'cagr'),
+                    'metadata': base_metadata
+                }
+                yield {'type': 'log', 'message': f"[데이터 수집] ✓ {label}: 고정 금리 {config.get('target_rate_pct')}% 데이터 생성"}
+                continue
 
             try:
                 result = _fetch_asset_history(config, start_year, end_year)
@@ -6056,6 +6291,19 @@ def finance_resolve_custom_asset_view(request):
     name = (payload.get('name') or '').strip()
     if not name:
         return JsonResponse({'ok': False, 'error': '자산명을 입력해주세요.'}, status=400)
+
+    synthetic_asset = _detect_synthetic_deposit_from_text(name)
+    if synthetic_asset:
+        asset = {
+            'id': synthetic_asset.get('id'),
+            'label': synthetic_asset.get('label') or name,
+            'ticker': synthetic_asset.get('id'),
+            'category': synthetic_asset.get('category'),
+            'unit': synthetic_asset.get('unit'),
+            'synthetic_asset': synthetic_asset.get('synthetic_asset'),
+            'target_rate_pct': synthetic_asset.get('target_rate_pct')
+        }
+        return JsonResponse({'ok': True, 'asset': asset})
 
     config = _find_known_asset_config(name, name)
     if config:
@@ -7711,6 +7959,7 @@ def _resolve_assets(asset_names):
                 'label': config.get('label') or name,
                 'ticker': config.get('ticker') or config.get('id') or name,
                 'category': config.get('category'),
+                'synthetic_asset': config.get('synthetic_asset')
             })
             continue
 
@@ -8159,19 +8408,36 @@ def finance_add_single_asset_view(request):
             'ticker': asset_id
         }
 
+    known_cfg = _find_known_asset_config(cfg.get('id'), cfg.get('label'))
+    if known_cfg:
+        cfg = known_cfg
+
     # Fetch history
     try:
-        result = _fetch_asset_history(cfg, start_year, end_year)
-        if not result:
-            return JsonResponse({'ok': False, 'error': f'No data found for {asset_id}'}, status=404)
+        if cfg.get('synthetic_asset') == 'deposit':
+            history = _build_synthetic_deposit_history(cfg.get('target_rate_pct'), start_year, end_year)
+            source = 'Synthetic (예적금 금리)'
+            logger.info(f"[Single Asset] Generated synthetic deposit history for {cfg.get('label')}")
+        else:
+            result = _fetch_asset_history(cfg, start_year, end_year)
+            if not result:
+                return JsonResponse({'ok': False, 'error': f'No data found for {asset_id}'}, status=404)
 
-        history, source = result
-        logger.info(f"[Single Asset] Fetched {len(history)} data points from {source}")
+            history, source = result
+            logger.info(f"[Single Asset] Fetched {len(history)} data points from {source}")
 
         # Build series
         series = _build_asset_series(asset_id, cfg, history, start_year, end_year, calculation_method, source=source)
         if not series:
             return JsonResponse({'ok': False, 'error': 'Failed to build series'}, status=500)
+
+        if cfg.get('synthetic_asset') == 'deposit':
+            metadata = series.get('metadata') or {}
+            metadata.setdefault('synthetic_asset', 'deposit')
+            metadata.setdefault('target_rate_pct', cfg.get('target_rate_pct'))
+            series['metadata'] = metadata
+            series['synthetic_asset'] = 'deposit'
+            series['target_rate_pct'] = cfg.get('target_rate_pct')
 
         # Build chart data table entry for yearly prices
         chart_entry = _build_chart_data_table_entry(asset_id, cfg, history, source, start_year, end_year)
