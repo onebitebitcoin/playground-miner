@@ -5,6 +5,17 @@ const defaultHeaders = {
   'Content-Type': 'application/json'
 }
 
+function resolveApiUrl(path = '') {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  if (BASE_URL) {
+    return `${BASE_URL}${normalizedPath}`
+  }
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}${normalizedPath}`
+  }
+  throw new Error('API base URL를 결정할 수 없습니다.')
+}
+
 async function handleResponse(response) {
   const contentType = response.headers.get('content-type') || ''
   const isJson = contentType.includes('application/json')
@@ -33,7 +44,7 @@ export async function fetchHistoricalReturns({ prompt, quickRequests, contextKey
     body.context_key = contextKey
   }
 
-  const response = await fetch(`${BASE_URL}/api/finance/historical-returns`, {
+  const response = await fetch(resolveApiUrl('/api/finance/historical-returns'), {
     method: 'POST',
     headers: defaultHeaders,
     body: JSON.stringify(body),
@@ -117,7 +128,7 @@ export async function fetchHistoricalReturnsStream({ prompt, quickRequests, cont
     body.context_key = contextKey
   }
 
-  const url = new URL(`${BASE_URL}/api/finance/historical-returns`)
+  const url = new URL(resolveApiUrl('/api/finance/historical-returns'))
   url.searchParams.set('stream', '1')
 
   try {
@@ -201,7 +212,7 @@ export async function fetchYearlyClosingPrices({ assets, startYear, endYear, sig
     end_year: endYear
   }
 
-  const response = await fetch(`${BASE_URL}/api/finance/yearly-closing-prices`, {
+  const response = await fetch(resolveApiUrl('/api/finance/yearly-closing-prices'), {
     method: 'POST',
     headers: defaultHeaders,
     body: JSON.stringify(body),
@@ -216,7 +227,7 @@ export async function fetchYearlyClosingPrices({ assets, startYear, endYear, sig
 }
 
 export async function fetchAgentPrompts({ signal }) {
-  const response = await fetch(`${BASE_URL}/api/finance/admin/agent-prompts`, {
+  const response = await fetch(resolveApiUrl('/api/finance/admin/agent-prompts'), {
     method: 'GET',
     headers: defaultHeaders,
     signal
@@ -231,7 +242,7 @@ export async function fetchAgentPrompts({ signal }) {
 
 export async function resolveCustomAsset(name, { signal } = {}) {
   const body = { name: name || '' }
-  const response = await fetch(`${BASE_URL}/api/finance/custom-asset/resolve`, {
+  const response = await fetch(resolveApiUrl('/api/finance/custom-asset/resolve'), {
     method: 'POST',
     headers: defaultHeaders,
     body: JSON.stringify(body),
@@ -252,7 +263,7 @@ export async function updateAgentPrompt({ agentType, name, description, systemPr
   if (systemPrompt !== undefined) body.system_prompt = systemPrompt
   if (isActive !== undefined) body.is_active = isActive
 
-  const response = await fetch(`${BASE_URL}/api/finance/admin/agent-prompts/${agentType}`, {
+  const response = await fetch(resolveApiUrl(`/api/finance/admin/agent-prompts/${agentType}`), {
     method: 'PATCH',
     headers: defaultHeaders,
     body: JSON.stringify(body),
@@ -270,7 +281,7 @@ export async function deleteAgentPrompt({ agentType, signal }) {
   if (!agentType) {
     throw new Error('Agent 타입이 필요합니다.')
   }
-  const response = await fetch(`${BASE_URL}/api/finance/admin/agent-prompts/${agentType}`, {
+  const response = await fetch(resolveApiUrl(`/api/finance/admin/agent-prompts/${agentType}`), {
     method: 'DELETE',
     headers: defaultHeaders,
     signal
@@ -284,7 +295,7 @@ export async function deleteAgentPrompt({ agentType, signal }) {
 }
 
 export async function initializeAgentPrompts({ signal }) {
-  const response = await fetch(`${BASE_URL}/api/finance/admin/agent-prompts`, {
+  const response = await fetch(resolveApiUrl('/api/finance/admin/agent-prompts'), {
     method: 'POST',
     headers: defaultHeaders,
     signal
@@ -298,7 +309,7 @@ export async function initializeAgentPrompts({ signal }) {
 }
 
 export async function fetchFinanceQuickCompareGroups({ signal } = {}) {
-  const response = await fetch(`${BASE_URL}/api/finance/quick-compare-groups`, {
+  const response = await fetch(resolveApiUrl('/api/finance/quick-compare-groups'), {
     method: 'GET',
     headers: defaultHeaders,
     signal
@@ -311,7 +322,7 @@ export async function fetchFinanceQuickCompareGroups({ signal } = {}) {
 }
 
 export async function fetchAdminFinanceQuickCompareGroups({ signal } = {}) {
-  const response = await fetch(`${BASE_URL}/api/finance/admin/quick-compare-groups`, {
+  const response = await fetch(resolveApiUrl('/api/finance/admin/quick-compare-groups'), {
     method: 'GET',
     headers: defaultHeaders,
     signal
@@ -324,7 +335,7 @@ export async function fetchAdminFinanceQuickCompareGroups({ signal } = {}) {
 }
 
 export async function createAdminFinanceQuickCompareGroup(payload, { signal } = {}) {
-  const response = await fetch(`${BASE_URL}/api/finance/admin/quick-compare-groups`, {
+  const response = await fetch(resolveApiUrl('/api/finance/admin/quick-compare-groups'), {
     method: 'POST',
     headers: defaultHeaders,
     body: JSON.stringify(payload || {}),
@@ -339,7 +350,7 @@ export async function createAdminFinanceQuickCompareGroup(payload, { signal } = 
 
 export async function updateAdminFinanceQuickCompareGroup(id, payload, { signal } = {}) {
   if (!id) throw new Error('그룹 ID가 필요합니다.')
-  const response = await fetch(`${BASE_URL}/api/finance/admin/quick-compare-groups/${id}`, {
+  const response = await fetch(resolveApiUrl(`/api/finance/admin/quick-compare-groups/${id}`), {
     method: 'PATCH',
     headers: defaultHeaders,
     body: JSON.stringify(payload || {}),
@@ -354,7 +365,7 @@ export async function updateAdminFinanceQuickCompareGroup(id, payload, { signal 
 
 export async function deleteAdminFinanceQuickCompareGroup(id, { signal } = {}) {
   if (!id) throw new Error('그룹 ID가 필요합니다.')
-  const response = await fetch(`${BASE_URL}/api/finance/admin/quick-compare-groups/${id}`, {
+  const response = await fetch(resolveApiUrl(`/api/finance/admin/quick-compare-groups/${id}`), {
     method: 'DELETE',
     headers: defaultHeaders,
     signal
@@ -374,7 +385,7 @@ export async function fetchAdminPriceCache({ offset = 0, limit = 10, search = ''
   if (search) {
     params.append('search', search)
   }
-  const response = await fetch(`${BASE_URL}/api/finance/admin/price-cache?${params.toString()}`, {
+  const response = await fetch(`${resolveApiUrl('/api/finance/admin/price-cache')}?${params.toString()}`, {
     method: 'GET',
     headers: defaultHeaders,
     signal
@@ -388,7 +399,7 @@ export async function fetchAdminPriceCache({ offset = 0, limit = 10, search = ''
 
 export async function deleteAdminPriceCache(id, { signal } = {}) {
   if (!id) throw new Error('캐시 ID가 필요합니다.')
-  const response = await fetch(`${BASE_URL}/api/finance/admin/price-cache/${id}`, {
+  const response = await fetch(resolveApiUrl(`/api/finance/admin/price-cache/${id}`), {
     method: 'DELETE',
     headers: defaultHeaders,
     signal
@@ -413,7 +424,7 @@ export async function addSingleAsset({ assetId, startYear, endYear, calculationM
     include_dividends: Boolean(includeDividends)
   }
 
-  const response = await fetch(`${BASE_URL}/api/finance/add-single-asset`, {
+  const response = await fetch(resolveApiUrl('/api/finance/add-single-asset'), {
     method: 'POST',
     headers: defaultHeaders,
     body: JSON.stringify(body),
