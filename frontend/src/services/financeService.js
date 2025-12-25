@@ -47,13 +47,6 @@ export async function fetchHistoricalReturns({ prompt, quickRequests, contextKey
   return data
 }
 
-function createStreamChannelId() {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID()
-  }
-  return `finance-${Date.now()}-${Math.random().toString(16).slice(2)}`
-}
-
 function createAbortError(message) {
   if (typeof DOMException !== 'undefined') {
     return new DOMException(message, 'AbortError')
@@ -63,148 +56,138 @@ function createAbortError(message) {
   return error
 }
 
-function buildFinanceWebSocketUrl(channelId) {
-  const baseEnv = (import.meta.env.VITE_API_BASE || '').trim()
-  if (baseEnv) {
-    try {
-      const base = new URL(baseEnv)
-      base.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:'
-      const normalizedPath = base.pathname.replace(/\/$/, '')
-      base.pathname = `${normalizedPath}/ws/finance`
-      base.search = `channel=${encodeURIComponent(channelId)}`
-      return base.toString()
-    } catch (error) {
-      console.warn('Invalid VITE_API_BASE for WebSocket:', error)
+function parseSseChunk(chunk, onLog) {
+  const lines = chunk.split('\n')
+  const dataLine = lines.find((line) => line.startsWith('data:'))
+  if (!dataLine) return null
+
+  let payload = null
+  try {
+    payload = JSON.parse(dataLine.replace(/^data:\s*/, ''))
+  } catch (error) {
+    console.warn('Failed to parse SSE payload:', error, dataLine)
+    return null
+  }
+
+  if (payload.type === 'log') {
+    if (payload.message && onLog) {
+      onLog(payload.message)
     }
+    return null
   }
-
-  if (typeof window === 'undefined') {
-    throw new Error('WebSocket URL를 결정할 수 없습니다.')
+  if (payload.type === 'error') {
+    throw new Error(payload.message || '분석 중 오류가 발생했습니다.')
   }
-
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/ws/finance?channel=${encodeURIComponent(channelId)}`
+  if (payload.type === 'result') {
+    return payload.data || null
+  }
+  return null
 }
 
 export async function fetchHistoricalReturnsStream({ prompt, quickRequests, contextKey, customAssets, includeDividends, signal, onLog }) {
-  /**
-   * WebSocket-assisted streaming version of fetchHistoricalReturns.
-   * Uses a dedicated per-request channel so each browser session receives only its own logs.
-   */
   if (signal?.aborted) {
     throw createAbortError('요청이 취소되었습니다.')
   }
 
-  const channelId = createStreamChannelId()
-  const wsUrl = buildFinanceWebSocketUrl(channelId)
+  const controller = new AbortController()
+  const abortHandlers = []
+
+  const cleanup = () => {
+    abortHandlers.forEach(({ target, handler }) => {
+      target.removeEventListener('abort', handler)
+    })
+    abortHandlers.length = 0
+  }
+
+  if (signal) {
+    const abortHandler = () => {
+      controller.abort()
+    }
+    signal.addEventListener('abort', abortHandler, { once: true })
+    abortHandlers.push({ target: signal, handler: abortHandler })
+  }
 
   const body = {
     prompt: prompt || '',
     quick_requests: Array.isArray(quickRequests) ? quickRequests : [],
     custom_assets: Array.isArray(customAssets) ? customAssets : [],
-    include_dividends: Boolean(includeDividends),
-    stream_channel: channelId,
-    stream_transport: 'websocket'
+    include_dividends: Boolean(includeDividends)
   }
   if (contextKey) {
     body.context_key = contextKey
   }
 
-  const fetchController = new AbortController()
+  const url = new URL(`${BASE_URL}/api/finance/historical-returns`)
+  url.searchParams.set('stream', '1')
 
-  return await new Promise((resolve, reject) => {
-    let finished = false
-    let ws = null
-    const abortHandlers = []
+  try {
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: defaultHeaders,
+      body: JSON.stringify(body),
+      signal: controller.signal
+    })
 
-    const cleanup = () => {
-      abortHandlers.forEach(({ target, handler }) => {
-        target.removeEventListener('abort', handler)
-      })
-      abortHandlers.length = 0
-      if (ws) {
-        try {
-          ws.close()
-        } catch (_) {}
-        ws = null
-      }
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => ({}))
+      throw new Error(errorPayload.error || `요청 실패(${response.status})`)
     }
 
-    const fail = (error) => {
-      if (finished) return
-      finished = true
-      if (!fetchController.signal.aborted) {
-        fetchController.abort()
-      }
-      cleanup()
-      reject(error)
+    if (!response.body || typeof response.body.getReader !== 'function') {
+      throw new Error('브라우저가 스트리밍 응답을 지원하지 않습니다.')
     }
 
-    const succeed = (result) => {
-      if (finished) return
-      finished = true
-      cleanup()
-      resolve(result)
-    }
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder('utf-8')
+    let buffer = ''
+    let finalResult = null
 
-    if (signal) {
-      const abortHandler = () => {
-        fail(createAbortError('요청이 취소되었습니다.'))
-      }
-      signal.addEventListener('abort', abortHandler, { once: true })
-      abortHandlers.push({ target: signal, handler: abortHandler })
-    }
-
-    try {
-      ws = new WebSocket(wsUrl)
-    } catch (error) {
-      fail(new Error('실시간 로그 채널을 열 수 없습니다.'))
-      return
-    }
-
-    ws.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data)
-        if (payload.type === 'log') {
-          if (onLog) onLog(payload.message)
-        } else if (payload.type === 'error') {
-          fail(new Error(payload.message || '분석 중 오류가 발생했습니다.'))
+    const processBuffer = () => {
+      let boundary = buffer.indexOf('\n\n')
+      while (boundary !== -1) {
+        const chunk = buffer.slice(0, boundary).trim()
+        buffer = buffer.slice(boundary + 2)
+        if (chunk) {
+          const parsed = parseSseChunk(chunk, onLog)
+          if (parsed) {
+            finalResult = parsed
+          }
         }
-      } catch (error) {
-        console.warn('Failed to parse finance WebSocket message:', error)
+        boundary = buffer.indexOf('\n\n')
       }
     }
 
-    ws.onerror = () => {
-      fail(new Error('실시간 로그 연결에 실패했습니다.'))
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) {
+        buffer += decoder.decode()
+        processBuffer()
+        break
+      }
+      buffer += decoder.decode(value, { stream: true })
+      processBuffer()
     }
 
-    ws.onclose = () => {
-      ws = null
-    }
-
-    ws.onopen = async () => {
-      try {
-        const response = await fetch(`${BASE_URL}/api/finance/historical-returns`, {
-          method: 'POST',
-          headers: defaultHeaders,
-          body: JSON.stringify(body),
-          signal: fetchController.signal
-        })
-        const data = await handleResponse(response)
-        if (!data.ok) {
-          throw new Error(data.error || 'AI 데이터 요청에 실패했습니다.')
-        }
-        succeed(data)
-      } catch (error) {
-        if (error.name === 'AbortError') {
-          fail(error)
-        } else {
-          fail(new Error(error.message || 'AI 데이터 요청에 실패했습니다.'))
-        }
+    if (buffer.trim()) {
+      const parsed = parseSseChunk(buffer.trim(), onLog)
+      if (parsed) {
+        finalResult = parsed
       }
     }
-  })
+
+    if (!finalResult) {
+      throw new Error('분석 결과를 받지 못했습니다.')
+    }
+
+    return finalResult
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw createAbortError('요청이 취소되었습니다.')
+    }
+    throw error
+  } finally {
+    cleanup()
+  }
 }
 
 export async function fetchYearlyClosingPrices({ assets, startYear, endYear, signal }) {
