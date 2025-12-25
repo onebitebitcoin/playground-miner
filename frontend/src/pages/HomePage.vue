@@ -127,7 +127,15 @@
               <component :is="card.icon" class="w-6 h-6" />
             </div>
             <div>
-              <h3 class="text-lg font-semibold text-slate-900">{{ card.title }}</h3>
+              <div class="flex items-center flex-wrap gap-2">
+                <h3 class="text-lg font-semibold text-slate-900">{{ card.title }}</h3>
+                <span
+                  v-if="card.recommended"
+                  class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"
+                >
+                  추천
+                </span>
+              </div>
               <p class="text-xs uppercase tracking-wide text-slate-400">{{ card.subtitle }}</p>
             </div>
           </div>
@@ -284,13 +292,34 @@ const iconFactory = (path) => ({
 
 const featureCards = [
   {
+    key: 'fee',
+    title: '수수료 계산',
+    subtitle: 'FEE',
+    description: '네트워크 상태에 따라 추천 수수료를 계산하고 지갑 송금 시 필요한 정보를 빠르게 파악하세요.',
+    route: 'fee',
+    icon: iconFactory('M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z'),
+    iconBg: 'bg-gradient-to-br from-green-200 to-emerald-200',
+    recommended: true
+  },
+  {
+    key: 'finance',
+    title: '재무 관리',
+    subtitle: 'FINANCE',
+    description: '비트코인 자산과 투자 계획을 한눈에 정리할 수 있는 재무 보드에서 목표를 관리하세요.',
+    route: 'finance',
+    icon: iconFactory('M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z'),
+    iconBg: 'bg-gradient-to-br from-yellow-200 to-lime-200',
+    recommended: true
+  },
+  {
     key: 'mining',
     title: '비트코인 채굴',
     subtitle: 'MINING',
     description: '난이도와 보상을 확인하며 버튼 한 번으로 채굴 체험을 즐겨보세요. 실시간 블록 체인 스택을 확인할 수 있어요.',
     route: 'mining',
     icon: iconFactory('M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10'),
-    iconBg: 'bg-gradient-to-br from-amber-200 to-orange-200'
+    iconBg: 'bg-gradient-to-br from-amber-200 to-orange-200',
+    recommended: true
   },
   {
     key: 'utxo',
@@ -309,24 +338,6 @@ const featureCards = [
     route: 'wallet',
     icon: iconFactory('M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z'),
     iconBg: 'bg-gradient-to-br from-sky-200 to-indigo-200'
-  },
-  {
-    key: 'fee',
-    title: '수수료 계산',
-    subtitle: 'FEE',
-    description: '네트워크 상태에 따라 추천 수수료를 계산하고 지갑 송금 시 필요한 정보를 빠르게 파악하세요.',
-    route: 'fee',
-    icon: iconFactory('M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z'),
-    iconBg: 'bg-gradient-to-br from-green-200 to-emerald-200'
-  },
-  {
-    key: 'finance',
-    title: '재무 관리',
-    subtitle: 'FINANCE',
-    description: '비트코인 자산과 투자 계획을 한눈에 정리할 수 있는 재무 보드에서 목표를 관리하세요.',
-    route: 'finance',
-    icon: iconFactory('M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z'),
-    iconBg: 'bg-gradient-to-br from-yellow-200 to-lime-200'
   },
   {
     key: 'compatibility',

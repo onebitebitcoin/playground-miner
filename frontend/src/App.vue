@@ -94,9 +94,17 @@ const isAdminFlag = vueRef(localStorage.getItem('isAdmin') === 'true')
 const menuItems = computed(() => {
   const items = [{ key: 'home', label: '홈' }]
 
-  // Add menu items based on sidebar config
+  // Add menu items based on sidebar config (fee/finance before mining)
+  if (sidebarConfig.value.show_fee) {
+    items.push({ key: 'fee', label: '수수료 계산', recommended: true })
+  }
+
+  if (sidebarConfig.value.show_finance) {
+    items.push({ key: 'finance', label: '재무 관리', recommended: true })
+  }
+
   if (sidebarConfig.value.show_mining) {
-    items.push({ key: 'mining', label: '비트코인 채굴' })
+    items.push({ key: 'mining', label: '비트코인 채굴', recommended: true })
   }
 
   if (sidebarConfig.value.show_utxo) {
@@ -105,14 +113,6 @@ const menuItems = computed(() => {
 
   if (sidebarConfig.value.show_wallet) {
     items.push({ key: 'wallet', label: '지갑' })
-  }
-
-  if (sidebarConfig.value.show_fee) {
-    items.push({ key: 'fee', label: '수수료 계산' })
-  }
-
-  if (sidebarConfig.value.show_finance) {
-    items.push({ key: 'finance', label: '재무 관리' })
   }
 
   if (sidebarConfig.value.show_compatibility) {
