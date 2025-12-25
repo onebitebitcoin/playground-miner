@@ -10,6 +10,8 @@ import CompatibilityPage from '../pages/CompatibilityPage.vue'
 import TimeCapsulePage from '../pages/TimeCapsulePage.vue'
 import AdminPage from '../pages/AdminPage.vue'
 import HomePage from '../pages/HomePage.vue'
+import NotFoundPage from '../pages/NotFoundPage.vue'
+import { loadSidebarConfig, isFeatureEnabled } from '@/stores/sidebarConfig'
 
 const routes = [
   {
@@ -75,12 +77,54 @@ const routes = [
     path: '/admin',
     name: 'admin',
     component: AdminPage
+  },
+  {
+    path: '/not-found',
+    name: 'not-found',
+    component: NotFoundPage
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/not-found'
   }
 ]
 
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+const featureRouteMap = {
+  mining: 'mining',
+  utxo: 'utxo',
+  wallet: 'wallet',
+  'wallet-kingstone': 'wallet',
+  'wallet-kingstone-detail': 'wallet',
+  fee: 'fee',
+  finance: 'finance',
+  compatibility: 'compatibility',
+  timecapsule: 'timecapsule'
+}
+
+router.beforeEach(async (to, from, next) => {
+  const featureKey = featureRouteMap[to.name]
+  if (!featureKey) {
+    next()
+    return
+  }
+
+  try {
+    await loadSidebarConfig()
+  } catch (error) {
+    console.error('Failed to refresh sidebar config before navigation', error)
+  }
+
+  if (!isFeatureEnabled(featureKey)) {
+    next({ name: 'not-found' })
+    return
+  }
+
+  next()
 })
 
 export default router

@@ -72,20 +72,10 @@
 <script setup>
 import { computed, ref as vueRef, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { apiGetSidebarConfig } from './api'
+import { loadSidebarConfig, sidebarConfig } from '@/stores/sidebarConfig'
 
 const router = useRouter()
 const route = useRoute()
-
-const sidebarConfig = vueRef({
-  show_mining: true,
-  show_utxo: true,
-  show_wallet: true,
-  show_fee: true,
-  show_finance: false,
-  show_compatibility: true,
-  show_timecapsule: true
-})
 
 // Current nickname/admin flags
 const currentNickname = vueRef(localStorage.getItem('nickname') || '')
@@ -96,15 +86,15 @@ const menuItems = computed(() => {
 
   // Add menu items based on sidebar config (fee/finance before mining)
   if (sidebarConfig.value.show_fee) {
-    items.push({ key: 'fee', label: '수수료 계산', recommended: true })
+    items.push({ key: 'fee', label: '수수료 계산' })
   }
 
   if (sidebarConfig.value.show_finance) {
-    items.push({ key: 'finance', label: '재무 관리', recommended: true })
+    items.push({ key: 'finance', label: '재무 관리' })
   }
 
   if (sidebarConfig.value.show_mining) {
-    items.push({ key: 'mining', label: '비트코인 채굴', recommended: true })
+    items.push({ key: 'mining', label: '비트코인 채굴' })
   }
 
   if (sidebarConfig.value.show_utxo) {
@@ -137,21 +127,6 @@ const currentRouteName = computed(() => {
   if (name === 'wallet-kingstone' || name === 'wallet-kingstone-detail') return 'wallet'
   return name
 })
-// Load sidebar config
-const loadSidebarConfig = async () => {
-  try {
-    const result = await apiGetSidebarConfig()
-    if (result.success && result.config) {
-      sidebarConfig.value = {
-        ...sidebarConfig.value,
-        ...result.config
-      }
-    }
-  } catch (error) {
-    console.error('Failed to load sidebar config:', error)
-  }
-}
-
 // Update nickname when localStorage changes
 onMounted(() => {
   // Load sidebar config on mount
@@ -175,7 +150,7 @@ onMounted(() => {
 
   // Listen for sidebar config updates
   window.addEventListener('sidebarConfigUpdated', () => {
-    loadSidebarConfig()
+    loadSidebarConfig(true)
   })
 })
 

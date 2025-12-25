@@ -92,6 +92,19 @@ export async function apiRegisterNickname(nickname) {
   return res.json()
 }
 
+export async function apiAdminLogin(password) {
+  const res = await fetch(`${BASE_URL}/api/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({ password })
+  })
+  const data = await res.json().catch(() => ({ ok: false, error: '서버 응답을 해석할 수 없습니다.' }))
+  if (!res.ok) {
+    return { success: false, error: data.error || '로그인에 실패했습니다.' }
+  }
+  return { success: data.ok, error: data.error }
+}
+
 export async function apiInitReset(token) {
   const res = await fetch(`${BASE_URL}/api/init_reset`, {
     method: 'POST',

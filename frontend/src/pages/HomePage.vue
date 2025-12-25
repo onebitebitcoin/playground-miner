@@ -46,15 +46,29 @@
                   비트코인을 눈으로 보고 즐기세요. 채굴, UTXO, 지갑, 궁합까지 한 자리에서 경험하세요.
                 </p>
                 <div class="space-y-2">
+                  <div v-if="isAdminNickname" class="space-y-2">
+                    <label class="block text-sm font-semibold text-gray-900">관리자 비밀번호</label>
+                    <input
+                      v-model="adminPassword"
+                      type="password"
+                      placeholder="관리자 비밀번호를 입력하세요"
+                      class="w-full rounded-2xl border border-slate-200 bg-white/80 px-4 py-2 text-base shadow-inner focus:border-gray-900 focus:ring-2 focus:ring-gray-900/30 outline-none transition"
+                      @keyup.enter="handleNicknameSave"
+                    />
+                    <p class="text-xs text-slate-500">관리자 전용 기능을 이용하려면 비밀번호가 필요합니다.</p>
+                    <p v-if="adminPasswordError" class="text-sm text-red-600">{{ adminPasswordError }}</p>
+                  </div>
                   <div class="flex flex-wrap gap-3">
                     <button
                       class="px-6 py-3 rounded-2xl text-base font-semibold text-gray-900 bg-gradient-to-r from-pink-200 via-indigo-200 to-sky-200 hover:from-pink-300 hover:via-indigo-300 hover:to-sky-300 disabled:opacity-60 transition flex items-center justify-center gap-2 shadow-sm"
                       :class="{ 'flex-1 sm:flex-none': !existingNickname }"
-                      :disabled="isSavingNickname || !nicknameInput.trim()"
+                      :disabled="isAdminNickname
+                        ? (adminLoginLoading || !adminPassword.trim())
+                        : (isSavingNickname || !nicknameInput.trim())"
                       @click="handleNicknameSave"
                     >
                       <svg
-                        v-if="isSavingNickname"
+                        v-if="(!isAdminNickname && isSavingNickname) || (isAdminNickname && adminLoginLoading)"
                         class="h-5 w-5 animate-spin"
                         viewBox="0 0 24 24"
                         fill="none"
@@ -67,7 +81,9 @@
                           stroke-linejoin="round"
                         />
                       </svg>
-                      <span>{{ isSavingNickname ? '등록 중...' : '등록하기' }}</span>
+                      <span>
+                        {{ isAdminNickname ? (adminLoginLoading ? '로그인 중...' : '관리자 로그인') : (isSavingNickname ? '등록 중...' : '등록하기') }}
+                      </span>
                     </button>
                     <button
                       v-if="existingNickname"
@@ -86,8 +102,10 @@
 
         <div class="relative h-72 sm:h-80 lg:h-96">
           <div class="floating-bitcoin">
-            <div class="coin-glow"></div>
-            <div class="coin-core">₿</div>
+            <div class="floating-bitcoin-content">
+              <div class="coin-glow"></div>
+              <div class="coin-core">₿</div>
+            </div>
           </div>
 
           <div class="character character-a">
@@ -163,7 +181,8 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount, h } from 'vue'
 import { useRouter } from 'vue-router'
-import { apiCheckNickname, apiRegisterNickname } from '../api'
+import { apiCheckNickname, apiRegisterNickname, apiAdminLogin } from '../api'
+import { loadSidebarConfig, isFeatureEnabled } from '@/stores/sidebarConfig'
 
 const router = useRouter()
 
@@ -172,20 +191,66 @@ const nicknameInput = ref(currentNickname.value || '')
 const isSavingNickname = ref(false)
 const nickError = ref('')
 const existingNickname = ref('')
+const adminPassword = ref('')
+const adminPasswordError = ref('')
+const adminLoginLoading = ref(false)
 
 const hasSession = computed(() => !!currentNickname.value)
+const isAdminNickname = computed(() => (nicknameInput.value || '').trim().toLowerCase() === 'admin')
 
 watch(nicknameInput, () => {
   nickError.value = ''
   existingNickname.value = ''
+  if (!isAdminNickname.value) {
+    adminPassword.value = ''
+    adminPasswordError.value = ''
+    adminLoginLoading.value = false
+  }
 })
 
-const persistNickname = (name) => {
+const persistNickname = (name, { admin = false } = {}) => {
   localStorage.setItem('nickname', name)
-  localStorage.removeItem('isAdmin')
+  if (admin) {
+    localStorage.setItem('isAdmin', 'true')
+  } else {
+    localStorage.removeItem('isAdmin')
+  }
   window.dispatchEvent(new CustomEvent('nicknameChanged', { detail: name }))
   currentNickname.value = name
   existingNickname.value = ''
+}
+
+const handleAdminLoginAttempt = async () => {
+  adminPasswordError.value = ''
+  const password = (adminPassword.value || '').trim()
+  if (!password) {
+    adminPasswordError.value = '비밀번호를 입력하세요'
+    return
+  }
+
+  adminLoginLoading.value = true
+  try {
+    const response = await apiAdminLogin(password)
+    if (!response?.success) {
+      adminPasswordError.value = response?.error || '비밀번호가 올바르지 않습니다.'
+      return
+    }
+
+    try {
+      await apiRegisterNickname('admin')
+    } catch (error) {
+      // 이미 등록되어 있으면 무시
+    }
+
+    persistNickname('admin', { admin: true })
+    nickError.value = ''
+    adminPasswordError.value = ''
+    adminPassword.value = ''
+  } catch (error) {
+    adminPasswordError.value = '로그인 중 오류가 발생했습니다.'
+  } finally {
+    adminLoginLoading.value = false
+  }
 }
 
 const handleNicknameSave = async () => {
@@ -203,7 +268,7 @@ const handleNicknameSave = async () => {
     return
   }
   if (trimmed.toLowerCase() === 'admin') {
-    nickError.value = '관리자 계정은 일반 사용자 등록으로 사용할 수 없습니다'
+    await handleAdminLoginAttempt()
     return
   }
 
@@ -245,6 +310,10 @@ const handleNicknameChanged = (value) => {
 
 const useExistingNickname = () => {
   if (!existingNickname.value) return
+  if ((existingNickname.value || '').trim().toLowerCase() === 'admin') {
+    nickError.value = '관리자 계정은 비밀번호로 로그인해야 합니다'
+    return
+  }
   persistNickname(existingNickname.value)
   nickError.value = ''
 }
@@ -262,6 +331,7 @@ const storageListener = (event) => {
 onMounted(() => {
   window.addEventListener('nicknameChanged', nicknameChangedListener)
   window.addEventListener('storage', storageListener)
+  loadSidebarConfig()
 })
 
 onBeforeUnmount(() => {
@@ -290,12 +360,12 @@ const iconFactory = (path) => ({
   }
 })
 
-const featureCards = [
+const baseFeatureCards = [
   {
     key: 'fee',
     title: '수수료 계산',
     subtitle: 'FEE',
-    description: '네트워크 상태에 따라 추천 수수료를 계산하고 지갑 송금 시 필요한 정보를 빠르게 파악하세요.',
+    description: '개인 지갑으로 출금할 때 가장 저렴한 수수료를 낼 수 있는 경로를 찾아보세요.',
     route: 'fee',
     icon: iconFactory('M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z'),
     iconBg: 'bg-gradient-to-br from-green-200 to-emerald-200',
@@ -305,7 +375,7 @@ const featureCards = [
     key: 'finance',
     title: '재무 관리',
     subtitle: 'FINANCE',
-    description: '비트코인 자산과 투자 계획을 한눈에 정리할 수 있는 재무 보드에서 목표를 관리하세요.',
+    description: '비트코인의 과거 수익률과 미래 수익률을 비교해서 나의 재무 전략을 계산하세요.',
     route: 'finance',
     icon: iconFactory('M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z'),
     iconBg: 'bg-gradient-to-br from-yellow-200 to-lime-200',
@@ -315,7 +385,7 @@ const featureCards = [
     key: 'mining',
     title: '비트코인 채굴',
     subtitle: 'MINING',
-    description: '난이도와 보상을 확인하며 버튼 한 번으로 채굴 체험을 즐겨보세요. 실시간 블록 체인 스택을 확인할 수 있어요.',
+    description: '난이도와 보상을 확인하며 클릭 한 번으로 비트코인 채굴을 쉽게 이해하세요. 실시간으로 블록이 추가되는 것도 확인할 수 있습니다.',
     route: 'mining',
     icon: iconFactory('M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10'),
     iconBg: 'bg-gradient-to-br from-amber-200 to-orange-200',
@@ -325,7 +395,7 @@ const featureCards = [
     key: 'utxo',
     title: 'UTXO 탐험',
     subtitle: 'UTXO',
-    description: 'UTXO 구조를 시각적으로 이해할 수 있도록 트랜잭션 흐름을 단계별로 풀어 설명합니다.',
+    description: '복잡하게 느껴지던 UTXO 구조를 시각적으로 이해해보세요.',
     route: 'utxo',
     icon: iconFactory('M13 7h8m0 0v8m0-8l-8 8-4-4-6 6'),
     iconBg: 'bg-gradient-to-br from-violet-200 to-pink-200'
@@ -334,7 +404,7 @@ const featureCards = [
     key: 'wallet',
     title: '지갑 체험',
     subtitle: 'WALLET',
-    description: '킹스톤 지갑을 통해 지갑 생성부터 트랜잭션 확인까지 따라 할 수 있는 인터랙션을 제공합니다.',
+    description: '다양한 지갑들의 인터페이스와 사용법을 경험해보세요.',
     route: 'wallet',
     icon: iconFactory('M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z'),
     iconBg: 'bg-gradient-to-br from-sky-200 to-indigo-200'
@@ -343,7 +413,7 @@ const featureCards = [
     key: 'compatibility',
     title: '궁합 보기',
     subtitle: 'COMPATIBILITY',
-    description: '비트코인을 매개로 다양한 궁합 시나리오를 즐겨보세요. 재미있는 결과가 기다리고 있습니다.',
+    description: '비트코인과 나, 그리고 비트코인 맥시들과의 궁합 시나리오를 즐겨보세요.',
     route: 'compatibility',
     icon: iconFactory('M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z'),
     iconBg: 'bg-gradient-to-br from-rose-200 to-orange-200'
@@ -352,12 +422,14 @@ const featureCards = [
     key: 'timecapsule',
     title: '타임캡슐',
     subtitle: 'TIMECAPSULE',
-    description: '미래의 나에게 메시지를 저장하고, 시간이 지난 후 꺼내볼 수 있는 디지털 타임캡슐입니다.',
+    description: '나의 큰 소망을 기록하고, 작은 용량으로 소망을 블록에 저장하세요.',
     route: 'timecapsule',
     icon: iconFactory('M6 3h12M6 3v4l6 6-6 6v4M18 3v4l-6 6 6 6v4M6 21h12'),
     iconBg: 'bg-gradient-to-br from-cyan-200 to-lime-200'
   }
 ]
+
+const featureCards = computed(() => baseFeatureCards.filter((card) => isFeatureEnabled(card.key)))
 </script>
 
 <style scoped>
@@ -373,6 +445,12 @@ const featureCards = [
   transform: translateX(-50%);
   width: 180px;
   height: 180px;
+}
+
+.floating-bitcoin-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
   background: radial-gradient(circle at 30% 30%, #ffd54f, #f39c12);
   display: flex;

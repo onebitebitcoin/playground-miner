@@ -1225,6 +1225,28 @@ def init_reset_view(request):
     return JsonResponse({'ok': True, 'status': current_status()})
 
 
+@csrf_exempt
+def admin_login_view(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'POST only'}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        payload = {}
+
+    password = (payload.get('password') or '').strip()
+    if not password:
+        return JsonResponse({'ok': False, 'error': '비밀번호를 입력하세요.'}, status=400)
+
+    expected = os.environ.get('ADMIN_TOKEN') or os.environ.get('INIT_TOKEN') or '0000'
+    if expected and password == expected:
+        return JsonResponse({'ok': True})
+
+    logger.warning('Admin login attempt failed: invalid password')
+    return JsonResponse({'ok': False, 'error': '비밀번호가 올바르지 않습니다.'}, status=401)
+
+
 # Mnemonic API views
 @csrf_exempt
 def request_mnemonic_view(request):
