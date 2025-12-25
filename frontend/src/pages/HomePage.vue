@@ -15,7 +15,7 @@
                   <span class="block">한입 놀이터에 오신 것을 환영합니다</span>
                 </h1>
                 <p class="mt-4 text-base sm:text-lg text-slate-700">
-                  비트코인을 눈으로 보고 즐기세요. 채굴, UTXO, 지갑, 궁합까지 한 자리에서 경험하세요.
+                  비트코인을 눈으로 보고 즐기세요. 수수료 계산부터 재무 전략까지 경험하세요.
                 </p>
               </div>
             </template>
@@ -43,7 +43,7 @@
                   </span>
                 </h1>
                 <p class="text-base sm:text-lg text-slate-700">
-                  비트코인을 눈으로 보고 즐기세요. 채굴, UTXO, 지갑, 궁합까지 한 자리에서 경험하세요.
+                  비트코인을 눈으로 보고 즐기세요. 수수료 계산부터 재무 전략까지 경험하세요.
                 </p>
                 <div class="space-y-2">
                   <div v-if="isAdminNickname" class="space-y-2">
@@ -100,27 +100,31 @@
           </div>
         </div>
 
-        <div class="relative h-72 sm:h-80 lg:h-96">
-          <div class="floating-bitcoin">
-            <div class="floating-bitcoin-content">
-              <div class="coin-glow"></div>
-              <div class="coin-core">₿</div>
+        <div class="relative h-60 sm:h-80 lg:h-96 md:overflow-hidden">
+          <div class="hero-coin hidden md:flex" aria-hidden="true">
+            <div class="hero-coin__inner">
+              <span class="hero-coin__btc">₿</span>
+            </div>
+          </div>
+          <div class="flex justify-center pt-6 md:hidden">
+            <div class="hero-coin-mobile" aria-hidden="true">
+              <span class="hero-coin__btc">₿</span>
             </div>
           </div>
 
-          <div class="character character-a">
-            <div class="character-face">🤖</div>
-            <div class="character-coin">₿</div>
-          </div>
-
-          <div class="character character-b">
-            <div class="character-face">🧑‍🚀</div>
-            <div class="character-coin">₿</div>
-          </div>
-
-          <div class="character character-c">
-            <div class="character-face">🧙‍♂️</div>
-            <div class="character-coin">₿</div>
+          <div class="floating-avatars hidden md:block">
+            <div class="floating-avatar floating-avatar--1">
+              <span class="floating-avatar__emoji">🤖</span>
+              <span class="floating-avatar__coin">₿</span>
+            </div>
+            <div class="floating-avatar floating-avatar--2">
+              <span class="floating-avatar__emoji">🧙‍♂️</span>
+              <span class="floating-avatar__coin">₿</span>
+            </div>
+            <div class="floating-avatar floating-avatar--3">
+              <span class="floating-avatar__emoji">🧑‍🚀</span>
+              <span class="floating-avatar__coin">₿</span>
+            </div>
           </div>
         </div>
       </div>
@@ -438,83 +442,115 @@ const featureCards = computed(() => baseFeatureCards.filter((card) => isFeatureE
   isolation: isolate;
 }
 
-.floating-bitcoin {
+.hero-coin {
   position: absolute;
-  top: 15%;
+  top: 6%;
   left: 50%;
   transform: translateX(-50%);
-  width: 180px;
-  height: 180px;
-}
-
-.floating-bitcoin-content {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #ffd54f, #f39c12);
+  width: 240px;
+  height: 240px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 20px 40px rgba(243, 156, 18, 0.4);
+}
+
+.hero-coin__inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 30% 30%, #ffd166, #f4a328 65%, #f08700);
+  box-shadow: 0 35px 65px rgba(240, 135, 0, 0.35), inset 0 -12px 18px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   animation: float 6s ease-in-out infinite;
 }
 
-.coin-glow {
+.hero-coin-mobile {
+  width: 130px;
+  height: 130px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 25% 25%, #ffd166, #f4a328 65%, #f08700);
+  box-shadow: 0 25px 45px rgba(240, 135, 0, 0.25), inset 0 -10px 15px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: float 6s ease-in-out infinite;
+}
+
+.hero-coin__btc {
+  font-size: 4.25rem;
+  color: rgba(51, 41, 0, 0.55);
+  font-weight: 900;
+  letter-spacing: -1px;
+}
+
+.floating-avatars {
   position: absolute;
-  inset: -15px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 212, 79, 0.35), transparent 70%);
-  filter: blur(6px);
+  inset: 5px;
+  pointer-events: none;
 }
 
-.coin-core {
-  font-size: 4rem;
-  color: rgba(0, 0, 0, 0.65);
-  font-weight: 600;
-  text-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
-}
-
-.character {
+.floating-avatar {
   position: absolute;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
-  animation: float 5s ease-in-out infinite;
+  gap: 0.75rem;
+  animation: orbit 9s ease-in-out infinite;
 }
 
-.character-face {
-  font-size: 2.8rem;
-  filter: drop-shadow(0 10px 15px rgba(0, 0, 0, 0.2));
+.floating-avatar--1 {
+  top: 8%;
+  left: 8%;
+  animation-delay: 0.2s;
 }
 
-.character-coin {
-  background: white;
+.floating-avatar--2 {
+  top: 60%;
+  left: 18%;
+  animation-delay: 1.8s;
+}
+
+.floating-avatar--3 {
+  bottom: 12%;
+  right: 12%;
+  animation-delay: 3.2s;
+}
+
+.floating-avatar__emoji {
+  font-size: 2.6rem;
+  filter: drop-shadow(0 12px 18px rgba(15, 23, 42, 0.15));
+}
+
+.floating-avatar__coin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.7));
   border-radius: 9999px;
-  padding: 0.4rem 1rem;
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #f39c12;
-  box-shadow: 0 5px 15px rgba(243, 156, 18, 0.25);
+  width: 48px;
+  height: 48px;
+  color: #f7931a;
+  font-weight: 700;
+  font-size: 1.2rem;
+  box-shadow: 0 15px 25px rgba(148, 163, 184, 0.35);
 }
 
-.character-a {
-  top: 10%;
-  left: 10%;
-  animation-delay: 0.3s;
+@media (min-width: 768px) {
+  .hero-coin-mobile {
+    display: none;
+  }
 }
 
-.character-b {
-  bottom: 5%;
-  right: 15%;
-  animation-delay: 0.8s;
-}
+@media (max-width: 767px) {
+  .hero-coin {
+    display: none;
+  }
 
-.character-c {
-  top: 55%;
-  left: 25%;
-  animation-delay: 1.2s;
+  .floating-avatars {
+    display: none;
+  }
 }
 
 @keyframes float {
@@ -524,6 +560,18 @@ const featureCards = computed(() => baseFeatureCards.filter((card) => isFeatureE
   }
   50% {
     transform: translateY(-15px);
+  }
+}
+
+@keyframes orbit {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-12px, -12px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
   }
 }
 </style>
