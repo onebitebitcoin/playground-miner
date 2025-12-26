@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-10 sm:space-y-14">
-    <section class="pastel-home-hero p-6 sm:p-10 relative">
+    <section class="pastel-home-hero p-6 sm:p-10 relative overflow-hidden">
       <div class="grid gap-8 lg:grid-cols-2 items-center relative z-10">
         <div class="space-y-6 text-gray-900">
           <span class="inline-flex items-center gap-2 text-sm font-semibold text-indigo-700">
@@ -22,14 +22,14 @@
             <template v-else>
               <div class="space-y-4">
                 <h1 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight space-y-3">
-                  <span class="flex flex-wrap items-baseline gap-3">
+                  <span class="flex flex-wrap items-center sm:items-baseline gap-3 w-full">
                     <label class="relative">
                       <span class="sr-only">닉네임 입력</span>
                       <input
                         v-model="nicknameInput"
                         @keyup.enter="handleNicknameSave"
                         type="text"
-                        class="min-w-[160px] rounded-2xl border border-slate-200 bg-white/70 px-4 py-2 text-2xl sm:text-3xl font-semibold text-gray-900 shadow-inner focus:border-gray-900 focus:ring-2 focus:ring-gray-900/30 outline-none transition"
+                        class="flex-shrink-0 w-full max-w-[260px] sm:max-w-none sm:w-auto sm:min-w-[160px] min-w-0 rounded-2xl border border-slate-200 bg-white/70 px-4 py-2 text-2xl sm:text-3xl font-semibold text-gray-900 shadow-inner focus:border-gray-900 focus:ring-2 focus:ring-gray-900/30 outline-none transition"
                         placeholder="사용자"
                         maxlength="20"
                       />
@@ -100,7 +100,7 @@
           </div>
         </div>
 
-        <div class="relative h-60 sm:h-80 lg:h-96 md:overflow-hidden">
+        <div class="relative h-60 sm:h-80 lg:h-96 overflow-hidden">
           <div class="hero-coin hidden md:flex" aria-hidden="true">
             <div class="hero-coin__inner">
               <span class="hero-coin__btc">₿</span>
@@ -447,8 +447,8 @@ const featureCards = computed(() => baseFeatureCards.filter((card) => isFeatureE
   top: 6%;
   left: 50%;
   transform: translateX(-50%);
-  width: 240px;
-  height: 240px;
+  width: min(240px, 85vw);
+  height: min(240px, 85vw);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -467,8 +467,8 @@ const featureCards = computed(() => baseFeatureCards.filter((card) => isFeatureE
 }
 
 .hero-coin-mobile {
-  width: 130px;
-  height: 130px;
+  width: min(130px, 70vw);
+  height: min(130px, 70vw);
   border-radius: 9999px;
   background: radial-gradient(circle at 25% 25%, #ffd166, #f4a328 65%, #f08700);
   box-shadow: 0 25px 45px rgba(240, 135, 0, 0.25), inset 0 -10px 15px rgba(0, 0, 0, 0.1);

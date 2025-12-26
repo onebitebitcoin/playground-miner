@@ -186,7 +186,7 @@ def seed_default_routes():
                 if not src or not dst:
                     continue
 
-                obj, was_created = Route.objects.update_or_create(
+                obj, was_created = Route.objects.get_or_create(
                     source=src,
                     destination=dst,
                     route_type=r['route_type'],
