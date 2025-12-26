@@ -84,6 +84,11 @@ const isAdminFlag = vueRef(localStorage.getItem('isAdmin') === 'true')
 const menuItems = computed(() => {
   const items = [{ key: 'home', label: '홈' }]
 
+  // Only show other menu items if user is logged in
+  if (!currentNickname.value) {
+    return items
+  }
+
   // Add menu items based on sidebar config (fee/finance before mining)
   if (sidebarConfig.value.show_fee) {
     items.push({ key: 'fee', label: '수수료 계산' })

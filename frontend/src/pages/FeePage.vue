@@ -13,6 +13,7 @@
       :formatted-total-amount="formattedTotalAmount"
       :formatted-bitcoin-price="formattedBitcoinPrice"
       :price-updated-text="priceUpdatedText"
+      :is-loading-paths="isLoadingPaths"
       @update:input-amount="updateInputAmount"
       @update:selected-unit="updateSelectedUnit"
       @quick-select="handleQuickSelect"
@@ -72,6 +73,7 @@ const error = ref(null)
 const results = ref([])
 const optimalPaths = ref([])
 const viewMode = ref('flow')
+const isLoadingPaths = ref(true)
 
 const feeRates = ref({
   upbit_btc: 0.05,
@@ -266,6 +268,7 @@ const withDefaultNodeType = (node) => {
 }
 
 const loadFinalPaths = async () => {
+  isLoadingPaths.value = true
   try {
     const res = await apiGetOptimalPaths(500)
     if (res.success) {
@@ -280,6 +283,8 @@ const loadFinalPaths = async () => {
     }
   } catch (e) {
     console.error('최종 경로를 불러오지 못했습니다', e)
+  } finally {
+    isLoadingPaths.value = false
   }
 }
 

@@ -35,7 +35,13 @@
         <button
           v-for="preset in quickAmounts"
           :key="preset.value"
-          class="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+          :disabled="isLoadingPaths"
+          :class="[
+            'px-3 py-1.5 text-sm rounded-lg transition-colors',
+            isLoadingPaths
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : 'bg-gray-100 hover:bg-gray-200 text-gray-700 cursor-pointer'
+          ]"
           @click="emit('quick-select', preset)"
         >
           {{ preset.label }}
@@ -83,6 +89,10 @@ const props = defineProps({
   priceUpdatedText: {
     type: String,
     default: ''
+  },
+  isLoadingPaths: {
+    type: Boolean,
+    default: false
   }
 })
 
