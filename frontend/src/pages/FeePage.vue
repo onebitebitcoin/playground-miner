@@ -54,6 +54,9 @@
 
         <div v-if="bitcoinPrice" class="text-sm text-gray-600">
           현재 비트코인 가격(업비트 기준): {{ formatPrice(bitcoinPrice) }}원
+          <span v-if="bitcoinPriceUpdatedAt" class="text-xs text-gray-500 ml-2">
+            (업데이트: {{ formatUpdatedTime(bitcoinPriceUpdatedAt) }})
+          </span>
         </div>
       </div>
 
@@ -822,13 +825,14 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { apiGetExchangeRates, apiGetWithdrawalFees, apiGetLightningServices, apiGetOptimalPaths } from '../api'
-import { getUpbitBtcPriceKrw } from '../utils/btcPriceProvider'
+import { getUpbitBtcPriceKrwWithTime } from '../utils/btcPriceProvider'
 import { getBtcPriceUsdt } from '../utils/btcUsdtPriceProvider'
 
 // Reactive data
 const inputAmount = ref('')
 const selectedUnit = ref('10000') // Default to 만원
 const bitcoinPrice = ref(null)
+const bitcoinPriceUpdatedAt = ref(null)
 const btcPriceUsdt = ref(null)
 const usdtPriceKrw = computed(() => {
   const btcKrw = bitcoinPrice.value
@@ -1238,14 +1242,15 @@ const fetchBitcoinPrice = async (force = false) => {
   error.value = null
 
   try {
-    const [priceKrw, priceUsdt] = await Promise.all([
-      getUpbitBtcPriceKrw(force),
+    const [priceData, priceUsdt] = await Promise.all([
+      getUpbitBtcPriceKrwWithTime(force),
       getBtcPriceUsdt(force).catch(err => {
         console.error('BTC/USDT price fetch error:', err)
         return btcPriceUsdt.value
       })
     ])
-    bitcoinPrice.value = priceKrw
+    bitcoinPrice.value = priceData.price
+    bitcoinPriceUpdatedAt.value = priceData.updatedAt
     if (priceUsdt) {
       btcPriceUsdt.value = priceUsdt
     }
@@ -1255,6 +1260,15 @@ const fetchBitcoinPrice = async (force = false) => {
   } finally {
     isLoading.value = false
   }
+}
+
+const formatUpdatedTime = (timestamp) => {
+  if (!timestamp) return ''
+  const date = new Date(timestamp)
+  const hours = date.getHours().toString().padStart(2, '0')
+  const minutes = date.getMinutes().toString().padStart(2, '0')
+  const seconds = date.getSeconds().toString().padStart(2, '0')
+  return `${hours}:${minutes}:${seconds}`
 }
 
 const loadData = async () => {

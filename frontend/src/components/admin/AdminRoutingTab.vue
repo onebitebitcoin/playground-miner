@@ -437,7 +437,12 @@
               </label>
             </div>
             <div class="flex flex-wrap items-center gap-4">
-              <div>BTC 가격: <span class="font-semibold">{{ btcPriceKrw ? formatKRW(btcPriceKrw) : '불러오는 중' }}</span></div>
+              <div>
+                BTC 가격: <span class="font-semibold">{{ btcPriceKrw ? formatKRW(btcPriceKrw) : '불러오는 중' }}</span>
+                <span v-if="btcPriceKrwUpdatedAt" class="text-xs text-gray-500 ml-2">
+                  (업데이트: {{ formatUpdatedTime(btcPriceKrwUpdatedAt) }})
+                </span>
+              </div>
               <button @click="fetchBtcPriceKrw(true)" class="text-xs text-blue-700">가격 새로고침</button>
               <button @click="loadOptimalPaths" :disabled="optimalLoading" class="text-xs text-blue-700 disabled:opacity-50">
                 {{ optimalLoading ? '계산 중...' : '경로 다시 계산' }}
@@ -504,7 +509,7 @@ import {
   apiSaveRoutingSnapshot,
   apiResetRoutingFromSnapshot
 } from '../../api'
-import { getUpbitBtcPriceKrw } from '../../utils/btcPriceProvider'
+import { getUpbitBtcPriceKrwWithTime } from '../../utils/btcPriceProvider'
 import { getBtcPriceUsdt } from '../../utils/btcUsdtPriceProvider'
 import { getAdminUsername, getCurrentUsername } from '../../utils/adminAuth'
 
@@ -570,6 +575,7 @@ const optimalPaths = ref([])
 const optimalLoading = ref(false)
 const optimalError = ref('')
 const btcPriceKrw = ref(0)
+const btcPriceKrwUpdatedAt = ref(null)
 const btcPriceUsdt = ref(0)
 const snapshotInfo = ref({ has_snapshot: false, updated_at: '', counts: { nodes: 0, routes: 0 } })
 const snapshotLoading = ref(false)
@@ -1156,11 +1162,21 @@ const resetFromSnapshot = async () => {
 
 const fetchBtcPriceKrw = async (force = false) => {
   try {
-    const price = await getUpbitBtcPriceKrw(force)
+    const { price, updatedAt } = await getUpbitBtcPriceKrwWithTime(force)
     if (Number.isFinite(price)) {
       btcPriceKrw.value = price
+      btcPriceKrwUpdatedAt.value = updatedAt
     }
   } catch {}
+}
+
+const formatUpdatedTime = (timestamp) => {
+  if (!timestamp) return ''
+  const date = new Date(timestamp)
+  const hours = date.getHours().toString().padStart(2, '0')
+  const minutes = date.getMinutes().toString().padStart(2, '0')
+  const seconds = date.getSeconds().toString().padStart(2, '0')
+  return `${hours}:${minutes}:${seconds}`
 }
 
 const fetchBtcPriceUsdt = async (force = false) => {
