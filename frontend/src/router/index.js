@@ -94,6 +94,26 @@ const router = createRouter({
   routes
 })
 
+const HOME_ROUTE_PATHS = new Set(['/home', '/'])
+
+const hasActiveSession = () => {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+    return false
+  }
+  try {
+    return !!window.localStorage.getItem('nickname')
+  } catch (error) {
+    console.warn('Failed to access localStorage while checking session state', error)
+    return false
+  }
+}
+
+const isHomeRoute = (route) => {
+  if (!route) return false
+  if (route.name === 'home') return true
+  return HOME_ROUTE_PATHS.has(route.path)
+}
+
 const featureRouteMap = {
   mining: 'mining',
   utxo: 'utxo',
@@ -107,6 +127,11 @@ const featureRouteMap = {
 }
 
 router.beforeEach(async (to, from, next) => {
+  if (!hasActiveSession() && !isHomeRoute(to)) {
+    next({ name: 'home' })
+    return
+  }
+
   const featureKey = featureRouteMap[to.name]
   if (!featureKey) {
     next()
