@@ -45,6 +45,9 @@
                 <p class="text-base sm:text-lg text-slate-700">
                   비트코인을 눈으로 보고 즐기세요. 수수료 계산부터 재무 전략까지 경험하세요.
                 </p>
+                <p class="text-sm sm:text-base text-slate-600">
+                  사용자 닉네임을 입력하고 등록한 후 이용해 주세요.
+                </p>
                 <div class="space-y-2">
                   <div v-if="isAdminNickname" class="space-y-2">
                     <label class="block text-sm font-semibold text-gray-900">관리자 비밀번호</label>

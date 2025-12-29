@@ -30,7 +30,7 @@
           ></span>
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 flex-wrap">
-              <p class="text-xs sm:text-sm font-semibold truncate">{{ getLegendLabel(series) }}</p>
+              <p class="text-xs sm:text-sm font-semibold truncate">{{ legendLabel(series) }}</p>
             </div>
             <p class="text-[11px] sm:text-xs text-slate-500 truncate">
               {{ formatAssetCategory(series) }}
@@ -59,7 +59,7 @@
 import {
   isBitcoinLegend,
   isKoreanM2Legend,
-  getLegendLabel,
+  getLegendLabel as getDefaultLegendLabel,
   formatAssetCategory,
   formatPercent,
   formatMultiple,
@@ -71,8 +71,16 @@ const props = defineProps({
   colorMap: Object,
   hiddenSeries: Object, // Set
   analysisResultType: String,
-  dataSourcesText: String
+  dataSourcesText: String,
+  getLegendLabel: Function
 })
+
+const legendLabel = (series) => {
+  if (typeof props.getLegendLabel === 'function') {
+    return props.getLegendLabel(series)
+  }
+  return getDefaultLegendLabel(series)
+}
 
 defineEmits(['toggleSeries'])
 </script>

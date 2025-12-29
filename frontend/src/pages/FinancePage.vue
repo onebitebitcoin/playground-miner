@@ -109,6 +109,7 @@
           :hidden-series="hiddenSeries"
           :analysis-result-type="analysisResultType"
           :data-sources-text="dataSourcesText"
+          :get-legend-label="getLegendLabel"
           @toggle-series="toggleSeries"
         />
 
