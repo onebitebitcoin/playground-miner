@@ -774,6 +774,54 @@ function normalizeAssetToken(val) {
   return (val || '').toString().trim().toLowerCase()
 }
 
+function resolvePreferredSeriesLabel(series, tickerCandidate) {
+  const tryLabel = (value) => {
+    if (!value) return ''
+    const friendly = stripTickerSuffix(value, tickerCandidate)
+    if (friendly && !isTickerLikeLabel(friendly)) {
+      return friendly
+    }
+    return ''
+  }
+
+  const meta = series?.metadata || {}
+  const candidateLabels = []
+  const pushLabel = (value) => {
+    if (value) candidateLabels.push(value)
+  }
+
+  pushLabel(series.display_label)
+  pushLabel(meta.display_label)
+  pushLabel(meta.localized_label)
+  pushLabel(meta.kr_name)
+  pushLabel(meta.korean_name)
+  pushLabel(meta.name)
+  pushLabel(meta.friendly_label)
+  pushLabel(meta.original_label)
+
+  const collectAliases = (aliases) => {
+    if (!Array.isArray(aliases)) return
+    aliases.forEach((alias) => pushLabel(alias))
+  }
+
+  collectAliases(series.aliases)
+  collectAliases(meta.aliases)
+
+  const priceEntry = findPriceEntry(series)
+  if (priceEntry) {
+    pushLabel(priceEntry.label)
+    pushLabel(priceEntry.displayLabel)
+    collectAliases(priceEntry.aliases)
+  }
+
+  for (const value of candidateLabels) {
+    const resolved = tryLabel(value)
+    if (resolved) return resolved
+  }
+
+  return ''
+}
+
 async function appendResolvedAsset(name, { silent = false, targetList = null } = {}) {
   const text = (name || '').trim()
   if (!text) return false
@@ -1074,11 +1122,6 @@ async function addAsset() {
       // If there's existing analysis data, append the new asset incrementally
       if (analysis.value && analysis.value.start_year && analysis.value.end_year) {
         await appendAssetToExistingAnalysis(assetId)
-      } else {
-        // No existing analysis, run full analysis
-        searchButtonAttention.value = false
-        prompt.value = buildPromptFromInputs()
-        requestAgentAnalysis()
       }
     }
   } finally {
@@ -1131,10 +1174,14 @@ async function appendAssetToExistingAnalysis(assetId) {
 }
 
 function removeAsset(index) {
+  const targetAsset = customAssets.value[index]
   customAssets.value = customAssets.value.filter((_, i) => i !== index)
   customAssetError.value = ''
   selectedQuickCompareGroup.value = ''
   selectedContextKey.value = determineContextKeyForAssets()
+  if (targetAsset) {
+    removeAssetDataFromAnalysis(targetAsset)
+  }
 }
 
 watch(
@@ -1172,7 +1219,10 @@ function getLegendLabel(series) {
     )
     if (friendly) return friendly
   }
-  return stripTickerSuffix(series.label || '', series.ticker || series.id)
+  const tickerCandidate = series.ticker || series.id
+  const resolved = resolvePreferredSeriesLabel(series, tickerCandidate)
+  if (resolved) return resolved
+  return stripTickerSuffix(series.label || '', tickerCandidate)
 }
 
 function stripTickerSuffix(label, tickerCandidate) {
@@ -1289,6 +1339,137 @@ function findPriceEntry(series) {
 
 function normalizeLabelAlias(label) {
   return label.replace(/\([^)]*\)/g, '').trim().toLowerCase()
+}
+
+function isTickerLikeLabel(label) {
+  const text = (label || '').trim()
+  if (!text) return false
+  const compact = text.replace(/\s+/g, '')
+  if (/^[A-Z0-9.\-]+$/.test(compact)) return true
+  if (/^\d{4,6}$/.test(compact)) return true
+  return false
+}
+
+function buildTokenSetFromAsset(asset) {
+  const tokens = new Set()
+  if (!asset) return tokens
+  const addToken = (value) => {
+    const token = normalizeAssetToken(value)
+    if (token) tokens.add(token)
+  }
+  ;[asset.id, asset.label, asset.display, asset.ticker, asset.requested_id].forEach(addToken)
+  if (Array.isArray(asset.aliases)) {
+    asset.aliases.forEach(addToken)
+  }
+  if (asset.metadata && Array.isArray(asset.metadata.aliases)) {
+    asset.metadata.aliases.forEach(addToken)
+  }
+  const aliasFromLabel = normalizeAssetToken(normalizeLabelAlias(asset.label || ''))
+  if (aliasFromLabel) tokens.add(aliasFromLabel)
+  return tokens
+}
+
+function buildTokenSetFromSeries(series) {
+  const tokens = new Set()
+  if (!series) return tokens
+  const addToken = (value) => {
+    const token = normalizeAssetToken(value)
+    if (token) tokens.add(token)
+  }
+  ;[series.id, series.label, series.ticker].forEach(addToken)
+  const aliasFromLabel = normalizeAssetToken(normalizeLabelAlias(series.label || ''))
+  if (aliasFromLabel) tokens.add(aliasFromLabel)
+  if (Array.isArray(series.aliases)) {
+    series.aliases.forEach(addToken)
+  }
+  if (series.metadata) {
+    if (Array.isArray(series.metadata.aliases)) {
+      series.metadata.aliases.forEach(addToken)
+    }
+    addToken(series.metadata.id)
+  }
+  return tokens
+}
+
+function buildTokenSetFromEntry(entry) {
+  const tokens = new Set()
+  if (!entry) return tokens
+  const addToken = (value) => {
+    const token = normalizeAssetToken(value)
+    if (token) tokens.add(token)
+  }
+  ;[entry.id, entry.label, entry.requested_id].forEach(addToken)
+  if (Array.isArray(entry.aliases)) {
+    entry.aliases.forEach(addToken)
+  }
+  const aliasFromLabel = normalizeAssetToken(normalizeLabelAlias(entry.label || ''))
+  if (aliasFromLabel) tokens.add(aliasFromLabel)
+  return tokens
+}
+
+function tokenSetsIntersect(primary, secondary) {
+  if (!primary.size || !secondary.size) return false
+  for (const token of secondary) {
+    if (primary.has(token)) return true
+  }
+  return false
+}
+
+function removeAssetDataFromAnalysis(asset) {
+  if (!analysis.value) return
+  const assetTokens = buildTokenSetFromAsset(asset)
+  if (!assetTokens.size) return
+
+  const current = analysis.value
+  let changed = false
+
+  const nextSeries = Array.isArray(current.series)
+    ? current.series.filter((series) => !tokenSetsIntersect(assetTokens, buildTokenSetFromSeries(series)))
+    : []
+  if (Array.isArray(current.series) && nextSeries.length !== current.series.length) {
+    changed = true
+  }
+
+  const nextChartData = Array.isArray(current.chart_data_table)
+    ? current.chart_data_table.filter((entry) => !tokenSetsIntersect(assetTokens, buildTokenSetFromEntry(entry)))
+    : current.chart_data_table
+  if (Array.isArray(current.chart_data_table) && nextChartData.length !== current.chart_data_table.length) {
+    changed = true
+  }
+
+  const nextYearlyPrices = Array.isArray(current.yearly_prices)
+    ? current.yearly_prices.filter((entry) => !tokenSetsIntersect(assetTokens, buildTokenSetFromEntry(entry)))
+    : current.yearly_prices
+  if (Array.isArray(current.yearly_prices) && nextYearlyPrices.length !== current.yearly_prices.length) {
+    changed = true
+  }
+
+  if (!changed) return
+
+  const nextAnalysis = {
+    ...current,
+    series: nextSeries
+  }
+  if (Array.isArray(current.chart_data_table)) {
+    nextAnalysis.chart_data_table = nextChartData
+  }
+  if (Array.isArray(current.yearly_prices)) {
+    nextAnalysis.yearly_prices = nextYearlyPrices
+  }
+
+  analysis.value = nextAnalysis
+  updateColorAssignments(nextSeries, { reset: true })
+
+  const validIds = new Set(nextSeries.map((series) => series.id))
+  hiddenSeries.value = new Set([...hiddenSeries.value].filter((id) => validIds.has(id)))
+
+  if (Array.isArray(nextChartData) && nextChartData.length) {
+    processYearlyPrices(nextChartData)
+  } else if (Array.isArray(nextYearlyPrices) && nextYearlyPrices.length) {
+    processYearlyPrices(nextYearlyPrices)
+  } else {
+    yearlyPriceMap.value = {}
+  }
 }
 
 function resolvePriceByMode(priceEntry, year) {
@@ -1993,6 +2174,16 @@ function processYearlyPrices(pricesData, { merge = false } = {}) {
         })
       }
 
+      const aliasSet = new Set()
+      ;[entry.id, entry.requested_id].forEach((alias) => {
+        if (alias) aliasSet.add(alias)
+      })
+      if (Array.isArray(entry.aliases)) {
+        entry.aliases.forEach((alias) => {
+          if (alias) aliasSet.add(alias)
+        })
+      }
+
       const record = {
         unit: (entry.unit || '').toLowerCase(),
         label: entry.label || '',
@@ -2003,19 +2194,10 @@ function processYearlyPrices(pricesData, { merge = false } = {}) {
         altSources: entry.alt_sources || {},
         status: entry.status || 'unknown',
         errorMessage: entry.error_message || null,
+        aliases: Array.from(aliasSet)
       }
 
-      const aliases = new Set()
-      ;[entry.id, entry.requested_id].forEach((alias) => {
-        if (alias) aliases.add(alias)
-      })
-      if (Array.isArray(entry.aliases)) {
-        entry.aliases.forEach((alias) => {
-          if (alias) aliases.add(alias)
-        })
-      }
-
-      aliases.forEach((alias) => {
+      aliasSet.forEach((alias) => {
         if (!alias) return
         map[alias] = record
         map[String(alias).toLowerCase()] = record
