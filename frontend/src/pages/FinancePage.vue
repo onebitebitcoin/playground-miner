@@ -7,11 +7,11 @@
           비트코인과 주요 자산군의 과거/미래 수익률을 한 화면에서 비교하세요.
         </p>
       </div>
-      <div class="flex rounded-xl bg-slate-100 p-full md:w-auto">
+      <div class="flex rounded-xl bg-slate-100 p-1 w-full md:w-auto md:min-w-[320px]">
         <button
           v-for="tab in tabs"
           :key="tab.key"
-          class="flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          class="flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
           :class="activeTab === tab.key
             ? 'bg-white text-slate-900 shadow-sm'
             : 'text-slate-500'"
@@ -701,32 +701,59 @@ const chartRenderKey = computed(() => {
 })
 
 const dataSourcesText = computed(() => {
-  const recordSource = (rec) => {
-    if (!rec) return
-    const src = String(rec.source || rec.data_source).trim()
-    if (src) sources.add(src)
-    const alt = rec.alt_sources || rec.altSources
-    if (alt && typeof alt === 'object') {
-      Object.values(alt).forEach(recordSource)
+  const sources = new Set()
+
+  const addSource = (sourceValue) => {
+    if (!sourceValue) return
+    const src = String(sourceValue).trim()
+    if (src && src !== 'undefined' && src !== 'null') {
+      sources.add(src)
     }
   }
+
   const processEntry = (entry) => {
     if (!entry || typeof entry !== 'object') return
-    recordSource(entry.source || entry.data_source)
+
+    // Add main source
+    addSource(entry.source || entry.data_source)
+
+    // Add alternative sources
     const alt = entry.alt_sources || entry.altSources
     if (alt && typeof alt === 'object') {
-      Object.values(alt).forEach(recordSource)
+      Object.values(alt).forEach(altSourceObj => {
+        if (altSourceObj && typeof altSourceObj === 'object') {
+          addSource(altSourceObj.source || altSourceObj.data_source)
+        } else {
+          addSource(altSourceObj)
+        }
+      })
     }
   }
-  const sources = new Set()
-  if (Array.isArray(analysis.value?.yearly_prices) && analysis.value.yearly_prices.length) {
+
+  // Collect from series
+  if (Array.isArray(analysis.value?.series)) {
+    analysis.value.series.forEach(series => {
+      addSource(series.source)
+    })
+  }
+
+  // Collect from yearly_prices
+  if (Array.isArray(analysis.value?.yearly_prices)) {
     analysis.value.yearly_prices.forEach(processEntry)
-  } else if (Array.isArray(analysis.value?.chart_data_table) && analysis.value.chart_data_table.length) {
+  }
+
+  // Collect from chart_data_table
+  if (Array.isArray(analysis.value?.chart_data_table)) {
     analysis.value.chart_data_table.forEach(processEntry)
   }
+
+  // Collect from priceTableData
   Object.values(priceTableData.value || {}).forEach(processEntry)
+
   if (!sources.size) return '데이터 출처 정보 없음'
-  const sourceList = Array.from(sources)
+
+  const sourceList = Array.from(sources).filter(src => src && src !== 'Unknown')
+
   const sourceLinks = {
     'Yahoo Finance': { url: 'https://finance.yahoo.com', label: 'Yahoo Finance' },
     Stooq: { url: 'https://stooq.com', label: 'Stooq' },
@@ -738,6 +765,9 @@ const dataSourcesText = computed(() => {
     'KB부동산 (정적)': { url: 'https://kbland.kr/', label: 'KB부동산' },
     'KB부동산 (Agent)': { url: 'https://kbland.kr/', label: 'KB부동산' }
   }
+
+  if (!sourceList.length) return '데이터 출처 정보 없음'
+
   return sourceList.map((src) => {
     const link = sourceLinks[src]
     if (link) {
@@ -1061,21 +1091,109 @@ function clearAllCustomAssets() {
 
 function determineContextKeyForAssets(list = customAssets.value) {
   if (!Array.isArray(list) || !list.length) return 'safe_assets'
-  return list.some((asset) => isLikelyKoreanEquityAsset(asset)) ? 'kr_equity' : 'safe_assets'
+
+  // 한국 주식이 있으면 kr_equity
+  if (list.some((asset) => isLikelyKoreanEquityAsset(asset))) {
+    return 'kr_equity'
+  }
+
+  // 미국 주식이 있으면 us_bigtech
+  if (list.some((asset) => isLikelyUSEquityAsset(asset))) {
+    return 'us_bigtech'
+  }
+
+  // 그 외는 safe_assets
+  return 'safe_assets'
+}
+
+function isLikelyUSEquityAsset(asset) {
+  if (!asset) return false
+
+  // 카테고리 확인
+  const category = (asset.category || '').toString().toLowerCase()
+
+  // 명시적으로 미국 주식/빅테크인 경우
+  if (category.includes('미국') || category.includes('빅테크') || category.includes('bigtech')) {
+    return true
+  }
+
+  // US, NASDAQ, NYSE 키워드가 있고 한국이 아닌 경우
+  if (category.includes('us') || category.includes('nasdaq') || category.includes('nyse')) {
+    if (!category.includes('국내') && !category.includes('korea') && !category.includes('kospi') && !category.includes('kosdaq')) {
+      return true
+    }
+  }
+
+  // Stock/Equity가 있고 한국이 아닌 경우
+  if (category.includes('stock') || category.includes('equity')) {
+    if (!category.includes('국내') && !category.includes('korea') && !category.includes('kospi') && !category.includes('kosdaq')) {
+      return true
+    }
+  }
+
+  // 티커 확인 (일반적으로 심볼 형태: AAPL, MSFT, MSTR 등)
+  const ticker = (asset.ticker || asset.id || '').toString().toUpperCase()
+  if (ticker && /^[A-Z]{1,5}$/.test(ticker)) {
+    // 한국이나 다른 특정 시장 suffix가 없는 경우
+    if (!ticker.includes('.') && ticker.length <= 5) {
+      return true
+    }
+  }
+
+  // unit이 USD이고 주식 관련 카테고리인 경우
+  const unit = (asset.unit || '').toString().toLowerCase()
+  if (unit === 'usd' && (category.includes('주식') || category.includes('stock') || category.includes('equity'))) {
+    return true
+  }
+
+  return false
 }
 
 function inferGroupContextKey(baseContext, meta = {}) {
   const normalized = (baseContext || '').trim()
   if (normalized && normalized !== 'safe_assets') return normalized
+
   const resolvedAssets = Array.isArray(meta?.resolved) ? meta.resolved : []
+
+  // 한국 주식 우선 확인
   if (resolvedAssets.some((asset) => isLikelyKoreanEquityAsset(asset))) {
     return 'kr_equity'
   }
+
   const rawAssets = Array.isArray(meta?.assets) ? meta.assets : []
   if (rawAssets.some(isLikelyKoreanAssetName)) {
     return 'kr_equity'
   }
+
+  // 미국 주식 확인
+  if (resolvedAssets.some((asset) => isLikelyUSEquityAsset(asset))) {
+    return 'us_bigtech'
+  }
+
+  if (rawAssets.some(isLikelyUSAssetName)) {
+    return 'us_bigtech'
+  }
+
   return normalized || 'safe_assets'
+}
+
+function isLikelyUSAssetName(name) {
+  if (!name) return false
+  const text = name.toString().trim().toUpperCase()
+  if (!text) return false
+
+  // 1~5자 알파벳만으로 구성된 경우 (AAPL, MSFT, MSTR 등)
+  if (/^[A-Z]{1,5}$/.test(text)) {
+    return true
+  }
+
+  // 미국 관련 키워드
+  const lower = text.toLowerCase()
+  if (lower.includes('nasdaq') || lower.includes('nyse') || lower.includes('s&p')) {
+    return true
+  }
+
+  return false
 }
 
 function isLikelyKoreanAssetName(name) {
@@ -1314,6 +1432,18 @@ function formatPriceCell(series, year) {
   const text = isLatestYear ? `${valueText} (오늘)` : valueText
   const url = generateNaverFinanceUrl(series, year)
   return { text, url }
+}
+
+function getDividendYieldForYear(series, year) {
+  if (!series || !year) return null
+  const priceEntry = findPriceEntry(series)
+  if (!priceEntry || !priceEntry.dividends) return null
+  const dividendAmount = priceEntry.dividends[year]
+  const priceValue = priceEntry.prices?.[year]
+  if (!Number.isFinite(dividendAmount) || !Number.isFinite(priceValue) || priceValue <= 0) return null
+  const yieldPct = (dividendAmount / priceValue) * 100
+  if (!Number.isFinite(yieldPct) || yieldPct <= 0) return null
+  return yieldPct
 }
 
 function findPriceEntry(series) {
@@ -1707,12 +1837,18 @@ const bitcoinHeroSummary = computed(() => {
 
 const analysisSummary = computed(() => Te.value)
 
-function getReturnForYear(series, year) {
+function getReturnForYear(series, year, options = {}) {
   if (!series?.points) return '-'
   const point = series.points.find((p) => p.year === year)
   if (!point) return '-'
   if (analysisResultType.value === 'price') {
-    if (priceTableMode.value === 'multiple') {
+    const mode = options.priceMode || priceTableMode.value
+    if (mode === 'dividend') {
+      const yieldPct = getDividendYieldForYear(series, year)
+      if (!Number.isFinite(yieldPct) || yieldPct < MIN_DIVIDEND_YIELD_DISPLAY) return '-'
+      return `${yieldPct.toFixed(1)}%`
+    }
+    if (mode === 'multiple') {
       const multiple = Number(point.multiple)
       if (!Number.isFinite(multiple) || multiple <= 0) return '-'
       return `${formatMultiple(multiple)}배`
@@ -1733,6 +1869,7 @@ function getReturnForYear(series, year) {
 function determineYearlySign(series, year) {
   if (!series) return 0
   if (analysisResultType.value === 'price') {
+    if (priceTableMode.value === 'dividend') return 0
     return getPriceYearlySign(series, year)
   }
   const point = series.points?.find((p) => p.year === year)
@@ -1879,10 +2016,12 @@ function buildPromptFromInputs() {
   const years = Math.max(1, Math.min(30, Number(investmentYearsAgo.value) || 1))
   const amount = Math.max(1, Math.min(100000, Number(investmentAmount.value) || 1))
   const amountText = `${amount.toLocaleString('ko-KR')}만원`
-  const assetText = customAssets.value.length
-    ? customAssets.value.map((asset) => asset.display || asset.label).join(', ')
-    : '대표 자산군'
 
+  if (!customAssets.value.length) {
+    return `${years}년 전에 비트코인에 ${amountText}을 투자했다면 지금 얼마인지 알려줘.`
+  }
+
+  const assetText = customAssets.value.map((asset) => asset.display || asset.label).join(', ')
   return `${years}년 전에 비트코인에 ${amountText}을 투자했다면 지금 얼마인지 알려주고, 비트코인과 비교 종목(${assetText})을 비교해줘.`
 }
 
@@ -2175,6 +2314,25 @@ function processYearlyPrices(pricesData, { merge = false } = {}) {
         })
       }
 
+      const dividendsMap = {}
+      if (Array.isArray(entry.dividends)) {
+        entry.dividends.forEach((divPoint) => {
+          const year = Number(divPoint.year)
+          const amount = Number(divPoint.amount)
+          if (Number.isFinite(year) && Number.isFinite(amount)) {
+            dividendsMap[year] = amount
+          }
+        })
+      } else if (entry.dividends && typeof entry.dividends === 'object') {
+        Object.entries(entry.dividends).forEach(([yearKey, amount]) => {
+          const year = Number(yearKey)
+          const val = Number(amount)
+          if (Number.isFinite(year) && Number.isFinite(val)) {
+            dividendsMap[year] = val
+          }
+        })
+      }
+
       const aliasSet = new Set()
       ;[entry.id, entry.requested_id].forEach((alias) => {
         if (alias) aliasSet.add(alias)
@@ -2192,6 +2350,8 @@ function processYearlyPrices(pricesData, { merge = false } = {}) {
         source: entry.source || '',
         prices: priceMap,
         altPrices,
+        dividends: dividendsMap,
+        dividendUnit: (entry.dividend_unit || entry.unit || '').toLowerCase(),
         altSources: entry.alt_sources || {},
         status: entry.status || 'unknown',
         errorMessage: entry.error_message || null,

@@ -4,26 +4,33 @@
     class="bg-white border border-slate-200 rounded-2xl shadow-sm p-3 sm:p-4 md:p-6 space-y-2 sm:space-y-3"
   >
     <div class="flex items-center justify-between gap-3 flex-wrap px-1">
-      <div class="text-sm font-semibold text-slate-900">
-        {{ analysisResultType === 'price' ? '연도별 가격 비교' : analysisResultType === 'cumulative' ? '연도별 누적 수익률 비교' : analysisResultType === 'yearly_growth' ? '연도별 전년 대비 증감률 비교' : '연도별 연평균 상승률 비교' }}
+      <div class="flex flex-col">
+        <div class="text-sm font-semibold text-slate-900">
+          {{ analysisResultType === 'price' ? '연도별 가격 비교' : analysisResultType === 'cumulative' ? '연도별 누적 수익률 비교' : analysisResultType === 'yearly_growth' ? '연도별 전년 대비 증감률 비교' : '연도별 연평균 상승률 비교' }}
+        </div>
+        <p
+          v-if="analysisResultType === 'price'"
+          class="text-[11px] text-slate-400"
+        >
+          연말 종가 기준 (12월 31일) · 배당률은 그 해 배당금 ÷ 연말 가격
+        </p>
       </div>
       <div
         v-if="analysisResultType === 'price'"
-        class="flex items-center gap-2 text-xs text-slate-500"
+        class="flex items-center text-xs text-slate-500"
       >
-        <span :class="priceTableMode === 'price' ? 'text-slate-900 font-semibold' : ''">가격</span>
-        <button
-          type="button"
-          class="relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-1"
-          :class="priceTableMode === 'multiple' ? 'bg-slate-900' : 'bg-slate-200'"
-          @click="$emit('update:priceTableMode', priceTableMode === 'price' ? 'multiple' : 'price')"
-        >
-          <span
-            class="inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform duration-200"
-            :class="priceTableMode === 'multiple' ? 'translate-x-3.5' : 'translate-x-0.5'"
-          ></span>
-        </button>
-        <span :class="priceTableMode === 'multiple' ? 'text-slate-900 font-semibold' : ''">배수</span>
+        <div class="inline-flex items-center bg-slate-100 rounded-full p-0.5">
+          <button
+            v-for="mode in PRICE_TABLE_OPTIONS"
+            :key="mode.key"
+            type="button"
+            class="px-2 py-1 rounded-full transition text-[11px]"
+            :class="priceTableMode === mode.key ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-slate-500'"
+            @click="$emit('update:priceTableMode', mode.key)"
+          >
+            {{ mode.label }}
+          </button>
+        </div>
       </div>
     </div>
     <div
@@ -70,7 +77,7 @@
               :key="`ret-cell-${series.id}-${year}`"
               :class="['py-1.5 sm:py-2 px-1.5 sm:px-2 text-right font-mono', getCellClass(series, year)]"
             >
-              {{ formatValue(series, year) }}
+              {{ formatValue(series, year, { priceMode: priceTableMode }) }}
             </td>
           </tr>
         </tbody>
@@ -97,6 +104,12 @@ const props = defineProps({
 })
 
 defineEmits(['update:priceTableMode'])
+
+const PRICE_TABLE_OPTIONS = [
+  { key: 'price', label: '가격' },
+  { key: 'dividend', label: '배당률' },
+  { key: 'multiple', label: '배수' }
+]
 
 const tableWrapper = ref(null)
 

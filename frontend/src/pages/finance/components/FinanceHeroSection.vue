@@ -43,10 +43,10 @@
         </p>
       </div>
       
-      <button 
+      <button
         @click="$emit('search')"
         :disabled="loading || customAssetResolving"
-        class="p-3 rounded-xl text-[#ffd400] hover:text-[#ffc400] active:scale-95 transition-all flex-shrink-0 group disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
+        class="p-3 rounded-xl text-[#ffd400] hover:text-[#ffc400] active:scale-95 transition-all flex-shrink-0 group disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 search-button-glow"
         :class="{'animate-attention': searchButtonAttention}"
         aria-label="분석 시작"
       >
@@ -160,6 +160,18 @@ function selectEditableContents(el) {
 
 .animate-attention {
   animation: attention 2s infinite ease-in-out;
+}
+
+.search-button-glow {
+  box-shadow: 0 0 20px rgba(255, 212, 0, 0.4);
+}
+
+.search-button-glow:hover:not(:disabled) {
+  box-shadow: 0 0 30px rgba(255, 212, 0, 0.6), 0 0 60px rgba(255, 212, 0, 0.3);
+}
+
+.search-button-glow:disabled {
+  box-shadow: none;
 }
 
 .hero-typewriter-cursor {

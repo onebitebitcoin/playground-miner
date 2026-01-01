@@ -2,6 +2,7 @@ import csv
 import io
 import json
 import logging
+import math
 import re
 import time
 import threading
@@ -10,6 +11,7 @@ import uuid
 import os
 import contextvars
 from datetime import datetime, timedelta
+from collections import defaultdict
 import requests
 from . import yahoo_finance
 try:
@@ -3329,6 +3331,36 @@ def _enrich_metadata_with_dividend_info(config, metadata):
     return merged
 
 
+def _build_yearly_dividend_map(config, start_year, end_year):
+    if not _equity_like_asset(config):
+        return {}
+    ticker = (config.get('ticker') or '').strip()
+    if not ticker:
+        return {}
+
+    try:
+        start_dt = datetime(start_year, 1, 1)
+        end_dt = datetime(end_year, 12, 31)
+        events = yahoo_finance.fetch_dividend_events(ticker, start_dt, end_dt)
+        if not events:
+            return {}
+
+        yearly_map = defaultdict(float)
+        for event in events:
+            dt = event.get('date')
+            amount = _safe_float(event.get('amount'))
+            if not dt or amount is None or not math.isfinite(amount):
+                continue
+            if dt.year < start_year or dt.year > end_year:
+                continue
+            yearly_map[dt.year] += amount
+
+        return {year: round(total, 6) for year, total in yearly_map.items() if total > 0}
+    except Exception as exc:
+        logger.warning('[%s] Failed to build yearly dividend map: %s', ticker, exc)
+        return {}
+
+
 def _fetch_korean_stock_history(ticker, start_year, end_year):
     """
     pykrx만 사용하여 한국 주식 데이터를 가져옵니다.
@@ -4937,6 +4969,80 @@ def _translate_to_english_if_needed(text):
     return cleaned
 
 
+def _normalize_asset_category(ticker, raw_category):
+    """Normalize asset category to standard format"""
+    if not ticker:
+        return raw_category or '기타'
+
+    ticker_upper = ticker.upper()
+    category_lower = (raw_category or '').lower()
+
+    # Korean stocks
+    if ticker_upper.endswith(('.KS', '.KQ', '.KL')):
+        return '국내 주식'
+
+    # Crypto
+    if '-USD' in ticker_upper or ticker_upper.startswith('BTC') or ticker_upper.startswith('ETH'):
+        return '암호화폐'
+
+    # Indices
+    if ticker_upper.startswith('^'):
+        return '지수'
+
+    # FX
+    if ticker_upper.endswith('=X'):
+        return '환율'
+
+    # US stocks - check by category keywords
+    if any(kw in category_lower for kw in ['us', 'stock', 'nasdaq', 'nyse', 'equity', '미국', '주식']):
+        return '미국 주식'
+
+    # ETF
+    if 'etf' in category_lower:
+        return 'ETF'
+
+    # REIT
+    if 'reit' in category_lower or '리츠' in category_lower:
+        return 'REIT'
+
+    # Gold/Silver
+    if any(kw in category_lower for kw in ['gold', 'silver', '금', '은']):
+        return '귀금속'
+
+    # If ticker is 1-5 uppercase letters without special chars, likely US stock
+    if ticker_upper.replace('.', '').isalpha() and len(ticker_upper.replace('.', '')) <= 5:
+        return '미국 주식'
+
+    return raw_category or '기타'
+
+
+def _infer_asset_unit(ticker, category):
+    """Infer asset unit from ticker and category"""
+    if not ticker:
+        return 'USD'
+
+    ticker_upper = ticker.upper()
+
+    # Korean stocks
+    if ticker_upper.endswith(('.KS', '.KQ', '.KL')):
+        return 'KRW'
+
+    # Crypto
+    if '-USD' in ticker_upper:
+        return 'USD'
+
+    # FX
+    if ticker_upper.endswith('=X'):
+        return 'KRW' if 'KRW' in ticker_upper else 'USD'
+
+    # Korean assets
+    if category and ('국내' in category or '한국' in category):
+        return 'KRW'
+
+    # Default to USD
+    return 'USD'
+
+
 def _lookup_ticker_with_llm(asset_id, label):
     system_prompt = _get_agent_prompt('ticker_finder',
         "You are a financial data assistant. Your goal is to find the correct Yahoo Finance ticker symbol for a given asset name.\n"
@@ -4987,11 +5093,17 @@ def _lookup_ticker_with_llm(asset_id, label):
         if result.get('found') and result.get('ticker'):
             ticker = result['ticker'].strip().upper()
             found_label = (result.get('label') or label or ticker).strip()
+
+            # Normalize category
+            raw_category = result.get('category') or ''
+            normalized_category = _normalize_asset_category(ticker, raw_category)
+
             return {
                 'id': ticker,
                 'label': found_label,
                 'ticker': ticker,
-                'category': result.get('category')
+                'category': normalized_category,
+                'unit': _infer_asset_unit(ticker, normalized_category)
             }
 
     except Exception as exc:
@@ -5219,6 +5331,10 @@ class PriceRetrieverAgent:
 
                 base_metadata = dict(asset.get('metadata') or {})
                 enriched_metadata = _enrich_metadata_with_dividend_info(config, base_metadata)
+                dividend_history = _build_yearly_dividend_map(config, start_year, end_year)
+                if dividend_history:
+                    enriched_metadata['yearly_dividends'] = dividend_history
+                    enriched_metadata['dividend_unit'] = config.get('unit')
                 price_data_map[asset_id] = {
                     'history': history,
                     'config': config,
@@ -5278,6 +5394,10 @@ class PriceRetrieverAgent:
                     history, source = result
                     base_metadata = dict(asset.get('metadata') or {})
                     enriched_metadata = _enrich_metadata_with_dividend_info(config, base_metadata)
+                    dividend_history = _build_yearly_dividend_map(config, start_year, end_year)
+                    if dividend_history:
+                        enriched_metadata['yearly_dividends'] = dividend_history
+                        enriched_metadata['dividend_unit'] = config.get('unit')
                     price_data_map[asset_id] = {
                         'history': history,
                         'config': config,
@@ -5287,6 +5407,13 @@ class PriceRetrieverAgent:
                     }
                     ticker_info = config.get('ticker', asset_id)
                     category_info = config.get('category', '알 수 없음')
+
+                    # 배당 정보 로깅
+                    if enriched_metadata.get('dividend_yield_pct'):
+                        div_yield = enriched_metadata.get('dividend_yield_pct')
+                        logger.info('[%s] 배당 정보 추가됨: %.2f%%', label, div_yield)
+                        yield {'type': 'log', 'message': f"[데이터 수집] ✓ {label}: 배당률 {div_yield:.2f}% 확인"}
+
                     yield {'type': 'log', 'message': f"[데이터 수집] ✓ {label}: {source}에서 {len(history)}개 데이터 포인트 수집 완료 (Ticker: {ticker_info}, Category: {category_info})"}
                 else:
                     yield {'type': 'log', 'message': f"[데이터 수집] ✗ {label}: 데이터 없음"}
@@ -5403,6 +5530,12 @@ class CalculatorAgent:
                         for meta_key, meta_value in metadata.items():
                             if meta_key not in series_obj:
                                 series_obj[meta_key] = meta_value
+
+                        # 배당 정보 로깅
+                        if metadata.get('dividend_yield_pct'):
+                            div_yield = metadata.get('dividend_yield_pct')
+                            logger.info('[%s] Series에 배당 정보 포함됨: %.2f%%', config.get('label'), div_yield)
+
                     series_list.append(series_obj)
                 else:
                     yield {'type': 'log', 'message': f"[수익률 계산] {config['label']}: 데이터 부족으로 시리즈 생성 불가"}
@@ -5489,7 +5622,28 @@ class CalculatorAgent:
                         'value': val  # Use raw value for table display
                     })
 
-            table_data.append({
+            dividends_list = []
+            dividend_map = None
+            if isinstance(series.get('yearly_dividends'), dict):
+                dividend_map = series.get('yearly_dividends')
+            elif isinstance(series.get('metadata'), dict) and isinstance(series['metadata'].get('yearly_dividends'), dict):
+                dividend_map = series['metadata'].get('yearly_dividends')
+
+            if dividend_map:
+                for year_key, amount in dividend_map.items():
+                    try:
+                        year_int = int(year_key)
+                    except (TypeError, ValueError):
+                        continue
+                    amount_val = _safe_float(amount)
+                    if amount_val is None:
+                        continue
+                    dividends_list.append({
+                        'year': year_int,
+                        'amount': amount_val
+                    })
+
+            entry = {
                 'id': asset_id,
                 'label': label,
                 'unit': unit,
@@ -5497,7 +5651,19 @@ class CalculatorAgent:
                 'value_label': value_label,
                 'values': yearly_values,
                 'calculation_method': calculation_method
-            })
+            }
+
+            if dividends_list:
+                dividends_list.sort(key=lambda item: item['year'])
+                entry['dividends'] = dividends_list
+                dividend_unit = None
+                if isinstance(series.get('dividend_unit'), str):
+                    dividend_unit = series.get('dividend_unit')
+                elif isinstance(series.get('metadata'), dict):
+                    dividend_unit = series['metadata'].get('dividend_unit')
+                entry['dividend_unit'] = dividend_unit or unit
+
+            table_data.append(entry)
 
         return table_data
 
@@ -8431,6 +8597,20 @@ def finance_add_single_asset_view(request):
         if not series:
             return JsonResponse({'ok': False, 'error': 'Failed to build series'}, status=500)
 
+        # Enrich with dividend information
+        base_metadata = series.get('metadata') or {}
+        enriched_metadata = _enrich_metadata_with_dividend_info(cfg, base_metadata)
+        yearly_dividends = _build_yearly_dividend_map(cfg, start_year, end_year)
+        if yearly_dividends:
+            enriched_metadata['yearly_dividends'] = yearly_dividends
+            enriched_metadata['dividend_unit'] = cfg.get('unit')
+        series['metadata'] = enriched_metadata
+
+        # Copy metadata fields to series root
+        for meta_key, meta_value in enriched_metadata.items():
+            if meta_key not in series:
+                series[meta_key] = meta_value
+
         if cfg.get('synthetic_asset') == 'deposit':
             metadata = series.get('metadata') or {}
             metadata.setdefault('synthetic_asset', 'deposit')
@@ -8439,8 +8619,13 @@ def finance_add_single_asset_view(request):
             series['synthetic_asset'] = 'deposit'
             series['target_rate_pct'] = cfg.get('target_rate_pct')
 
+        # Log dividend info if present
+        if enriched_metadata.get('dividend_yield_pct'):
+            div_yield = enriched_metadata.get('dividend_yield_pct')
+            logger.info(f"[Single Asset] {cfg.get('label')}: 배당률 {div_yield:.2f}% 추가됨")
+
         # Build chart data table entry for yearly prices
-        chart_entry = _build_chart_data_table_entry(asset_id, cfg, history, source, start_year, end_year)
+        chart_entry = _build_chart_data_table_entry(asset_id, cfg, history, source, start_year, end_year, yearly_dividends)
 
         logger.info(f"[Single Asset] Successfully built series for {asset_id}")
 
@@ -8455,7 +8640,7 @@ def finance_add_single_asset_view(request):
         return JsonResponse({'ok': False, 'error': str(e)}, status=500)
 
 
-def _build_chart_data_table_entry(asset_id, cfg, history, source, start_year, end_year):
+def _build_chart_data_table_entry(asset_id, cfg, history, source, start_year, end_year, dividend_map=None):
     """Build a chart_data_table entry for a single asset"""
     entry = {
         'id': asset_id,
@@ -8484,5 +8669,22 @@ def _build_chart_data_table_entry(asset_id, cfg, history, source, start_year, en
             continue
         if year >= start_year and year <= end_year:
             entry['prices'].append({'year': year, 'value': value})
+
+    dividends = []
+    if isinstance(dividend_map, dict):
+        for key, amount in dividend_map.items():
+            try:
+                year_int = int(key)
+            except (TypeError, ValueError):
+                continue
+            amount_val = _safe_float(amount)
+            if amount_val is None:
+                continue
+            dividends.append({'year': year_int, 'amount': amount_val})
+
+    if dividends:
+        dividends.sort(key=lambda item: item['year'])
+        entry['dividends'] = dividends
+        entry['dividend_unit'] = cfg.get('unit', 'usd')
 
     return entry

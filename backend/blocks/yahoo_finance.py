@@ -129,14 +129,172 @@ def fetch_latest_quote(symbol: str, timeout: int = 10) -> Optional[dict]:
 
 def fetch_dividend_yield(symbol: str) -> Optional[float]:
     """Return dividend yield ratio (0.05 = 5%) if available."""
-    quote = fetch_latest_quote(symbol)
-    if not quote:
+    # Try quote endpoint first
+    try:
+        quote = fetch_latest_quote(symbol)
+        if quote:
+            for key in ("trailingAnnualDividendYield", "dividendYield", "fiftyTwoWeekDividendYield"):
+                ratio = _extract_numeric(quote.get(key))
+                if ratio is not None:
+                    return ratio
+    except Exception as exc:
+        logger.warning("[%s] Quote endpoint failed, trying chart endpoint: %s", symbol, exc)
+
+    # Fallback: Try to extract from chart endpoint
+    try:
+        return _fetch_dividend_yield_from_chart(symbol)
+    except Exception as exc:
+        logger.warning("[%s] Chart endpoint dividend fetch failed: %s", symbol, exc)
         return None
-    for key in ("trailingAnnualDividendYield", "dividendYield", "fiftyTwoWeekDividendYield"):
-        ratio = _extract_numeric(quote.get(key))
-        if ratio is not None:
-            return ratio
-    return None
+
+
+def _fetch_dividend_yield_from_chart(symbol: str, timeout: int = 15) -> Optional[float]:
+    """Extract dividend yield from chart endpoint by analyzing recent dividends."""
+    if not symbol:
+        return None
+
+    # Fetch last 2 years of data to calculate trailing dividend yield
+    end_dt = datetime.now(timezone.utc)
+    start_dt = end_dt.replace(year=end_dt.year - 2)
+
+    start_ts = int(start_dt.timestamp())
+    end_ts = int(end_dt.timestamp())
+
+    params = {
+        "period1": start_ts,
+        "period2": end_ts,
+        "interval": "1mo",
+        "includePrePost": "false",
+        "events": "div",
+        "includeAdjustedClose": "false",
+    }
+
+    url = _CHART_URL.format(symbol=quote_plus(symbol.strip()))
+    response = requests.get(url, params=params, timeout=timeout, headers=_DEFAULT_HEADERS)
+    response.raise_for_status()
+    payload = response.json()
+
+    chart = payload.get("chart", {})
+    result_seq = chart.get("result") or []
+    if not result_seq:
+        return None
+
+    result = result_seq[0]
+
+    # Get current price
+    indicators = result.get("indicators") or {}
+    quote_data = (indicators.get("quote") or [{}])[0]
+    closes = quote_data.get("close") or []
+
+    # Get latest valid close price
+    current_price = None
+    for price in reversed(closes):
+        if price is not None and price != "null":
+            try:
+                current_price = float(price)
+                if current_price > 0:
+                    break
+            except (TypeError, ValueError):
+                continue
+
+    if not current_price:
+        return None
+
+    # Get dividend events
+    events = result.get("events")
+    if not events or "dividends" not in events:
+        return None
+
+    dividends = events["dividends"]
+    if not dividends:
+        return None
+
+    # Calculate trailing 12-month dividends
+    one_year_ago_ts = int(end_dt.replace(year=end_dt.year - 1).timestamp())
+    trailing_dividends = 0.0
+
+    for div_data in dividends.values():
+        div_ts = div_data.get("date")
+        div_amount = div_data.get("amount")
+
+        if div_ts and div_amount and div_ts >= one_year_ago_ts:
+            try:
+                trailing_dividends += float(div_amount)
+            except (TypeError, ValueError):
+                continue
+
+    if trailing_dividends <= 0:
+        return None
+
+    # Calculate yield: (annual dividends / current price)
+    dividend_yield = trailing_dividends / current_price
+    logger.info("[%s] Calculated dividend yield from chart: %.2f%% (dividends: $%.2f, price: $%.2f)",
+                symbol, dividend_yield * 100, trailing_dividends, current_price)
+
+    return dividend_yield
+
+
+def fetch_dividend_events(
+    symbol: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    *,
+    timeout: int = 15,
+):
+    """Fetch raw dividend events between the given dates."""
+    if not symbol:
+        return []
+
+    start_ts = int(_ensure_utc(start_dt).timestamp())
+    end_ts = int(_ensure_utc(end_dt).timestamp())
+    if end_ts <= start_ts:
+        end_ts = start_ts + 86400
+
+    params = {
+        "period1": start_ts,
+        "period2": end_ts,
+        "interval": "1mo",
+        "includePrePost": "false",
+        "events": "div",
+        "includeAdjustedClose": "false",
+    }
+
+    url = _CHART_URL.format(symbol=quote_plus(symbol.strip()))
+    response = requests.get(url, params=params, timeout=timeout, headers=_DEFAULT_HEADERS)
+    response.raise_for_status()
+    payload = response.json()
+
+    chart = payload.get("chart", {})
+    result_seq = chart.get("result") or []
+    if not result_seq:
+        return []
+
+    result = result_seq[0]
+    events = result.get("events") or {}
+    dividends = events.get("dividends") or {}
+    if not dividends:
+        return []
+
+    entries = []
+    for event in dividends.values():
+        ts = event.get("date")
+        amount = _extract_numeric(event.get("amount"))
+        if ts is None or amount is None:
+            continue
+        try:
+            dt = datetime.fromtimestamp(int(ts), tz=timezone.utc).replace(tzinfo=None)
+        except (TypeError, ValueError, OSError):
+            continue
+        try:
+            amount_val = float(amount)
+        except (TypeError, ValueError):
+            continue
+        if amount_val <= 0:
+            continue
+        entries.append({"date": dt, "amount": amount_val})
+
+    entries.sort(key=lambda entry: entry["date"])
+    return entries
 
 
 def fetch_latest_price_if_stale(
