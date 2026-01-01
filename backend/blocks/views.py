@@ -3811,7 +3811,7 @@ def _fetch_m2_money_supply_history(ticker, start_year, end_year):
     M2 통화량 데이터를 가져옵니다.
 
     - US: FRED API (M2SL)
-    - Korea: ECOS API (한국은행 광의통화 M2, 통계코드: 101Y002)
+    - Korea: ECOS API (한국은행 광의통화 M2, 통계코드: 161Y007)
     """
     from datetime import datetime
     import requests
@@ -3897,7 +3897,7 @@ def _fetch_korea_m2_from_ecos(start_year, end_year):
         raise RuntimeError("ECOS_API_KEY가 설정되지 않았습니다. .env 파일을 확인하세요.")
 
     try:
-        # ECOS API 통계표: 101Y001 (M2 말잔, 계절조정계열)
+        # ECOS API 통계표: 161Y007 (M2 상품별 구성내역 - 말잔, 계절조정계열)
         # 데이터가 많아서 페이징 필요 - 연도별로 나눠서 요청
         all_rows = []
 
@@ -3908,7 +3908,7 @@ def _fetch_korea_m2_from_ecos(start_year, end_year):
 
             url = (
                 f"https://ecos.bok.or.kr/api/StatisticSearch/"
-                f"{api_key}/json/kr/1/100/101Y001/M/{year_start}/{year_end}"
+                f"{api_key}/json/kr/1/100/161Y007/M/{year_start}/{year_end}"
             )
 
             response = requests.get(url, timeout=30)
@@ -4040,14 +4040,16 @@ def _fetch_asset_history(cfg, start_year, end_year):
     if is_m2_indicator:
         try:
             history = _fetch_m2_money_supply_history(ticker, start_year, end_year)
-            if history:
-                # Determine source based on ticker
-                source = 'ECOS' if 'KR' in ticker.upper() else 'FRED'
-                return history, source
-            errors.append('M2 데이터: 데이터 없음')
+            if not history:
+                raise RuntimeError('M2 데이터: 데이터 없음')
+            # Determine source based on ticker
+            source = 'ECOS' if 'KR' in ticker.upper() else 'FRED'
+            return history, source
         except Exception as exc:
-            errors.append(f'M2 데이터: {exc}')
             logger.error('[%s] M2 데이터 가져오기 실패: %s', label, exc)
+            if isinstance(exc, RuntimeError):
+                raise
+            raise RuntimeError(f'M2 데이터 가져오기 실패: {exc}')
 
     # 한국 주식 여부 확인
     is_korean_stock = (
@@ -4849,6 +4851,49 @@ def _build_manual_assets(asset_names, calculation_method):
         })
 
     return manual_assets
+
+
+def _serialize_requested_assets(asset_list):
+    """
+    Normalize the list of requested assets so the frontend can reconcile them with the final series output.
+    """
+    serialized = []
+    for asset in asset_list or []:
+        if not isinstance(asset, dict):
+            continue
+        requested_id = (asset.get('id') or asset.get('ticker') or asset.get('label') or '').strip()
+        requested_label = (asset.get('label') or requested_id or '').strip()
+        if not requested_id and not requested_label:
+            continue
+
+        known_cfg = _find_known_asset_config(requested_id, requested_label)
+        if known_cfg:
+            entry_id = known_cfg.get('id') or requested_id or requested_label
+            label = known_cfg.get('label') or requested_label or entry_id
+            ticker = known_cfg.get('ticker') or requested_id or entry_id
+            category = known_cfg.get('category') or asset.get('category') or asset.get('type') or ''
+            unit = known_cfg.get('unit') or asset.get('unit') or ''
+            aliases = _collect_asset_aliases(known_cfg, requested_id or entry_id)
+        else:
+            entry_id = requested_id or requested_label
+            label = requested_label or entry_id
+            ticker = asset.get('ticker') or entry_id or label
+            category = asset.get('category') or asset.get('type') or ''
+            unit = asset.get('unit') or ''
+            alias_candidates = {entry_id, requested_id, label, ticker}
+            aliases = sorted(a for a in alias_candidates if a)
+
+        serialized.append({
+            'id': entry_id,
+            'requested_id': requested_id or entry_id,
+            'label': label,
+            'ticker': ticker,
+            'category': category,
+            'unit': unit,
+            'aliases': aliases,
+            'display': asset.get('display') or asset.get('display_label')
+        })
+    return serialized
 
 
 def _asset_identity_key(asset):
@@ -6217,6 +6262,7 @@ def finance_historical_returns_view(request):
                     added_labels = ', '.join(a.get('label', a.get('id', '')) for a in added_assets)
                     append_log(f"[의도 분석] 사용자 지정 자산 추가: {added_labels}")
             validated_assets = assets
+            serialized_requested_assets = _serialize_requested_assets(validated_assets)
 
             # Agent 2: Price Retriever
             backend_logger.info("STEP 2: Running PriceRetrieverAgent")
@@ -6295,6 +6341,7 @@ def finance_historical_returns_view(request):
                 'quick_requests': quick_requests,
                 'calculation_method': calculation_method,
                 'include_dividends': include_dividends,
+                'requested_assets': serialized_requested_assets,
             }
 
             return JsonResponse(response_payload)
@@ -6362,6 +6409,7 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
                 yield send_log(f"[의도 분석] 사용자 지정 자산 추가: {added_labels}")
 
         validated_assets = assets
+        serialized_requested_assets = _serialize_requested_assets(validated_assets)
 
         # Agent 2: Price Retriever
         retriever_agent = PriceRetrieverAgent()
@@ -6434,6 +6482,7 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
             'prompt': prompt,
             'quick_requests': quick_requests,
             'calculation_method': calculation_method,
+            'requested_assets': serialized_requested_assets,
         }
 
         yield send_result(result_payload)

@@ -328,6 +328,10 @@ const currentYear = new Date().getFullYear()
 const priceDisplayMode = ref('usd')
 const priceTableData = ref({})
 const customAssetResolving = ref(false)
+const customAssets = ref([])
+const customAssetsLoading = ref(false)
+let Gt = 0
+let vo = false
 const newAssetInput = ref('')
 const isAutoApplyEnabled = computed(() => selectedContextKey.value === 'kr_equity')
 
@@ -673,13 +677,41 @@ const chartSeries = computed(() => {
   return filteredSeries.value.filter((s) => !hiddenSeries.value.has(s.id))
 })
 
+const requestedAssetsForLegend = computed(() => {
+  const requestedList = analysis.value?.requested_assets
+  if (Array.isArray(requestedList) && requestedList.length) {
+    return requestedList
+  }
+  return customAssets.value
+})
+
+const missingLegendEntries = computed(() => {
+  const requested = requestedAssetsForLegend.value
+  if (!Array.isArray(requested) || !requested.length) return []
+  const seriesList = analysis.value?.series || []
+
+  return requested.map((asset) => {
+    if (!asset) return null
+    const tokens = buildTokenSetFromAsset(asset)
+    if (!tokens.size) return null
+    const hasMatch = seriesList.some((series) => tokenSetsIntersect(tokens, buildTokenSetFromSeries(series)))
+    if (hasMatch) return null
+    return buildFailedLegendSeries(asset)
+  }).filter(Boolean)
+})
+
 const sortedLegend = computed(() => {
-  if (!filteredSeries.value.length) return []
-  return [...filteredSeries.value].sort((a, b) => {
+  const baseSeries = filteredSeries.value || []
+  const sortedSeries = baseSeries.length ? [...baseSeries].sort((a, b) => {
     const valA = typeof a.annualized_return_pct === 'number' ? a.annualized_return_pct : -Infinity
     const valB = typeof b.annualized_return_pct === 'number' ? b.annualized_return_pct : -Infinity
     return valB - valA
-  })
+  }) : []
+
+  if (!missingLegendEntries.value.length) {
+    return sortedSeries
+  }
+  return [...sortedSeries, ...missingLegendEntries.value]
 })
 
 const tableYears = computed(() => {
@@ -1263,22 +1295,28 @@ async function appendAssetToExistingAnalysis(assetId) {
 
     if (result.series) {
       // Add series to existing analysis
-      const currentSeries = analysis.value.series || []
+      const currentAnalysis = analysis.value || {}
+      const currentSeries = currentAnalysis.series || []
+      const nextSeries = [...currentSeries, result.series]
+      const snapshot = buildRequestedAssetSnapshotFromSeries(result.series)
+      const nextRequestedAssets = upsertRequestedAssetsSnapshot(currentAnalysis.requested_assets, snapshot)
       analysis.value = {
-        ...analysis.value,
-        series: [...currentSeries, result.series]
+        ...currentAnalysis,
+        series: nextSeries,
+        requested_assets: nextRequestedAssets
       }
       updateColorAssignments([result.series])
 
       // Add chart data table entry
       if (result.chartDataTableEntry) {
-        const currentChartData = analysis.value.chart_data_table || []
+        const currentChartData = currentAnalysis.chart_data_table || []
         analysis.value.chart_data_table = [...currentChartData, result.chartDataTableEntry]
 
         // Process the new entry for price table (merge with existing data)
         processYearlyPrices([result.chartDataTableEntry], { merge: true })
       }
 
+      ensureMissingPriceEntries(nextRequestedAssets.length ? nextRequestedAssets : customAssets.value)
       appendProgressLogs(`✓ ${assetId} 추가 완료`)
     }
   } catch (error) {
@@ -1385,6 +1423,9 @@ function getAssetUrl(series) {
   
   const symbol = ticker.toUpperCase()
   const entry = findPriceEntry(series)
+  if (entry?.status === 'failed') {
+    return null
+  }
   const source = String(entry?.source || series.source || '')
   const category = entry?.category || series.category || ''
   const labelLower = (series.label || '').toLowerCase()
@@ -1546,6 +1587,59 @@ function tokenSetsIntersect(primary, secondary) {
   return false
 }
 
+function buildFailedLegendSeries(asset) {
+  const label = asset?.display ?? asset?.label ?? asset?.requested_id ?? asset?.id ?? asset?.ticker ?? '알 수 없는 자산'
+  const entryId = asset?.id || asset?.requested_id || asset?.ticker || label
+  const ticker = asset?.ticker || entryId || label
+  const failureReason = asset?.failure_reason || asset?.error_message || '데이터 불러오기 실패'
+  return {
+    id: entryId || `missing-${Date.now()}-${Math.random()}`,
+    label,
+    display_label: label,
+    ticker,
+    category: asset?.category || asset?.type || '',
+    status: 'failed',
+    failure_reason: failureReason,
+    metadata: {
+      ...(asset?.metadata || {}),
+      failure_reason: failureReason,
+      requested_id: asset?.requested_id || asset?.id || ticker
+    },
+    requested_id: asset?.requested_id || asset?.id || ticker,
+    points: [],
+    annualized_return_pct: null,
+    multiple_from_start: null
+  }
+}
+
+function buildRequestedAssetSnapshotFromSeries(series) {
+  if (!series) return null
+  return {
+    id: series.id,
+    requested_id: series.requested_id || series.id,
+    label: series.label,
+    display: series.display_label || series.label,
+    ticker: series.ticker || series.id,
+    category: series.category || series.metadata?.category || '',
+    unit: series.unit || series.metadata?.unit || '',
+    aliases: series.aliases || series.metadata?.aliases || []
+  }
+}
+
+function upsertRequestedAssetsSnapshot(existingList, assetSnapshot) {
+  if (!assetSnapshot) return Array.isArray(existingList) ? existingList : []
+  const base = Array.isArray(existingList) ? [...existingList] : []
+  const tokens = buildTokenSetFromAsset(assetSnapshot)
+  const filtered = base.filter((entry) => !tokenSetsIntersect(tokens, buildTokenSetFromAsset(entry)))
+  filtered.push(assetSnapshot)
+  return filtered
+}
+
+function removeRequestedAssetsByTokens(tokens, existingList) {
+  if (!Array.isArray(existingList) || !existingList.length) return []
+  return existingList.filter((entry) => !tokenSetsIntersect(tokens, buildTokenSetFromAsset(entry)))
+}
+
 function removeAssetDataFromAnalysis(asset) {
   if (!analysis.value) return
   const assetTokens = buildTokenSetFromAsset(asset)
@@ -1577,9 +1671,11 @@ function removeAssetDataFromAnalysis(asset) {
 
   if (!changed) return
 
+  const nextRequested = removeRequestedAssetsByTokens(assetTokens, current.requested_assets)
   const nextAnalysis = {
     ...current,
-    series: nextSeries
+    series: nextSeries,
+    requested_assets: nextRequested
   }
   if (Array.isArray(current.chart_data_table)) {
     nextAnalysis.chart_data_table = nextChartData
@@ -1601,6 +1697,7 @@ function removeAssetDataFromAnalysis(asset) {
   } else {
     yearlyPriceMap.value = {}
   }
+  ensureMissingPriceEntries(nextRequested.length ? nextRequested : customAssets.value)
 }
 
 function resolvePriceByMode(priceEntry, year) {
@@ -2033,11 +2130,6 @@ const heroTypewriterText = computed(() => {
   return `${investmentYearsAgo.value}년 전에 비트코인 ${formattedInvestmentAmountNumber.value}만원을 샀다면 지금 얼마일까?`
 })
 
-const customAssets = ref([])
-const customAssetsLoading = ref(false)
-let Gt = 0
-let vo = false
-
 watch(investmentYearsAgo, (val) => {
   let num = Number(val)
   if (!Number.isFinite(num)) num = 1
@@ -2190,6 +2282,11 @@ function applyAnalysisResult(result, { shouldCache = true, preserveHidden = true
   } else {
     yearlyPriceMap.value = {}
   }
+
+  const placeholderTargets = (Array.isArray(result.requested_assets) && result.requested_assets.length)
+    ? result.requested_assets
+    : customAssets.value
+  ensureMissingPriceEntries(placeholderTargets)
 
   if (shouldCache) {
     const key = orKey(inc)
@@ -2366,6 +2463,58 @@ function processYearlyPrices(pricesData, { merge = false } = {}) {
     })
   }
   yearlyPriceMap.value = map
+}
+
+function ensureMissingPriceEntries(requestedAssets = []) {
+  if (!Array.isArray(requestedAssets) || !requestedAssets.length) return
+  const map = { ...yearlyPriceMap.value }
+  let changed = false
+  requestedAssets.forEach((asset) => {
+    if (!asset) return
+    const tokens = buildTokenSetFromAsset(asset)
+    if (!tokens.size) return
+    const hasEntry = Array.from(tokens).some((token) => token && map[token])
+    if (hasEntry) return
+    const placeholder = buildYearlyPricePlaceholder(asset)
+    placeholder.aliases.forEach((alias) => {
+      if (!alias) return
+      map[alias] = placeholder
+      map[String(alias).toLowerCase()] = placeholder
+    })
+    changed = true
+  })
+  if (changed) {
+    yearlyPriceMap.value = map
+  }
+}
+
+function buildYearlyPricePlaceholder(asset) {
+  const label = asset?.display ?? asset?.label ?? asset?.requested_id ?? asset?.id ?? asset?.ticker ?? '알 수 없는 자산'
+  const entryId = asset?.id || asset?.requested_id || asset?.ticker || label
+  const aliasSet = new Set()
+  ;[entryId, asset?.label, asset?.display, asset?.ticker, asset?.requested_id].forEach((alias) => {
+    if (alias) {
+      aliasSet.add(alias)
+      const normalized = normalizeLabelAlias(alias)
+      if (normalized) aliasSet.add(normalized)
+    }
+  })
+  const normalizedLabel = normalizeLabelAlias(label || '')
+  if (normalizedLabel) aliasSet.add(normalizedLabel)
+  return {
+    unit: (asset?.unit || '').toLowerCase(),
+    label,
+    category: asset?.category || asset?.type || '',
+    source: '',
+    prices: {},
+    altPrices: {},
+    dividends: {},
+    dividendUnit: '',
+    altSources: {},
+    status: 'failed',
+    errorMessage: '데이터 불러오기 실패',
+    aliases: Array.from(aliasSet).filter(Boolean)
+  }
 }
 
 </script>

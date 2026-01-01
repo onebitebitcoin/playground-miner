@@ -12,21 +12,28 @@
         :key="series.id"
         class="flex items-center justify-between rounded-xl sm:rounded-2xl border px-3 py-2.5 sm:px-4 sm:py-3 text-left transition"
         :class="[
-          hiddenSeries.has(series.id)
-            ? 'border-slate-200 text-slate-400 bg-slate-50'
-            : 'border-slate-200 text-slate-800 hover:border-slate-400 active:bg-slate-50',
+          isFailedSeries(series)
+            ? 'border-rose-200 text-slate-400 bg-rose-50/60 cursor-not-allowed'
+            : hiddenSeries.has(series.id)
+              ? 'border-slate-200 text-slate-400 bg-slate-50'
+              : 'border-slate-200 text-slate-800 hover:border-slate-400 active:bg-slate-50',
           isBitcoinLegend(series)
             ? 'border-amber-400 shadow-[0_0_12px_rgba(255,215,0,0.6)]'
             : isKoreanM2Legend(series)
               ? 'border-rose-400 shadow-[0_0_12px_rgba(248,113,113,0.55)]'
               : ''
         ]"
-        @click="$emit('toggleSeries', series.id)"
+        :disabled="isFailedSeries(series)"
+        :aria-disabled="isFailedSeries(series)"
+        @click="handleToggle(series)"
       >
         <div class="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
           <span
             class="w-7 sm:w-9 h-2 rounded-full flex-shrink-0"
-            :style="{ backgroundColor: colorMap[series.id] || '#0f172a', opacity: hiddenSeries.has(series.id) ? 0.3 : 1 }"
+            :style="{
+              backgroundColor: isFailedSeries(series) ? '#cbd5f5' : (colorMap[series.id] || '#0f172a'),
+              opacity: isFailedSeries(series) ? 0.3 : (hiddenSeries.has(series.id) ? 0.3 : 1)
+            }"
           ></span>
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 flex-wrap">
@@ -44,8 +51,14 @@
           </div>
         </div>
         <div class="text-[11px] sm:text-xs text-slate-500 text-right flex-shrink-0 ml-2">
-          <p class="whitespace-nowrap">{{ analysisResultType === 'price' ? '연평균 상승률' : analysisResultType === 'yearly_growth' ? '평균 증감률' : '연평균' }} {{ formatPercent(series.annualized_return_pct) }}</p>
-          <p class="whitespace-nowrap">{{ formatMultiple(series.multiple_from_start) }}배</p>
+          <template v-if="isFailedSeries(series)">
+            <p class="whitespace-nowrap text-rose-500 font-semibold">데이터 불러오기 실패</p>
+            <p class="whitespace-nowrap text-slate-400">{{ getFailureReason(series) }}</p>
+          </template>
+          <template v-else>
+            <p class="whitespace-nowrap">{{ analysisResultType === 'price' ? '연평균 상승률' : analysisResultType === 'yearly_growth' ? '평균 증감률' : '연평균' }} {{ formatPercent(series.annualized_return_pct) }}</p>
+            <p class="whitespace-nowrap">{{ formatMultiple(series.multiple_from_start) }}배</p>
+          </template>
         </div>
       </button>
     </div>
@@ -82,5 +95,20 @@ const legendLabel = (series) => {
   return getDefaultLegendLabel(series)
 }
 
-defineEmits(['toggleSeries'])
+const emit = defineEmits(['toggleSeries'])
+
+const isFailedSeries = (series) => {
+  if (!series) return false
+  return series.status === 'failed'
+}
+
+const getFailureReason = (series) => {
+  if (!series) return ''
+  return series.failure_reason || series.error_message || series.metadata?.failure_reason || '데이터 불러오기 실패'
+}
+
+function handleToggle(series) {
+  if (!series || isFailedSeries(series)) return
+  emit('toggleSeries', series.id)
+}
 </script>
