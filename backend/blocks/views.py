@@ -5560,10 +5560,11 @@ class CalculatorAgent:
         for asset_id, data in price_data_map.items():
             if not isinstance(data, dict):
                 continue
-            source = data.get('source')
+            source = str(data.get('source') or '').strip()
             config = data.get('config') or {}
             ticker = (config.get('ticker') or '').strip()
-            if source != 'Yahoo Finance' or not ticker:
+
+            if 'yahoo finance' not in source.lower() or not ticker:
                 continue
 
             try:
