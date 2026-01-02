@@ -916,13 +916,37 @@ def _ensure_asset_prices_cached(asset, group_key=None):
     try:
         if (asset.get('synthetic_asset') or (asset.get('metadata') or {}).get('synthetic_asset')):
             return False
-        asset_id = (asset.get('ticker') or asset.get('id') or '').strip()
+        primary_id = (asset.get('id') or asset.get('ticker') or '').strip()
+        fallback_ticker = (asset.get('ticker') or '').strip()
+        asset_id = primary_id or fallback_ticker
         label = (asset.get('label') or asset_id).strip()
         category = asset.get('category')
         if not asset_id or not label:
             return False
 
-        if AssetPriceCache.objects.filter(asset_id=asset_id).exists():
+        lookup_filter = Q()
+        seen_keys = set()
+        for candidate in (primary_id, fallback_ticker):
+            candidate_key = (candidate or '').strip()
+            if not candidate_key:
+                continue
+            lowered = candidate_key.lower()
+            if lowered in seen_keys:
+                continue
+            seen_keys.add(lowered)
+            lookup_filter |= Q(asset_id__iexact=candidate_key)
+
+        cache_entry = None
+        if lookup_filter:
+            cache_entry = AssetPriceCache.objects.filter(lookup_filter).first()
+
+        if cache_entry:
+            if primary_id and cache_entry.asset_id != primary_id:
+                conflict = AssetPriceCache.objects.filter(asset_id__iexact=primary_id).exclude(pk=cache_entry.pk).first()
+                if conflict:
+                    return True
+                cache_entry.asset_id = primary_id
+                cache_entry.save(update_fields=['asset_id', 'last_updated'])
             return True
 
         return _cache_asset_prices(asset_id, label, category)
