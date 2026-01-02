@@ -908,7 +908,8 @@ async function appendResolvedAsset(name, { silent = false, targetList = null } =
 
   const label = result?.label?.trim() || text
   const ticker = result?.ticker?.trim() || result?.id?.trim()
-  if (assetExistsInList(label, ticker, existingList)) return false
+  const id = result?.id?.trim()
+  if (assetExistsInList(label, ticker, existingList, id)) return false
   
   const isSyntheticAsset = Boolean(result?.synthetic_asset)
   const display = isSyntheticAsset ? label : Io(label, ticker)
@@ -931,13 +932,15 @@ async function appendResolvedAsset(name, { silent = false, targetList = null } =
   return entry
 }
 
-function assetExistsInList(label, ticker, list = customAssets.value) {
+function assetExistsInList(label, ticker, list = customAssets.value, id = null) {
   const lowLabel = normalizeAssetToken(label)
   const lowTicker = normalizeAssetToken(ticker)
+  const lowId = normalizeAssetToken(id)
   return list.some((a) => {
     const matchLabel = lowLabel && normalizeAssetToken(a.label) === lowLabel
     const matchTicker = lowTicker && normalizeAssetToken(a.ticker) === lowTicker
-    return matchLabel || matchTicker
+    const matchId = lowId && normalizeAssetToken(a.id) === lowId
+    return matchLabel || matchTicker || matchId
   })
 }
 

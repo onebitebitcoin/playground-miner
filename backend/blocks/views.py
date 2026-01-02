@@ -526,7 +526,32 @@ SAFE_ASSETS = {
         'category': '통화',
         'aliases': ['달러지수', 'dxy', 'dollar index', '달러 인덱스']
     },
+    'm2_us': {
+        'id': 'm2_us',
+        'label': '미국 M2 통화량',
+        'ticker': 'M2-US',
+        'stooq_symbol': None,
+        'unit': 'USD',
+        'category': '통화량',
+        'aliases': [
+            '미국 m2',
+            '미국 m2 통화량',
+            '미국의 m2',
+            'us m2',
+            'usa m2',
+            'm2 us',
+            'm2-us',
+            'm2 usa',
+            'us m2 money supply',
+            'usa m2 money supply',
+            'united states m2',
+            'american m2',
+            'm2sl',
+            'us m2 supply'
+        ]
+    },
     'm2_korea': {
+        'id': 'm2_korea',
         'label': '한국 M2 통화량',
         'ticker': 'M2-KR',
         'stooq_symbol': None,
