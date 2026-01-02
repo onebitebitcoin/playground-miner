@@ -6,13 +6,13 @@
     <div class="flex items-center justify-between gap-3 flex-wrap px-1">
       <div class="flex flex-col">
         <div class="text-sm font-semibold text-slate-900">
-          {{ analysisResultType === 'price' ? '연도별 가격 비교' : analysisResultType === 'cumulative' ? '연도별 누적 수익률 비교' : analysisResultType === 'yearly_growth' ? '연도별 전년 대비 증감률 비교' : '연도별 연평균 상승률 비교' }}
+          {{ analysisResultType === 'price' ? '연도별 비교' : analysisResultType === 'cumulative' ? '연도별 누적 수익률 비교' : analysisResultType === 'yearly_growth' ? '연도별 전년 대비 증감률 비교' : '연도별 연평균 상승률 비교' }}
         </div>
         <p
           v-if="analysisResultType === 'price'"
           class="text-[11px] text-slate-400"
         >
-          연말 종가 기준 (12월 31일) · 배당률은 그 해 배당금 ÷ 연말 가격
+          연말 종가 기준 (12월 31일, 현재 연도는 최신 가격) · 배당률은 그 해 배당금 ÷ 연말 가격
         </p>
       </div>
       <div
@@ -75,7 +75,7 @@
             <td
               v-for="year in tableYears"
               :key="`ret-cell-${series.id}-${year}`"
-              :class="['py-1.5 sm:py-2 px-1.5 sm:px-2 text-right font-mono', getCellClass(series, year)]"
+              :class="['py-1.5 sm:py-2 px-1.5 sm:px-2 text-right font-mono whitespace-pre-line', getCellClass(series, year)]"
             >
               {{ formatValue(series, year, { priceMode: priceTableMode }) }}
             </td>
@@ -107,8 +107,8 @@ defineEmits(['update:priceTableMode'])
 
 const PRICE_TABLE_OPTIONS = [
   { key: 'price', label: '가격' },
-  { key: 'dividend', label: '배당률' },
-  { key: 'multiple', label: '배수' }
+  { key: 'multiple', label: '배수' },
+  { key: 'dividend', label: '배당률' }
 ]
 
 const tableWrapper = ref(null)

@@ -1948,12 +1948,24 @@ function getReturnForYear(series, year, options = {}) {
     if (mode === 'multiple') {
       const multiple = Number(point.multiple)
       if (!Number.isFinite(multiple) || multiple <= 0) return '-'
-      return `${formatMultiple(multiple)}배`
+      const investmentInManwon = investmentAmount.value * multiple
+      const formattedInvestment = investmentInManwon >= 10000
+        ? `${(investmentInManwon / 10000).toFixed(1)}억원`
+        : `${Math.round(investmentInManwon).toLocaleString('ko-KR')}만원`
+      return `${formatMultiple(multiple)}배\n${formattedInvestment}`
     }
     const displayCurrency = getSeriesDisplayCurrency(series)
     const { value } = resolvePriceValueForCurrency(series, point, year, displayCurrency)
     if (!Number.isFinite(value)) return '-'
     const symbol = getCurrencySymbolForMode(displayCurrency)
+    const multiple = Number(point.multiple)
+    if (Number.isFinite(multiple) && multiple > 0) {
+      const investmentInManwon = investmentAmount.value * multiple
+      const formattedInvestment = investmentInManwon >= 10000
+        ? `${(investmentInManwon / 10000).toFixed(1)}억원`
+        : `${Math.round(investmentInManwon).toLocaleString('ko-KR')}만원`
+      return `${symbol}${priceFormatter.format(value)}\n${formattedInvestment}`
+    }
     return `${symbol}${priceFormatter.format(value)}`
   }
 

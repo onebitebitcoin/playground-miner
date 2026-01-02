@@ -3188,6 +3188,15 @@ def _fetch_pykrx_history(ticker, start_year, end_year):
         rows.append((dt, price))
 
     rows.sort(key=lambda item: item[0])
+
+    # For current year, if we have recent data but not year-end data,
+    # add the latest price as a proxy for year-end closing price
+    if end_year == current_dt.year and rows:
+        last_row_dt = rows[-1][0]
+        # If last data point is not from December, it's still valid as latest price
+        if last_row_dt.year == current_dt.year:
+            logger.info('[%s] 현재 연도(%d) 최신 가격 포함: %s (%.2f)', stock_code, current_dt.year, last_row_dt.strftime('%Y-%m-%d'), rows[-1][1])
+
     logger.info('[%s] pykrx에서 데이터 %d개 가져옴 (%d-%d)', stock_code, len(rows), start_year, end_year)
     return rows
 
@@ -5471,8 +5480,17 @@ class PriceRetrieverAgent:
         """
         Check internal DB cache for price data.
         Returns cached data dict or None if not found.
+        For current year requests, returns None to force fresh data fetch.
         """
         from blocks.models import AssetPriceCache
+        from datetime import datetime as dt_class
+
+        current_year = dt_class.utcnow().year
+
+        # If requesting current year data, skip cache to get latest prices
+        if end_year >= current_year:
+            return None
+
         try:
             cache_entry = AssetPriceCache.objects.get(asset_id=asset_id)
 
