@@ -110,7 +110,9 @@
           :analysis-result-type="analysisResultType"
           :data-sources-text="dataSourcesText"
           :get-legend-label="getLegendLabel"
+          :refreshing-asset-token="refreshingAssetToken"
           @toggle-series="toggleSeries"
+          @refresh-asset="refreshFailedAsset"
         />
 
         <FinancePriceTable
@@ -328,6 +330,7 @@ const currentYear = new Date().getFullYear()
 const priceDisplayMode = ref('usd')
 const priceTableData = ref({})
 const customAssetResolving = ref(false)
+const refreshingAssetToken = ref('')
 const customAssets = ref([])
 const customAssetsLoading = ref(false)
 let Gt = 0
@@ -2030,6 +2033,85 @@ function toggleSeries(id) {
     next.add(id)
   }
   hiddenSeries.value = next
+}
+
+async function refreshFailedAsset(series) {
+  if (!series || !analysis.value) return
+
+  const refreshToken = normalizeAssetToken(
+    series?.metadata?.requested_id ||
+    series?.requested_id ||
+    series?.ticker ||
+    series?.id ||
+    series?.label
+  )
+
+  try {
+    if (refreshToken) {
+      refreshingAssetToken.value = refreshToken
+    }
+    customAssetResolving.value = true
+    appendProgressLogs(`${series.label || series.id} 데이터 다시 불러오는 중...`)
+
+    // Remove failed series from analysis
+    const assetTokens = buildTokenSetFromSeries(series)
+    if (assetTokens.size) {
+      const current = analysis.value
+      const nextSeries = Array.isArray(current.series)
+        ? current.series.filter((s) => !tokenSetsIntersect(assetTokens, buildTokenSetFromSeries(s)))
+        : []
+      analysis.value = {
+        ...current,
+        series: nextSeries
+      }
+    }
+
+    // Re-fetch the asset
+    const assetId = series.ticker || series.id || series.label
+    const result = await addSingleAsset({
+      assetId: assetId,
+      startYear: analysis.value.start_year,
+      endYear: analysis.value.end_year,
+      calculationMethod: analysisResultType.value,
+      includeDividends: includeDividends.value
+    })
+
+    if (result.series) {
+      // Add series to existing analysis
+      const currentAnalysis = analysis.value || {}
+      const currentSeries = currentAnalysis.series || []
+      const nextSeries = [...currentSeries, result.series]
+      const snapshot = buildRequestedAssetSnapshotFromSeries(result.series)
+      const nextRequestedAssets = upsertRequestedAssetsSnapshot(currentAnalysis.requested_assets, snapshot)
+      analysis.value = {
+        ...currentAnalysis,
+        series: nextSeries,
+        requested_assets: nextRequestedAssets
+      }
+      updateColorAssignments([result.series])
+
+      // Add chart data table entry
+      if (result.chartDataTableEntry) {
+        const currentChartData = currentAnalysis.chart_data_table || []
+        analysis.value.chart_data_table = [...currentChartData, result.chartDataTableEntry]
+        processYearlyPrices([result.chartDataTableEntry], { merge: true })
+      }
+
+      ensureMissingPriceEntries(nextRequestedAssets.length ? nextRequestedAssets : customAssets.value)
+      appendProgressLogs(`✓ ${series.label || series.id} 데이터 불러오기 성공`)
+    }
+  } catch (error) {
+    customAssetError.value = error.message || '자산 데이터를 불러오는 중 오류가 발생했습니다.'
+    appendProgressLogs(`오류: ${error.message}`)
+    setTimeout(() => {
+      customAssetError.value = ''
+    }, 5000)
+  } finally {
+    if (refreshToken && refreshingAssetToken.value === refreshToken) {
+      refreshingAssetToken.value = ''
+    }
+    customAssetResolving.value = false
+  }
 }
 
 function isBitcoinLabel(label) {

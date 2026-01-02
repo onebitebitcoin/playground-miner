@@ -53,7 +53,24 @@
         <div class="text-[11px] sm:text-xs text-slate-500 text-right flex-shrink-0 ml-2">
           <template v-if="isFailedSeries(series)">
             <p class="whitespace-nowrap text-rose-500 font-semibold">데이터 불러오기 실패</p>
-            <p class="whitespace-nowrap text-slate-400">{{ getFailureReason(series) }}</p>
+            <p class="whitespace-nowrap text-slate-400 mb-1">{{ getFailureReason(series) }}</p>
+            <button
+              @click.stop="handleRefresh(series)"
+              class="inline-flex items-center gap-1 px-2 py-1 text-[10px] sm:text-[11px] font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition disabled:opacity-60 disabled:cursor-not-allowed"
+              :disabled="isRefreshingSeries(series)"
+              title="다시 시도"
+            >
+              <svg
+                class="w-3 h-3"
+                :class="isRefreshingSeries(series) ? 'animate-spin text-blue-600' : ''"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+              </svg>
+              <span>{{ isRefreshingSeries(series) ? '불러오는 중...' : '새로고침' }}</span>
+            </button>
           </template>
           <template v-else>
             <p class="whitespace-nowrap">{{ analysisResultType === 'price' ? '연평균 상승률' : analysisResultType === 'yearly_growth' ? '평균 증감률' : '연평균' }} {{ formatPercent(series.annualized_return_pct) }}</p>
@@ -85,7 +102,8 @@ const props = defineProps({
   hiddenSeries: Object, // Set
   analysisResultType: String,
   dataSourcesText: String,
-  getLegendLabel: Function
+  getLegendLabel: Function,
+  refreshingAssetToken: String
 })
 
 const legendLabel = (series) => {
@@ -95,11 +113,25 @@ const legendLabel = (series) => {
   return getDefaultLegendLabel(series)
 }
 
-const emit = defineEmits(['toggleSeries'])
+const emit = defineEmits(['toggleSeries', 'refreshAsset'])
 
 const isFailedSeries = (series) => {
   if (!series) return false
   return series.status === 'failed'
+}
+
+const normalizeToken = (value) => (value || '').toString().trim().toLowerCase()
+
+const isRefreshingSeries = (series) => {
+  if (!series || !props.refreshingAssetToken) return false
+  const candidates = [
+    series?.metadata?.requested_id,
+    series?.requested_id,
+    series?.ticker,
+    series?.id,
+    series?.label
+  ]
+  return candidates.some((candidate) => candidate && normalizeToken(candidate) === props.refreshingAssetToken)
 }
 
 const getFailureReason = (series) => {
@@ -110,5 +142,10 @@ const getFailureReason = (series) => {
 function handleToggle(series) {
   if (!series || isFailedSeries(series)) return
   emit('toggleSeries', series.id)
+}
+
+function handleRefresh(series) {
+  if (!series) return
+  emit('refreshAsset', series)
 }
 </script>

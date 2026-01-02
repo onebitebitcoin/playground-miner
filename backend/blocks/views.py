@@ -10,7 +10,7 @@ import hashlib
 import uuid
 import os
 import contextvars
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from collections import defaultdict
 import requests
 from . import yahoo_finance
@@ -8244,6 +8244,20 @@ def _resolve_assets(asset_names):
     return resolved
 
 
+def _resolve_single_custom_asset(asset_name):
+    """
+    Lightweight helper to resolve a single asset using the multi-asset resolver.
+    Returns the first resolved asset dict or None.
+    """
+    if not asset_name:
+        return None
+
+    resolved = _resolve_assets([asset_name])
+    if resolved:
+        return resolved[0]
+    return None
+
+
 def _cache_asset_prices(asset_id, label, category=None):
     """
     Fetch and cache historical price data for an asset from 2009 to present.
@@ -8753,15 +8767,33 @@ def _build_chart_data_table_entry(asset_id, cfg, history, source, start_year, en
     for raw_year, value in history:
         if raw_year is None or value is None:
             continue
-        year = raw_year
-        if isinstance(raw_year, datetime):
-            year = raw_year.year
+
+        normalized_year = raw_year
+        if isinstance(raw_year, (datetime, date)):
+            normalized_year = raw_year.year
+        elif hasattr(raw_year, 'year'):
+            try:
+                normalized_year = raw_year.year
+            except Exception:
+                pass
+
+        if isinstance(normalized_year, str):
+            normalized_year = normalized_year.strip()
+            if not normalized_year:
+                continue
+            normalized_year = normalized_year.split('-')[0]
+
         try:
-            year = int(year)
+            year = int(normalized_year)
         except (TypeError, ValueError):
             continue
+
+        normalized_value = _safe_float(value, allow_negative=True)
+        if normalized_value is None:
+            continue
+
         if year >= start_year and year <= end_year:
-            entry['prices'].append({'year': year, 'value': value})
+            entry['prices'].append({'year': year, 'value': normalized_value})
 
     dividends = []
     if isinstance(dividend_map, dict):

@@ -153,6 +153,7 @@
             </div>
 
             <svg
+              ref="svgRef"
               :viewBox="`0 0 ${dimensions.width} ${dimensions.height}`"
               role="img"
               class="w-full h-full"
@@ -724,6 +725,7 @@ const tooltip = ref({
   left: 50,
   top: 50
 })
+const svgRef = ref(null)
 const showNormalizationInfo = ref(false)
 const showTaxInfo = ref(false)
 const showDividendInfo = ref(false)
@@ -1037,8 +1039,46 @@ function tooltipValueFormatter(point) {
 }
 
 function showTooltip(seriesLabel, point) {
-  const left = Math.max(5, Math.min(95, (point.x / dimensions.width) * 100))
-  const top = Math.max(10, Math.min(90, (point.y / dimensions.height) * 100))
+  if (!svgRef.value) {
+    // Fallback to old calculation if ref not available
+    const left = Math.max(5, Math.min(95, (point.x / dimensions.width) * 100))
+    const top = Math.max(10, Math.min(90, (point.y / dimensions.height) * 100))
+    tooltip.value = {
+      show: true,
+      label: seriesLabel,
+      valueText: tooltipValueFormatter(point),
+      year: point.year,
+      left,
+      top
+    }
+    return
+  }
+
+  // Get actual SVG bounding rect
+  const svgRect = svgRef.value.getBoundingClientRect()
+  const containerRect = svgRef.value.parentElement.getBoundingClientRect()
+
+  // Calculate viewBox to screen transformation
+  const scaleX = svgRect.width / dimensions.width
+  const scaleY = svgRect.height / dimensions.height
+
+  // Account for preserveAspectRatio="xMidYMid meet"
+  const scale = Math.min(scaleX, scaleY)
+  const actualWidth = dimensions.width * scale
+  const actualHeight = dimensions.height * scale
+
+  // Calculate offset from center alignment
+  const offsetX = (svgRect.width - actualWidth) / 2
+  const offsetY = (svgRect.height - actualHeight) / 2
+
+  // Transform viewBox coordinates to actual pixel position
+  const pixelX = point.x * scale + offsetX
+  const pixelY = point.y * scale + offsetY
+
+  // Convert to percentage of container
+  const left = Math.max(5, Math.min(95, (pixelX / containerRect.width) * 100))
+  const top = Math.max(10, Math.min(90, (pixelY / containerRect.height) * 100))
+
   tooltip.value = {
     show: true,
     label: seriesLabel,
