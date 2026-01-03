@@ -349,6 +349,7 @@ let abortController = null
 const progressLogs = ref([])
 const analysisLogs = computed(() => progressLogs.value)
 const showDebugLogs = ref(false)
+const isAdmin = ref(typeof window !== 'undefined' ? localStorage.getItem('isAdmin') === 'true' : false)
 
 function appendProgressLogs(...messages) {
   if (!messages.length) return
@@ -406,7 +407,18 @@ const quickCompareGroups = ref([])
 const quickCompareGroupsLoading = ref(false)
 const selectedQuickCompareGroup = ref('')
 const feKey = ref('')
-const allowRealtimeLogs = import.meta.env.DEV
+const allowRealtimeLogs = computed(() => import.meta.env.DEV || isAdmin.value)
+
+function syncAdminStatus() {
+  if (typeof window === 'undefined') return
+  isAdmin.value = localStorage.getItem('isAdmin') === 'true'
+}
+
+function handleStorageEvent(event) {
+  if (event.key === 'isAdmin') {
+    isAdmin.value = event.newValue === 'true'
+  }
+}
 
 watch(loading, (val) => {
   if (!val && searchButtonAttention.value) {
@@ -458,6 +470,16 @@ function isCacheIndicator(msg) {
   const low = msg.toLowerCase()
   return !!(msg.includes('✓') || low.includes('cache hit') || low.includes('캐시됨') || low.includes('수집 완료') || low.includes('데이터 포인트'))
 }
+
+onMounted(() => {
+  window.addEventListener('storage', handleStorageEvent)
+  window.addEventListener('nicknameChanged', syncAdminStatus)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('storage', handleStorageEvent)
+  window.removeEventListener('nicknameChanged', syncAdminStatus)
+})
 
 function advanceToStage(key, { immediate = false } = {}) {
   const index = LOADING_STAGES.findIndex((s) => s.key === key)
