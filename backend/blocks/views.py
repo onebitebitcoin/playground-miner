@@ -2894,6 +2894,7 @@ def admin_finance_logs_view(request):
             'error_message': log.error_message,
             'assets_count': log.assets_count,
             'processing_time_ms': log.processing_time_ms,
+            'is_prefetch': log.is_prefetch,
             'created_at': log.created_at.isoformat(),
         })
 
@@ -2975,12 +2976,8 @@ def _log_finance_query(user_identifier, prompt, quick_requests, context_key, suc
     Log finance query to database.
 
     Args:
-        is_prefetch: If True, skip logging (used for dividend prefetch requests)
+        is_prefetch: Whether this request originated from a dividend prefetch run
     """
-    # Skip logging for prefetch requests
-    if is_prefetch:
-        return
-
     try:
         FinanceQueryLog.objects.create(
             user_identifier=user_identifier,
@@ -2990,7 +2987,8 @@ def _log_finance_query(user_identifier, prompt, quick_requests, context_key, suc
             success=success,
             error_message=error_message,
             assets_count=assets_count,
-            processing_time_ms=processing_time_ms
+            processing_time_ms=processing_time_ms,
+            is_prefetch=is_prefetch,
         )
     except Exception as e:
         logger.error(f"Failed to log finance query: {e}")
@@ -6299,7 +6297,7 @@ def finance_historical_returns_view(request):
     backend_logger.info("Include Dividends: %s", include_dividends)
     is_prefetch = bool(payload.get('isPrefetch') or payload.get('is_prefetch'))
     if is_prefetch:
-        backend_logger.info("Request Type: Prefetch (will skip logging)")
+        backend_logger.info("Request Type: Prefetch")
     stream_channel = (payload.get('stream_channel') or '').strip()
     if stream_channel:
         finance_stream_manager.prepare_channel(stream_channel)

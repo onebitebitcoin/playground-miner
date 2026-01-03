@@ -512,6 +512,7 @@ class FinanceQueryLog(models.Model):
     error_message = models.TextField(blank=True, default='')  # Error if failed
     assets_count = models.PositiveSmallIntegerField(default=0)  # Number of assets analyzed
     processing_time_ms = models.PositiveIntegerField(null=True, blank=True)  # Processing time in milliseconds
+    is_prefetch = models.BooleanField(default=False)  # Whether this entry is from a prefetch request
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

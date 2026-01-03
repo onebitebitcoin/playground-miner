@@ -491,6 +491,12 @@
                     <span class="truncate block" :title="log.prompt">
                       {{ log.prompt || '-' }}
                     </span>
+                    <span
+                      v-if="log.is_prefetch"
+                      class="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded-full border border-blue-100 bg-blue-50 text-blue-600"
+                    >
+                      Prefetch
+                    </span>
                     <button
                       v-if="log.prompt"
                       class="text-gray-400 hover:text-gray-600 flex-shrink-0"
@@ -725,7 +731,10 @@ const loadFinanceLogs = async () => {
     const data = await response.json()
 
     if (data.ok) {
-      financeLogs.value = data.logs || []
+      financeLogs.value = (data.logs || []).map((log) => ({
+        ...log,
+        is_prefetch: Boolean(log.is_prefetch)
+      }))
       financeLogsTotal.value = data.total || 0
     } else {
       props.showError(data.error || '로그를 불러올 수 없습니다')

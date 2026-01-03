@@ -33,12 +33,13 @@ async function handleResponse(response) {
   return payload
 }
 
-export async function fetchHistoricalReturns({ prompt, quickRequests, contextKey, customAssets, includeDividends, signal }) {
+export async function fetchHistoricalReturns({ prompt, quickRequests, contextKey, customAssets, includeDividends, isPrefetch = false, signal }) {
   const body = {
     prompt: prompt || '',
     quick_requests: Array.isArray(quickRequests) ? quickRequests : [],
     custom_assets: Array.isArray(customAssets) ? customAssets : [],
-    include_dividends: Boolean(includeDividends)
+    include_dividends: Boolean(includeDividends),
+    is_prefetch: Boolean(isPrefetch)
   }
   if (contextKey) {
     body.context_key = contextKey
