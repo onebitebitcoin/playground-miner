@@ -98,7 +98,7 @@
           :price-data="priceTableData"
           :calculation-method="analysisResultType"
           @update:start-year="displayStartYear = $event"
-          @toggle-tax="includeTax = !includeTax"
+          @toggle-tax="handleTaxToggle"
           @toggle-dividends="handleDividendToggle"
         />
 
@@ -181,9 +181,6 @@ import {
 } from '@/services/financeService'
 import { defaultFinanceQuickCompareGroups } from '@/config/financeQuickCompareGroups'
 
-const TAX_RATE = 0.22
-const KR_INTEREST_TAX_RATE = 0.154
-const KR_EQUITY_TAX_FREE_ALLOWANCE = 50000000
 const HERO_ANIMATION_DURATION = 2800
 const MIN_DIVIDEND_YIELD_DISPLAY = 0.1
 const LOADING_STAGES = [
@@ -316,8 +313,8 @@ const hiddenSeries = ref(new Set())
 const customAssetError = ref('')
 const includeTax = ref(true)
 const includeDividends = ref(true)
-const dividendCache = reactive({ true: null, false: null })
-const dividendPrefetchStatus = reactive({ true: false, false: false })
+const dividendCache = reactive({})
+const dividendPrefetchStatus = reactive({})
 const dividendTogglePending = ref(null)
 
 let prefetchController = null
@@ -594,11 +591,11 @@ const filteredSeries = computed(() => {
   if (!((_analysis$value = analysis.value) != null && (_analysis$value$serie = _analysis$value.series) != null && _analysis$value$serie.length)) return []
   const startY = displayStartYear.value || analysis.value.start_year
   const allowKoreanEquities = selectedContextKey.value === 'kr_equity' || analysisContainsKoreanEquities.value
-  const series = analysis.value.series.filter((s) =>
-    isBitcoinLabel(s.label) ||
-    !isKoreanEquitySeries(s) ||
-    allowKoreanEquities
-  )
+    const series = analysis.value.series.filter((s) =>
+      isBitcoinLabel(s.label) ||
+      !isKoreanEquitySeries(s) ||
+      allowKoreanEquities
+    )
 
   if (!startY) return series
 
@@ -607,8 +604,6 @@ const filteredSeries = computed(() => {
     const validPoints = s.points.filter((p) => p.year >= startY)
     if (validPoints.length < 2) return null
     const sortedPoints = [...validPoints].sort((a, b) => a.year - b.year)
-    const taxTreatment = includeTax.value ? resolveTaxTreatment(s) : null
-    const applyTax = Boolean(taxTreatment)
 
     if (isPrice) {
       const startV = resolvePointValue(sortedPoints[0])
@@ -619,25 +614,15 @@ const filteredSeries = computed(() => {
       let annualizedReturn = 0
       let multipleFromStart = lastV / startV
       if (duration > 0 && Number.isFinite(multipleFromStart) && multipleFromStart > 0) {
-        const adjustedMultiple = applyTax ? applyTaxToMultiple(multipleFromStart, duration, taxTreatment) : multipleFromStart
-        multipleFromStart = adjustedMultiple
-        const rate = Math.pow(adjustedMultiple, 1 / duration) - 1
+        const rate = Math.pow(multipleFromStart, 1 / duration) - 1
         if (Number.isFinite(rate)) {
           annualizedReturn = rate * 100
         }
-      } else if (applyTax && Number.isFinite(multipleFromStart) && multipleFromStart > 0) {
-        multipleFromStart = applyTaxToMultiple(multipleFromStart, 0, taxTreatment)
       }
       const points = sortedPoints.map((p) => {
         const v = resolvePointValue(p)
         if (!Number.isFinite(v) || v <= 0) return null
         let multiple = v / startV
-
-        if (applyTax) {
-          const yearsElapsed = p.year - sortedPoints[0].year
-          multiple = applyTaxToMultiple(multiple, yearsElapsed, taxTreatment)
-        }
-
         return { ...p, unit: s.unit || p.unit, multiple, value: multiple }
       }).filter(Boolean)
       if (points.length < 2) return null
@@ -652,14 +637,13 @@ const filteredSeries = computed(() => {
     if (Number.isFinite(startMultiple) && startMultiple > 0 && Number.isFinite(endMultiple) && endMultiple > 0) {
       const baseMultiple = endMultiple / startMultiple
       if (duration > 0 && Number.isFinite(baseMultiple) && baseMultiple > 0) {
-        const adjustedMultiple = applyTax ? applyTaxToMultiple(baseMultiple, duration, taxTreatment) : baseMultiple
-        multipleFromStart = adjustedMultiple
-        const rate = Math.pow(adjustedMultiple, 1 / duration) - 1
+        multipleFromStart = baseMultiple
+        const rate = Math.pow(baseMultiple, 1 / duration) - 1
         if (Number.isFinite(rate)) {
           annualizedReturn = rate * 100
         }
       } else if (Number.isFinite(baseMultiple) && baseMultiple > 0) {
-        multipleFromStart = applyTax ? applyTaxToMultiple(baseMultiple, 0, taxTreatment) : baseMultiple
+        multipleFromStart = baseMultiple
       }
     }
     const points = sortedPoints.map((p) => {
@@ -670,9 +654,6 @@ const filteredSeries = computed(() => {
       }
       if (!Number.isFinite(relativeMultiple) || relativeMultiple <= 0) relativeMultiple = 1
       const yearsElapsed = p.year - sortedPoints[0].year
-      if (applyTax) {
-        relativeMultiple = applyTaxToMultiple(relativeMultiple, yearsElapsed, taxTreatment)
-      }
       let cagr = 0
       if (yearsElapsed > 0 && relativeMultiple > 0) {
         const rate = Math.pow(relativeMultiple, 1 / yearsElapsed) - 1
@@ -1342,33 +1323,51 @@ async function appendAssetToExistingAnalysis(assetId) {
       startYear: analysis.value.start_year,
       endYear: analysis.value.end_year,
       calculationMethod: analysisResultType.value,
-      includeDividends: includeDividends.value
+      includeDividends: includeDividends.value,
+      includeTax: includeTax.value
     })
 
     if (result.series) {
-      // Add series to existing analysis
       const currentAnalysis = analysis.value || {}
-      const currentSeries = currentAnalysis.series || []
-      const nextSeries = [...currentSeries, result.series]
+      const nextSeries = mergeSeriesLists(currentAnalysis.series || [], [result.series])
       const snapshot = buildRequestedAssetSnapshotFromSeries(result.series)
       const nextRequestedAssets = upsertRequestedAssetsSnapshot(currentAnalysis.requested_assets, snapshot)
-      analysis.value = {
+      const baseChartData = Array.isArray(currentAnalysis.chart_data_table) ? currentAnalysis.chart_data_table : []
+      const nextChartData = result.chartDataTableEntry
+        ? mergeChartDataEntries(baseChartData, [result.chartDataTableEntry])
+        : baseChartData
+      const variantPayload = result.taxVariants || result.tax_variants
+
+      const nextAnalysis = {
         ...currentAnalysis,
         series: nextSeries,
-        requested_assets: nextRequestedAssets
+        requested_assets: nextRequestedAssets,
+        chart_data_table: nextChartData
       }
+      mergeTaxVariantsIntoAnalysis(nextAnalysis, variantPayload)
+      analysis.value = nextAnalysis
       updateColorAssignments([result.series])
 
-      // Add chart data table entry
       if (result.chartDataTableEntry) {
-        const currentChartData = currentAnalysis.chart_data_table || []
-        analysis.value.chart_data_table = [...currentChartData, result.chartDataTableEntry]
-
-        // Process the new entry for price table (merge with existing data)
         processYearlyPrices([result.chartDataTableEntry], { merge: true })
       }
 
       ensureMissingPriceEntries(nextRequestedAssets.length ? nextRequestedAssets : customAssets.value)
+
+      const activeKey = dividendVariantKey(includeDividends.value, includeTax.value)
+      const altTaxKey = dividendVariantKey(includeDividends.value, !includeTax.value)
+      dividendCache[activeKey] = nextAnalysis
+      dividendCache[altTaxKey] = nextAnalysis
+      dividendPrefetchStatus[activeKey] = true
+      dividendPrefetchStatus[altTaxKey] = true
+
+      const otherDividendKey = dividendVariantKey(!includeDividends.value, includeTax.value)
+      const otherAltKey = dividendVariantKey(!includeDividends.value, !includeTax.value)
+      delete dividendCache[otherDividendKey]
+      delete dividendCache[otherAltKey]
+      delete dividendPrefetchStatus[otherDividendKey]
+      delete dividendPrefetchStatus[otherAltKey]
+
       appendProgressLogs(`✓ ${assetId} 추가 완료`)
     }
   } catch (error) {
@@ -1579,6 +1578,67 @@ function normalizeLabelAlias(label) {
   return label.replace(/\([^)]*\)/g, '').trim().toLowerCase()
 }
 
+function buildTokenSetFromTableEntry(entry) {
+  const tokens = new Set()
+  if (!entry) return tokens
+  const addToken = (value) => {
+    const token = normalizeAssetToken(value)
+    if (token) tokens.add(token)
+  }
+  ;[entry.id, entry.label, entry.requested_id].forEach(addToken)
+  if (Array.isArray(entry.aliases)) {
+    entry.aliases.forEach(addToken)
+  }
+  const alias = normalizeLabelAlias(entry.label || '')
+  if (alias) {
+    const normalizedAlias = normalizeAssetToken(alias)
+    if (normalizedAlias) tokens.add(normalizedAlias)
+  }
+  return tokens
+}
+
+function mergeChartDataEntries(existingEntries, newEntries) {
+  const merged = Array.isArray(existingEntries) ? [...existingEntries] : []
+  newEntries.forEach((entry) => {
+    if (!entry) return
+    const tokens = buildTokenSetFromTableEntry(entry)
+    if (tokens.size) {
+      for (let idx = merged.length - 1; idx >= 0; idx -= 1) {
+        const existing = merged[idx]
+        if (tokenSetsIntersect(tokens, buildTokenSetFromTableEntry(existing))) {
+          merged.splice(idx, 1)
+        }
+      }
+    }
+    merged.push(entry)
+  })
+  return merged
+}
+
+function mergeTaxVariantsIntoAnalysis(targetAnalysis, variantsPayload) {
+  if (!targetAnalysis || !variantsPayload) return
+  targetAnalysis.tax_variants = targetAnalysis.tax_variants || {}
+  Object.entries(variantsPayload).forEach(([key, payload]) => {
+    if (!payload) return
+    const seriesList = Array.isArray(payload.series)
+      ? payload.series
+      : payload.series
+        ? [payload.series]
+        : []
+    let chartEntries = payload.chart_data_table || payload.chartDataTable || []
+    if (!Array.isArray(chartEntries) && payload.chart_data_table_entry) {
+      chartEntries = [payload.chart_data_table_entry]
+    }
+    const existingVariant = targetAnalysis.tax_variants[key] || { series: [], chart_data_table: [], summary: '' }
+    targetAnalysis.tax_variants[key] = {
+      ...existingVariant,
+      series: mergeSeriesLists(existingVariant.series, seriesList),
+      chart_data_table: mergeChartDataEntries(existingVariant.chart_data_table, chartEntries),
+      summary: existingVariant.summary || payload.summary || ''
+    }
+  })
+}
+
 function isTickerLikeLabel(label) {
   const text = (label || '').trim()
   if (!text) return false
@@ -1651,6 +1711,24 @@ function tokenSetsIntersect(primary, secondary) {
     if (primary.has(token)) return true
   }
   return false
+}
+
+function mergeSeriesLists(existingList, additions) {
+  const merged = Array.isArray(existingList) ? [...existingList] : []
+  additions.forEach((series) => {
+    if (!series) return
+    const tokens = buildTokenSetFromSeries(series)
+    if (tokens.size) {
+      for (let idx = merged.length - 1; idx >= 0; idx -= 1) {
+        const existing = merged[idx]
+        if (tokenSetsIntersect(tokens, buildTokenSetFromSeries(existing))) {
+          merged.splice(idx, 1)
+        }
+      }
+    }
+    merged.push(series)
+  })
+  return merged
 }
 
 function buildFailedLegendSeries(asset) {
@@ -2181,7 +2259,8 @@ async function refreshFailedAsset(series) {
       startYear: analysis.value.start_year,
       endYear: analysis.value.end_year,
       calculationMethod: analysisResultType.value,
-      includeDividends: includeDividends.value
+      includeDividends: includeDividends.value,
+      includeTax: includeTax.value
     })
 
     if (result.series) {
@@ -2233,66 +2312,6 @@ function isKoreanM2Label(label) {
   const lower = label.toLowerCase()
   const hasKorea = lower.includes('한국') || lower.includes('korea')
   return hasKorea && lower.includes('m2')
-}
-
-function resolveTaxTreatment(series) {
-  if (!series || isBitcoinLabel(series.label)) return null
-  const syntheticType = (series?.metadata?.synthetic_asset || series?.synthetic_asset || '').toLowerCase()
-  if (syntheticType === 'deposit') {
-    const targetRate = Number(series?.metadata?.target_rate_pct ?? series?.target_rate_pct)
-    return {
-      type: 'kr_deposit',
-      rate: KR_INTEREST_TAX_RATE,
-      targetRatePct: Number.isFinite(targetRate) ? targetRate : null
-    }
-  }
-  if (isKoreanEquitySeries(series)) {
-    return {
-      type: 'kr',
-      rate: TAX_RATE,
-      allowance: KR_EQUITY_TAX_FREE_ALLOWANCE
-    }
-  }
-  const category = (series.category || '').toLowerCase()
-  const unit = (series.unit || '').toLowerCase()
-  const label = (series.label || '').toLowerCase()
-  const id = (series.id || '').toLowerCase()
-  const isUsEquity =
-    category.includes('미국') ||
-    label.includes('미국') ||
-    id.endsWith('.us')
-  if (isUsEquity && unit === 'usd') {
-    return {
-      type: 'us',
-      rate: TAX_RATE
-    }
-  }
-  return null
-}
-
-function applyTaxToMultiple(multiple, yearsElapsed, taxTreatment) {
-  if (!taxTreatment) return multiple
-  if (!Number.isFinite(multiple) || multiple <= 0) return multiple
-  if (taxTreatment.type === 'us' || taxTreatment.type === 'kr_deposit') {
-    if (!Number.isFinite(yearsElapsed) || yearsElapsed <= 0) return multiple
-    const cagr = Math.pow(multiple, 1 / yearsElapsed) - 1
-    if (!Number.isFinite(cagr)) return multiple
-    const rate = taxTreatment.rate ?? (taxTreatment.type === 'us' ? TAX_RATE : KR_INTEREST_TAX_RATE)
-    const adjusted = cagr * (1 - rate)
-    return Math.pow(1 + adjusted, yearsElapsed)
-  }
-  if (taxTreatment.type === 'kr') {
-    const principal = baseInvestmentWon.value
-    if (!Number.isFinite(principal) || principal <= 0) return multiple
-    const gain = (multiple - 1) * principal
-    if (gain <= 0) return multiple
-    const allowance = Number.isFinite(taxTreatment.allowance) ? taxTreatment.allowance : KR_EQUITY_TAX_FREE_ALLOWANCE
-    const taxableGain = Math.max(0, gain - allowance)
-    const afterTaxGain = (gain - taxableGain) + taxableGain * (1 - (taxTreatment.rate ?? TAX_RATE))
-    const afterTaxMultiple = (principal + afterTaxGain) / principal
-    return Math.max(afterTaxMultiple, 0)
-  }
-  return multiple
 }
 
 function startHeroTypewriterAnimation() {
@@ -2453,6 +2472,7 @@ async function requestAgentAnalysis(options = {}) {
     const streamOptions = {
       ...requestContext,
       includeDividends: includeDividends.value,
+      includeTax: includeTax.value,
       signal: abortController.signal,
       onLog: (msg) => {
         appendProgressLogs(msg)
@@ -2460,7 +2480,7 @@ async function requestAgentAnalysis(options = {}) {
     }
 
     const result = await fetchHistoricalReturnsStream(streamOptions)
-    applyAnalysisResult(result, { shouldCache: true, resetColors: true })
+    applyAnalysisResult(result, { shouldCache: true, resetColors: true, preferredTaxMode: includeTax.value })
     prefetchDividendVariant(!includeDividends.value)
     completeLoadingStageTracking()
 
@@ -2486,12 +2506,34 @@ const analysisSummaryContent = ref('')
 const Te = ref('')
 const ee = ref('')
 
+function setAnalysisTaxVariant(result, taxEnabled) {
+  if (!result) return false
+  const variants = result.tax_variants || result.taxVariants
+  if (!variants) {
+    result.include_tax = taxEnabled
+    return false
+  }
+  const key = taxEnabled ? 'tax_on' : 'tax_off'
+  const variant = variants[key]
+  if (!variant) {
+    result.include_tax = taxEnabled
+    return false
+  }
+  result.series = Array.isArray(variant.series) ? variant.series : []
+  result.chart_data_table = Array.isArray(variant.chart_data_table) ? variant.chart_data_table : (variant.table || [])
+  result.summary = typeof variant.summary === 'string' ? variant.summary : result.summary
+  result.include_tax = taxEnabled
+  return true
+}
+
 function resetDividendCache() {
   cancelDividendPrefetch()
-  dividendCache.true = null
-  dividendCache.false = null
-  dividendPrefetchStatus.true = false
-  dividendPrefetchStatus.false = false
+  Object.keys(dividendCache).forEach((key) => {
+    delete dividendCache[key]
+  })
+  Object.keys(dividendPrefetchStatus).forEach((key) => {
+    delete dividendPrefetchStatus[key]
+  })
   dividendTogglePending.value = null
 }
 
@@ -2503,7 +2545,7 @@ function cancelDividendPrefetch() {
   }
 }
 
-function applyAnalysisResult(result, { shouldCache = true, preserveHidden = true, resetColors = false } = {}) {
+function applyAnalysisResult(result, { shouldCache = true, preserveHidden = true, resetColors = false, preferredTaxMode = null } = {}) {
   if (!result) return
   dividendTogglePending.value = null
   const prevHidden = preserveHidden ? new Set(hiddenSeries.value) : null
@@ -2516,7 +2558,12 @@ function applyAnalysisResult(result, { shouldCache = true, preserveHidden = true
 
   const inc = Object.prototype.hasOwnProperty.call(result, 'include_dividends') ? !!result.include_dividends : includeDividends.value
   includeDividends.value = inc
-  dividendPrefetchStatus[orKey(inc)] = true
+  const taxFromResult = Object.prototype.hasOwnProperty.call(result, 'include_tax') ? !!result.include_tax : includeTax.value
+  const nextTaxMode = typeof preferredTaxMode === 'boolean' ? preferredTaxMode : taxFromResult
+  includeTax.value = nextTaxMode
+  setAnalysisTaxVariant(analysis.value, includeTax.value)
+  dividendPrefetchStatus[dividendVariantKey(inc, taxFromResult)] = true
+  dividendPrefetchStatus[dividendVariantKey(inc, !taxFromResult)] = true
 
   displayStartYear.value = result.start_year
   sliderMinYear.value = result.start_year
@@ -2536,19 +2583,23 @@ function applyAnalysisResult(result, { shouldCache = true, preserveHidden = true
   ensureMissingPriceEntries(placeholderTargets)
 
   if (shouldCache) {
-    const key = orKey(inc)
-    dividendCache[key] = result
+    const primaryKey = dividendVariantKey(inc, taxFromResult)
+    const alternateKey = dividendVariantKey(inc, !taxFromResult)
+    dividendCache[primaryKey] = result
+    dividendCache[alternateKey] = result
+    dividendPrefetchStatus[primaryKey] = true
+    dividendPrefetchStatus[alternateKey] = true
   }
 }
 
-function orKey(val) {
-  return val ? 'true' : 'false'
+function dividendVariantKey(val, tax = includeTax.value) {
+  return `${tax ? 'tax1' : 'tax0'}:${val ? 'div1' : 'div0'}`
 }
 
 function handleDividendToggle() {
   if (loading.value || !analysis.value) return
   const nextVal = !includeDividends.value
-  const key = orKey(nextVal)
+  const key = dividendVariantKey(nextVal)
   const cached = dividendCache[key]
 
   if (!cached) {
@@ -2559,23 +2610,36 @@ function handleDividendToggle() {
 
   dividendTogglePending.value = null
   includeDividends.value = nextVal
-  applyAnalysisResult(cached, { preserveHidden: true })
+  applyAnalysisResult(cached, { preserveHidden: true, preferredTaxMode: includeTax.value })
   prefetchDividendVariant(!nextVal)
+}
+
+function handleTaxToggle() {
+  if (loading.value || !analysis.value) return
+  const nextVal = !includeTax.value
+  includeTax.value = nextVal
+  const applied = setAnalysisTaxVariant(analysis.value, nextVal)
+  if (!applied) {
+    requestAgentAnalysis({ preserveCache: true })
+    return
+  }
+  dividendPrefetchStatus[dividendVariantKey(includeDividends.value, nextVal)] = true
 }
 
 async function prefetchDividendVariant(val) {
   const request = lastAnalysisRequest.value
   if (!request) return
-  const key = orKey(val)
+  const requestTaxState = includeTax.value
+  const key = dividendVariantKey(val, requestTaxState)
   if (dividendCache[key]) {
     dividendPrefetchStatus[key] = true
     return
   }
-  if (prefetchController && dividendPrefetchPromise && val === prefetchController.val) return
+  if (prefetchController && dividendPrefetchPromise && key === prefetchController.key) return
 
   cancelDividendPrefetch()
   prefetchController = new AbortController()
-  prefetchController.val = val
+  prefetchController.key = key
   dividendPrefetchStatus[key] = false
 
   let wasSuccess = false
@@ -2583,15 +2647,19 @@ async function prefetchDividendVariant(val) {
     const result = await fetchHistoricalReturns({
       ...request,
       includeDividends: val,
+      includeTax: requestTaxState,
       isPrefetch: true,  // Mark as prefetch for logging/analytics
       signal: prefetchController.signal
     })
     if (result && result.ok) {
       dividendCache[key] = result
       dividendPrefetchStatus[key] = true
+      const altKey = dividendVariantKey(val, !requestTaxState)
+      dividendCache[altKey] = result
+      dividendPrefetchStatus[altKey] = true
       if (dividendTogglePending.value === val) {
         includeDividends.value = val
-        applyAnalysisResult(result, { preserveHidden: true })
+        applyAnalysisResult(result, { preserveHidden: true, preferredTaxMode: includeTax.value })
         dividendTogglePending.value = null
         wasSuccess = true
       }

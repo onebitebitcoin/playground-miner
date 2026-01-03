@@ -1,3 +1,4 @@
+import copy
 import csv
 import io
 import json
@@ -4249,9 +4250,17 @@ def _normalize_dividend_history(dividend_map):
     return normalized
 
 
-def _apply_dividend_reinvestment_to_series(adjusted_series, dividend_map):
+def _apply_dividend_reinvestment_to_series(adjusted_series, dividend_map, tax_rate=0.0):
     """
     Given a series of (year, price) tuples, adjust them to reflect dividend reinvestment.
+
+    Args:
+        adjusted_series: List of (year, price) tuples
+        dividend_map: Dictionary of {year: dividend_amount}
+        tax_rate: Dividend tax rate (0.0 to 1.0). 0.15 means 15% tax
+                  0.0 = no tax (세전 배당 재투자)
+                  0.15 = 15% tax (미국 주식)
+                  0.154 = 15.4% tax (한국 주식)
     """
     if not adjusted_series or not dividend_map:
         return adjusted_series
@@ -4259,6 +4268,10 @@ def _apply_dividend_reinvestment_to_series(adjusted_series, dividend_map):
     normalized_dividends = _normalize_dividend_history(dividend_map)
     if not normalized_dividends:
         return adjusted_series
+
+    # Calculate after-tax multiplier (1 - tax_rate)
+    # 예: 세율 15% → 0.85 (배당의 85%만 재투자)
+    after_tax_multiplier = 1.0 - tax_rate
 
     reinvested_series = []
     current_value = adjusted_series[0][1]
@@ -4273,9 +4286,11 @@ def _apply_dividend_reinvestment_to_series(adjusted_series, dividend_map):
             return adjusted_series
 
         # Reinvest dividends from the previous year at the previous year's price
+        # Apply tax deduction: only reinvest (dividend * after_tax_multiplier)
         dividend_amount = normalized_dividends.get(prev_year, 0.0)
         if dividend_amount > 0:
-            current_value *= (1 + dividend_amount / prev_price)
+            after_tax_dividend = dividend_amount * after_tax_multiplier
+            current_value *= (1 + after_tax_dividend / prev_price)
 
         # Apply price change to reach the next year
         current_value *= (price / prev_price)
@@ -4285,13 +4300,72 @@ def _apply_dividend_reinvestment_to_series(adjusted_series, dividend_map):
     last_year, last_price = adjusted_series[-1]
     final_dividend = normalized_dividends.get(last_year)
     if final_dividend and last_price and last_price > 0:
-        current_value = reinvested_series[-1][1] * (1 + final_dividend / last_price)
+        after_tax_final_dividend = final_dividend * after_tax_multiplier
+        current_value = reinvested_series[-1][1] * (1 + after_tax_final_dividend / last_price)
         reinvested_series[-1] = (last_year, current_value)
 
     return reinvested_series
 
 
-def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculation_method='cagr', source=None, include_dividends=False, dividend_map=None):
+def _infer_capital_gains_tax_rate(cfg):
+    """
+    Determine capital gains tax rate based on asset metadata.
+    Defaults to 22% for US equities/ETFs, 0% otherwise.
+    """
+    if not isinstance(cfg, dict):
+        return 0.0
+
+    synthetic_type = str(cfg.get('synthetic_asset') or '').lower()
+    if 'deposit' in synthetic_type:
+        return 0.0
+
+    label_lower = (cfg.get('label') or '').lower()
+    ticker_lower = (cfg.get('ticker') or '').lower()
+    category_lower = (cfg.get('category') or '').lower()
+    asset_id_lower = (cfg.get('id') or '').lower()
+
+    crypto_indicators = ['bitcoin', '비트코인', 'btc', 'crypto', '디지털 자산', '가상자산']
+    for text in (label_lower, ticker_lower, category_lower, asset_id_lower):
+        if text and any(indicator in text for indicator in crypto_indicators):
+            return 0.0
+
+    category = (cfg.get('category') or '').lower()
+    unit = (cfg.get('unit') or '').upper()
+    ticker = (cfg.get('ticker') or '').upper()
+    label = (cfg.get('label') or '').lower()
+
+    us_indicators = [
+        '미국',
+        'us ',
+        'us_',
+        'usa',
+        'etf',
+        'nasdaq',
+        'nyse'
+    ]
+    if unit == 'USD' or any(token in category for token in us_indicators):
+        return 0.22
+    if any(token in label for token in ('미국', 'nasdaq', 'nyse')):
+        return 0.22
+    if ticker.endswith('.US'):
+        return 0.22
+    return 0.0
+
+
+def _build_asset_series(
+    asset_key,
+    cfg,
+    history,
+    start_year,
+    end_year,
+    calculation_method='cagr',
+    source=None,
+    include_dividends=False,
+    dividend_map=None,
+    dividend_tax_rate=0.0,
+    apply_capital_gains_tax=False,
+    capital_gains_tax_rate=0.0
+):
     """
     Build asset series for charting.
 
@@ -4406,7 +4480,8 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculati
     effective_series = adjusted_series
     dividends_applied = False
     if include_dividends and dividend_history:
-        reinvested_series = _apply_dividend_reinvestment_to_series(adjusted_series, dividend_history)
+        # Apply dividend reinvestment with tax deduction if specified
+        reinvested_series = _apply_dividend_reinvestment_to_series(adjusted_series, dividend_history, tax_rate=dividend_tax_rate)
         if reinvested_series and len(reinvested_series) == len(adjusted_series):
             effective_series = reinvested_series
             dividends_applied = True
@@ -4418,9 +4493,21 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculati
     if not base_value or base_value <= 0:
         return None
 
+    capital_gains_delta_scale = 1.0
+    capital_gains_tax_applied = False
+    if apply_capital_gains_tax and capital_gains_tax_rate > 0:
+        end_value = effective_series[-1][1]
+        if end_value > base_value:
+            capital_gains_delta_scale = max(0.0, 1.0 - capital_gains_tax_rate)
+            capital_gains_tax_applied = True
+
     points = []
     for idx, (year, effective_value) in enumerate(effective_series):
-        multiple = effective_value / base_value
+        raw_multiple = effective_value / base_value
+        if capital_gains_tax_applied:
+            multiple = 1 + (raw_multiple - 1) * capital_gains_delta_scale
+        else:
+            multiple = raw_multiple
         original_value = adjusted_series[idx][1]
 
         if calculation_method == 'price':
@@ -4508,6 +4595,9 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculati
     }
     if dividends_applied:
         result['dividends_reinvested'] = True
+    if capital_gains_tax_applied:
+        result['capital_gains_tax_applied'] = True
+        result['capital_gains_tax_rate'] = capital_gains_tax_rate
     return result
 
 
@@ -5673,20 +5763,20 @@ class CalculatorAgent:
     required by the frontend (calculating CAGR or cumulative returns, normalizing to 1.0, etc.).
     Also prepares the yearly closing prices for the table.
     """
-    def run(self, price_data_map, start_year, end_year, calculation_method='cagr', include_dividends=False):
+    def run(self, price_data_map, start_year, end_year, calculation_method='cagr', include_dividends=False, include_tax=False):
         logs = []
         result_data = {'series': [], 'table': [], 'summary': ''}
-        for event in self.stream(price_data_map, start_year, end_year, calculation_method, include_dividends=include_dividends):
+        for event in self.stream(price_data_map, start_year, end_year, calculation_method, include_dividends=include_dividends, include_tax=include_tax):
             if event['type'] == 'log':
                 logs.append(event['message'])
             elif event['type'] == 'result':
                 result_data = event['data']
         return result_data['series'], result_data['table'], result_data['summary'], logs
 
-    def stream(self, price_data_map, start_year, end_year, calculation_method='cagr', include_dividends=False):
-        yield from self._run_generator(price_data_map, start_year, end_year, calculation_method, include_dividends)
+    def stream(self, price_data_map, start_year, end_year, calculation_method='cagr', include_dividends=False, include_tax=False):
+        yield from self._run_generator(price_data_map, start_year, end_year, calculation_method, include_dividends, include_tax)
 
-    def _run_generator(self, price_data_map, start_year, end_year, calculation_method, include_dividends):
+    def _run_generator(self, price_data_map, start_year, end_year, calculation_method, include_dividends, include_tax):
         if calculation_method == 'price':
             method_label = '가격(Price)'
         elif calculation_method == 'cumulative':
@@ -5699,7 +5789,7 @@ class CalculatorAgent:
         yield {'type': 'log', 'message': f"[수익률 계산] {method_label} 계산 및 데이터 포맷팅 중..."}
 
         if include_dividends:
-            adjusted = self._apply_dividend_reinvestment(price_data_map, start_year, end_year)
+            adjusted = self._apply_dividend_reinvestment(price_data_map, start_year, end_year, include_tax=include_tax)
             if adjusted:
                 yield {'type': 'log', 'message': f"[수익률 계산] 배당 재투자 적용: {len(adjusted)}개 자산"}
             else:
@@ -5715,6 +5805,23 @@ class CalculatorAgent:
             asset_calc_method = data.get('calculation_method', calculation_method)
 
             try:
+                metadata = data.get('metadata') or {}
+                dividend_tax_rate = metadata.get('dividend_tax_rate', 0.0) if metadata.get('apply_dividend_tax') else 0.0
+
+                dividends_already_reinvested = bool(metadata.get('dividends_reinvested'))
+                include_dividends_for_series = include_dividends and not dividends_already_reinvested
+                dividend_map = metadata.get('yearly_dividends') if include_dividends_for_series else None
+                apply_capital_gains_tax = include_tax and include_dividends
+                capital_gains_tax_rate = 0.0
+                if apply_capital_gains_tax:
+                    meta_rate = metadata.get('capital_gains_tax_rate')
+                    if isinstance(meta_rate, (int, float)):
+                        capital_gains_tax_rate = float(meta_rate)
+                    else:
+                        capital_gains_tax_rate = _infer_capital_gains_tax_rate(config)
+                        if metadata is not None:
+                            metadata['capital_gains_tax_rate'] = capital_gains_tax_rate
+
                 series_obj = _build_asset_series(
                     config['id'],
                     config,
@@ -5723,8 +5830,11 @@ class CalculatorAgent:
                     end_year,
                     asset_calc_method,
                     source=source,
-                    include_dividends=include_dividends,
-                    dividend_map=(data.get('metadata') or {}).get('yearly_dividends')
+                    include_dividends=include_dividends_for_series,
+                    dividend_map=dividend_map,
+                    dividend_tax_rate=dividend_tax_rate,
+                    apply_capital_gains_tax=apply_capital_gains_tax,
+                    capital_gains_tax_rate=capital_gains_tax_rate
                 )
                 if series_obj:
                     series_obj['id'] = config['id']
@@ -5755,16 +5865,22 @@ class CalculatorAgent:
         summary = self._generate_summary(series_list, start_year, end_year)
         yield {'type': 'result', 'data': {'series': series_list, 'table': chart_data_table, 'summary': summary}}
 
-    def _apply_dividend_reinvestment(self, price_data_map, start_year, end_year):
+    def _apply_dividend_reinvestment(self, price_data_map, start_year, end_year, include_tax=False):
         """
         For Yahoo Finance assets, refetch dividend-adjusted history to simulate reinvestment.
+
+        Args:
+            include_tax: If True, apply dividend tax deduction (세후 배당 재투자)
+                         If False, use full dividend reinvestment (세전 배당 재투자)
         """
         adjusted_assets = []
         if not price_data_map:
             logger.info('[배당 재투자] price_data_map이 비어있어 스킵')
             return adjusted_assets
 
-        logger.info('[배당 재투자] %d개 자산 확인 시작', len(price_data_map))
+        tax_mode = "세후" if include_tax else "세전"
+        logger.info('[배당 재투자] %d개 자산 확인 시작 (%s)', len(price_data_map), tax_mode)
+
         for asset_id, data in price_data_map.items():
             if not isinstance(data, dict):
                 logger.debug('[배당 재투자] %s: data가 dict 타입이 아님, 스킵', asset_id)
@@ -5773,6 +5889,8 @@ class CalculatorAgent:
             config = data.get('config') or {}
             ticker = (config.get('ticker') or '').strip()
             label = config.get('label') or ticker or asset_id
+            category = config.get('category', '')
+            unit = config.get('unit', 'USD').upper()
 
             logger.info('[배당 재투자] %s 확인 중 (source=%s, ticker=%s)', label, source, ticker)
 
@@ -5785,21 +5903,57 @@ class CalculatorAgent:
                 continue
 
             try:
-                logger.info('[배당 재투자] %s: 배당 조정된 데이터 조회 시작 (ticker=%s, %d-%d)', label, ticker, start_year, end_year)
-                history = _fetch_yfinance_history(ticker, start_year, end_year, adjust_for_dividends=True)
-                if history:
-                    old_history_len = len(data.get('history', []))
-                    data['history'] = history
-                    metadata = data.setdefault('metadata', {})
-                    metadata['dividends_reinvested'] = True
-                    adjusted_assets.append(label)
-                    logger.info('[%s] 배당 재투자 적용 완료 (Adjusted Close 사용, %d → %d 데이터 포인트)', label, old_history_len, len(history))
+                logger.info('[배당 재투자] %s: 배당 조정된 데이터 조회 시작 (ticker=%s, %d-%d, %s)', label, ticker, start_year, end_year, tax_mode)
+
+                # Adjusted Close는 세전 배당 100% 재투자를 가정
+                # 세금을 고려하려면 수동으로 계산 필요
+                if include_tax:
+                    # 세후 배당: Close 가격 + 배당 내역을 가져와서 세후 배당 재투자 계산
+                    # 이 경우 _build_asset_series에서 배당을 수동으로 적용하도록 메타데이터에 표시
+                    logger.info('[%s] 세후 배당 재투자 모드: 배당 내역을 가져와 세금 차감 계산', label)
+
+                    # 배당 내역 가져오기
+                    yearly_dividends = _build_yearly_dividend_map(config, start_year, end_year)
+                    if yearly_dividends:
+                        metadata = data.setdefault('metadata', {})
+                        metadata['yearly_dividends'] = yearly_dividends
+                        metadata['dividend_unit'] = unit
+                        metadata['apply_dividend_tax'] = True
+
+                        # 배당소득세율 결정 (미국: 15%, 한국: 15.4%)
+                        is_us_asset = unit == 'USD' or category in ['미국 주식', '미국 ETF']
+                        is_kr_asset = unit == 'KRW' or category in ['국내 주식', '국내 ETF']
+
+                        if is_us_asset:
+                            tax_rate = 0.15  # 미국 15% 원천징수
+                        elif is_kr_asset:
+                            tax_rate = 0.154  # 한국 15.4% (소득세 14% + 지방소득세 1.4%)
+                        else:
+                            tax_rate = 0.15  # 기본값
+
+                        metadata['dividend_tax_rate'] = tax_rate
+                        metadata['capital_gains_tax_rate'] = metadata.get('capital_gains_tax_rate') or _infer_capital_gains_tax_rate(config)
+                        adjusted_assets.append(label)
+                        logger.info('[%s] 세후 배당 재투자 설정 완료 (세율: %.1f%%)', label, tax_rate * 100)
+                    else:
+                        logger.info('[%s] 배당 내역이 없어 스킵', label)
                 else:
-                    logger.warning('[%s] 배당 조정된 데이터를 가져왔지만 비어있음', label)
+                    # 세전 배당: Adjusted Close 사용 (기존 방식)
+                    history = _fetch_yfinance_history(ticker, start_year, end_year, adjust_for_dividends=True)
+                    if history:
+                        old_history_len = len(data.get('history', []))
+                        data['history'] = history
+                        metadata = data.setdefault('metadata', {})
+                        metadata['dividends_reinvested'] = True
+                        adjusted_assets.append(label)
+                        logger.info('[%s] 배당 재투자 적용 완료 (Adjusted Close 사용, %d → %d 데이터 포인트)', label, old_history_len, len(history))
+                    else:
+                        logger.warning('[%s] 배당 조정된 데이터를 가져왔지만 비어있음', label)
+
             except Exception as exc:
                 logger.warning('[%s] 배당 재투자 데이터 가져오기 실패: %s', label, exc, exc_info=True)
 
-        logger.info('[배당 재투자] 완료: %d개 자산에 적용됨', len(adjusted_assets))
+        logger.info('[배당 재투자] 완료: %d개 자산에 적용됨 (%s)', len(adjusted_assets), tax_mode)
         return adjusted_assets
 
     def _build_chart_data_table(self, series_list, calculation_method):
@@ -6210,6 +6364,8 @@ def finance_historical_returns_view(request):
     _ensure_finance_cache_purged(context_key)
     include_dividends = bool(payload.get('include_dividends'))
     backend_logger.info("Include Dividends: %s", include_dividends)
+    include_tax = bool(payload.get('include_tax'))
+    backend_logger.info("Include Tax: %s", include_tax)
     is_prefetch = bool(payload.get('isPrefetch') or payload.get('is_prefetch'))
     if is_prefetch:
         backend_logger.info("Request Type: Prefetch")
@@ -6233,7 +6389,7 @@ def finance_historical_returns_view(request):
     if use_streaming:
         # Return a streaming response (logging handled in stream generator)
         return StreamingHttpResponse(
-            _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key, start_year, end_year, user_identifier, start_time, calculation_method, include_dividends, is_prefetch),
+            _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key, start_year, end_year, user_identifier, start_time, calculation_method, include_dividends, include_tax, is_prefetch),
             content_type='text/event-stream'
         )
     else:
@@ -6306,7 +6462,9 @@ def finance_historical_returns_view(request):
             # Agent 2: Price Retriever
             backend_logger.info("STEP 2: Running PriceRetrieverAgent")
             retriever_agent = PriceRetrieverAgent()
-            price_data_map = consume_agent_stream(retriever_agent.stream(validated_assets, start_year, end_year)) or {}
+            raw_price_data_map = consume_agent_stream(retriever_agent.stream(validated_assets, start_year, end_year)) or {}
+            price_data_map = raw_price_data_map or {}
+            price_data_snapshot = copy.deepcopy(price_data_map)
 
             backend_logger.info("Price Data Map Keys: %s", list(price_data_map.keys()) if price_data_map else "EMPTY")
 
@@ -6334,12 +6492,40 @@ def finance_historical_returns_view(request):
             # Agent 3: Calculator
             backend_logger.info("STEP 3: Running CalculatorAgent with method: %s", calculation_method)
             calculator_agent = CalculatorAgent()
+            primary_price_map = copy.deepcopy(price_data_snapshot) if price_data_snapshot else {}
             calc_result = consume_agent_stream(
-                calculator_agent.stream(price_data_map, start_year, end_year, calculation_method, include_dividends=include_dividends)
+                calculator_agent.stream(primary_price_map, start_year, end_year, calculation_method, include_dividends=include_dividends, include_tax=include_tax)
             ) or {}
             series_data = calc_result.get('series', [])
             chart_data_table = calc_result.get('table', [])
             summary = calc_result.get('summary', '')
+
+            tax_variants = {}
+            selected_tax_key = 'tax_on' if include_tax else 'tax_off'
+            alternate_tax_key = 'tax_off' if include_tax else 'tax_on'
+            tax_variants[selected_tax_key] = {
+                'series': series_data,
+                'chart_data_table': chart_data_table,
+                'summary': summary
+            }
+            try:
+                alt_price_map = copy.deepcopy(price_data_snapshot) if price_data_snapshot else {}
+                alt_series, alt_table, alt_summary, _ = calculator_agent.run(
+                    alt_price_map or {},
+                    start_year,
+                    end_year,
+                    calculation_method,
+                    include_dividends=include_dividends,
+                    include_tax=not include_tax
+                )
+                tax_variants[alternate_tax_key] = {
+                    'series': alt_series,
+                    'chart_data_table': alt_table,
+                    'summary': alt_summary
+                }
+            except Exception as exc:
+                backend_logger.warning("Failed to compute alternate tax variant: %s", exc)
+                tax_variants[alternate_tax_key] = tax_variants[selected_tax_key]
 
             if not series_data:
                 processing_time_ms = int((time.time() - start_time) * 1000)
@@ -6403,7 +6589,9 @@ def finance_historical_returns_view(request):
                 'quick_requests': quick_requests,
                 'calculation_method': calculation_method,
                 'include_dividends': include_dividends,
+                'include_tax': include_tax,
                 'requested_assets': serialized_requested_assets,
+                'tax_variants': tax_variants,
             }
 
             return JsonResponse(response_payload)
@@ -6415,7 +6603,7 @@ def finance_historical_returns_view(request):
             _finance_log_callback.reset(log_token)
 
 
-def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key, start_year, end_year, user_identifier, start_time, calculation_method, include_dividends=False, is_prefetch=False):
+def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key, start_year, end_year, user_identifier, start_time, calculation_method, include_dividends=False, include_tax=False, is_prefetch=False):
     """Generator function for streaming finance analysis logs."""
     import logging
     import time
@@ -6468,6 +6656,7 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
                 yield send_log(event['message'])
             elif event['type'] == 'result':
                 price_data_map = event['data']
+        price_data_snapshot = copy.deepcopy(price_data_map)
 
         if not price_data_map:
             processing_time_ms = int((time.time() - start_time) * 1000)
@@ -6489,7 +6678,8 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
         series_data = []
         chart_data_table = []
         summary = ''
-        for event in calculator_agent.stream(price_data_map, start_year, end_year, calculation_method, include_dividends=include_dividends):
+        primary_price_map = copy.deepcopy(price_data_snapshot) if price_data_snapshot else {}
+        for event in calculator_agent.stream(primary_price_map, start_year, end_year, calculation_method, include_dividends=include_dividends, include_tax=include_tax):
             if event['type'] == 'log':
                 yield send_log(event['message'])
             elif event['type'] == 'result':
@@ -6497,6 +6687,33 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
                 series_data = result_payload.get('series', [])
                 chart_data_table = result_payload.get('table', [])
                 summary = result_payload.get('summary', '')
+
+        tax_variants = {}
+        selected_tax_key = 'tax_on' if include_tax else 'tax_off'
+        alternate_tax_key = 'tax_off' if include_tax else 'tax_on'
+        tax_variants[selected_tax_key] = {
+            'series': series_data,
+            'chart_data_table': chart_data_table,
+            'summary': summary
+        }
+        try:
+            alt_price_map = copy.deepcopy(price_data_snapshot) if price_data_snapshot else {}
+            alt_series, alt_table, alt_summary, _ = calculator_agent.run(
+                alt_price_map or {},
+                start_year,
+                end_year,
+                calculation_method,
+                include_dividends=include_dividends,
+                include_tax=not include_tax
+            )
+            tax_variants[alternate_tax_key] = {
+                'series': alt_series,
+                'chart_data_table': alt_table,
+                'summary': alt_summary
+            }
+        except Exception as exc:
+            backend_logger.warning("Failed to compute alternate tax variant (stream): %s", exc)
+            tax_variants[alternate_tax_key] = tax_variants[selected_tax_key]
 
         if not series_data:
             processing_time_ms = int((time.time() - start_time) * 1000)
@@ -6554,7 +6771,9 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
             'prompt': prompt,
             'quick_requests': quick_requests,
             'calculation_method': calculation_method,
+            'include_tax': include_tax,
             'requested_assets': serialized_requested_assets,
+            'tax_variants': tax_variants,
         }
 
         yield send_result(result_payload)
@@ -8577,6 +8796,7 @@ def finance_add_single_asset_view(request):
     end_year = payload.get('end_year')
     calculation_method = (payload.get('calculation_method') or 'cagr').strip()
     include_dividends = bool(payload.get('include_dividends', False))
+    include_tax = bool(payload.get('include_tax', False))
 
     if not asset_id:
         return JsonResponse({'ok': False, 'error': 'asset_id required'}, status=400)
@@ -8631,82 +8851,95 @@ def finance_add_single_asset_view(request):
             result = _fetch_asset_history(cfg, start_year, end_year)
             if not result:
                 return JsonResponse({'ok': False, 'error': f'No data found for {asset_id}'}, status=404)
-
             history, source = result
             logger.info(f"[Single Asset] Fetched {len(history)} data points from {source}")
-
-        # Apply dividend reinvestment if requested
-        dividends_reinvested = False
-        if include_dividends and 'yahoo finance' in source.lower() and cfg.get('ticker'):
-            try:
-                ticker = cfg.get('ticker')
-                logger.info(f"[Single Asset] Applying dividend reinvestment for {cfg.get('label')} (ticker={ticker})")
-                adjusted_history = _fetch_yfinance_history(ticker, start_year, end_year, adjust_for_dividends=True)
-                if adjusted_history:
-                    history = adjusted_history
-                    dividends_reinvested = True
-                    logger.info(f"[Single Asset] Dividend reinvestment applied: {len(adjusted_history)} data points (Adjusted Close)")
-                else:
-                    logger.warning(f"[Single Asset] Failed to get dividend-adjusted data for {cfg.get('label')}")
-            except Exception as exc:
-                logger.warning(f"[Single Asset] Dividend reinvestment failed for {cfg.get('label')}: {exc}")
-
-        # Build yearly dividend map for metadata (only if not using Adjusted Close)
-        yearly_dividends = None if dividends_reinvested else _build_yearly_dividend_map(cfg, start_year, end_year)
-
-        # Build series
-        # Note: When using Adjusted Close, we don't apply dividends again (already included in price)
-        series = _build_asset_series(
-            asset_id, cfg, history, start_year, end_year, calculation_method,
-            source=source,
-            include_dividends=False,  # Don't apply dividends twice - Adjusted Close already includes them
-            dividend_map=yearly_dividends
-        )
-        if not series:
-            return JsonResponse({'ok': False, 'error': 'Failed to build series'}, status=500)
-
-        # Enrich with dividend information
-        base_metadata = series.get('metadata') or {}
-        enriched_metadata = _enrich_metadata_with_dividend_info(cfg, base_metadata)
-        if yearly_dividends:
-            enriched_metadata['yearly_dividends'] = yearly_dividends
-            enriched_metadata['dividend_unit'] = cfg.get('unit')
-        if dividends_reinvested:
-            enriched_metadata['dividends_reinvested'] = True
-        series['metadata'] = enriched_metadata
-
-        # Copy metadata fields to series root
-        for meta_key, meta_value in enriched_metadata.items():
-            if meta_key not in series:
-                series[meta_key] = meta_value
-
-        if cfg.get('synthetic_asset') == 'deposit':
-            metadata = series.get('metadata') or {}
-            metadata.setdefault('synthetic_asset', 'deposit')
-            metadata.setdefault('target_rate_pct', cfg.get('target_rate_pct'))
-            series['metadata'] = metadata
-            series['synthetic_asset'] = 'deposit'
-            series['target_rate_pct'] = cfg.get('target_rate_pct')
-
-        # Log dividend info if present
-        if enriched_metadata.get('dividend_yield_pct'):
-            div_yield = enriched_metadata.get('dividend_yield_pct')
-            logger.info(f"[Single Asset] {cfg.get('label')}: 배당률 {div_yield:.2f}% 추가됨")
-
-        # Build chart data table entry for yearly prices
-        chart_entry = _build_chart_data_table_entry(asset_id, cfg, history, source, start_year, end_year, yearly_dividends)
-
-        logger.info(f"[Single Asset] Successfully built series for {asset_id}")
-
-        return JsonResponse({
-            'ok': True,
-            'series': series,
-            'chart_data_table_entry': chart_entry
-        })
-
     except Exception as e:
         logger.error(f"[Single Asset] Error: {str(e)}", exc_info=True)
         return JsonResponse({'ok': False, 'error': str(e)}, status=500)
+
+    if not history:
+        return JsonResponse({'ok': False, 'error': 'Failed to build series'}, status=500)
+
+    base_metadata = dict(resolved_asset.get('metadata') or {})
+    enriched_metadata = _enrich_metadata_with_dividend_info(cfg, base_metadata)
+    dividend_history = _build_yearly_dividend_map(cfg, start_year, end_year)
+    if dividend_history:
+        enriched_metadata['yearly_dividends'] = dividend_history
+        enriched_metadata['dividend_unit'] = cfg.get('unit')
+    if cfg.get('synthetic_asset') == 'deposit':
+        enriched_metadata.setdefault('synthetic_asset', 'deposit')
+        if cfg.get('target_rate_pct') is not None:
+            enriched_metadata.setdefault('target_rate_pct', cfg.get('target_rate_pct'))
+
+    price_entry = {
+        'history': history,
+        'config': cfg,
+        'source': source,
+        'calculation_method': calculation_method,
+        'metadata': enriched_metadata
+    }
+    price_data_map = {cfg['id']: price_entry}
+    calculator_agent = CalculatorAgent()
+
+    def _compute_variant(include_tax_flag):
+        variant_map = copy.deepcopy(price_data_map)
+        series_list, table_entries, summary, _ = calculator_agent.run(
+            variant_map,
+            start_year,
+            end_year,
+            calculation_method,
+            include_dividends=include_dividends,
+            include_tax=include_tax_flag
+        )
+        if not series_list:
+            return None
+        series_obj = series_list[0]
+        chart_entry = None
+        for entry in table_entries or []:
+            if entry.get('id') == series_obj.get('id'):
+                chart_entry = entry
+                break
+        if chart_entry is None and table_entries:
+            chart_entry = table_entries[0]
+        return {
+            'series': series_obj,
+            'chart_entry': chart_entry,
+            'summary': summary
+        }
+
+    primary_variant = _compute_variant(include_tax)
+    if not primary_variant:
+        return JsonResponse({'ok': False, 'error': 'Failed to build series'}, status=500)
+
+    try:
+        alternate_variant = _compute_variant(not include_tax) or primary_variant
+    except Exception as exc:
+        logger.warning(f"[Single Asset] Failed to compute alternate tax variant for {asset_id}: {exc}")
+        alternate_variant = primary_variant
+
+    selected_key = 'tax_on' if include_tax else 'tax_off'
+    alternate_key = 'tax_off' if include_tax else 'tax_on'
+    tax_variants = {
+        selected_key: {
+            'series': [primary_variant['series']],
+            'chart_data_table': [primary_variant['chart_entry']] if primary_variant.get('chart_entry') else [],
+            'summary': primary_variant.get('summary', '')
+        },
+        alternate_key: {
+            'series': [alternate_variant['series']],
+            'chart_data_table': [alternate_variant['chart_entry']] if alternate_variant.get('chart_entry') else [],
+            'summary': alternate_variant.get('summary', '')
+        }
+    }
+
+    logger.info(f"[Single Asset] Successfully built series for {asset_id}")
+
+    return JsonResponse({
+        'ok': True,
+        'series': primary_variant['series'],
+        'chart_data_table_entry': primary_variant.get('chart_entry'),
+        'tax_variants': tax_variants
+    })
 
 
 def _build_chart_data_table_entry(asset_id, cfg, history, source, start_year, end_year, dividend_map=None):

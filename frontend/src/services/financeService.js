@@ -40,6 +40,7 @@ export async function fetchHistoricalReturns({
   customAssets,
   assetRequests,
   includeDividends,
+  includeTax,
   calculationMethod,
   isPrefetch = false,
   signal
@@ -54,6 +55,7 @@ export async function fetchHistoricalReturns({
     quick_requests: Array.isArray(quickRequests) ? quickRequests : [],
     custom_assets: normalizedAssets,
     include_dividends: Boolean(includeDividends),
+    include_tax: Boolean(includeTax),
     calculation_method: calculationMethod || 'cagr',
     is_prefetch: Boolean(isPrefetch)
   }
@@ -119,6 +121,7 @@ export async function fetchHistoricalReturnsStream({
   customAssets,
   assetRequests,
   includeDividends,
+  includeTax,
   calculationMethod,
   signal,
   onLog
@@ -155,6 +158,7 @@ export async function fetchHistoricalReturnsStream({
     quick_requests: Array.isArray(quickRequests) ? quickRequests : [],
     custom_assets: normalizedAssets,
     include_dividends: Boolean(includeDividends),
+    include_tax: Boolean(includeTax),
     calculation_method: calculationMethod || 'cagr'
   }
   if (contextKey) {
@@ -381,7 +385,7 @@ export async function deleteAdminPriceCache(id, { signal } = {}) {
   return true
 }
 
-export async function addSingleAsset({ assetId, startYear, endYear, calculationMethod, includeDividends, signal }) {
+export async function addSingleAsset({ assetId, startYear, endYear, calculationMethod, includeDividends, includeTax, signal }) {
   if (!assetId) {
     throw new Error('자산 ID가 필요합니다.')
   }
@@ -391,7 +395,8 @@ export async function addSingleAsset({ assetId, startYear, endYear, calculationM
     start_year: startYear,
     end_year: endYear,
     calculation_method: calculationMethod || 'cagr',
-    include_dividends: Boolean(includeDividends)
+    include_dividends: Boolean(includeDividends),
+    include_tax: Boolean(includeTax)
   }
 
   const response = await fetch(resolveApiUrl('/api/finance/add-single-asset'), {
@@ -408,6 +413,7 @@ export async function addSingleAsset({ assetId, startYear, endYear, calculationM
 
   return {
     series: data.series,
-    chartDataTableEntry: data.chart_data_table_entry
+    chartDataTableEntry: data.chart_data_table_entry,
+    taxVariants: data.tax_variants || data.taxVariants || null
   }
 }
