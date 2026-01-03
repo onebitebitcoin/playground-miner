@@ -2970,8 +2970,17 @@ def _get_client_identifier(request):
     return ip
 
 
-def _log_finance_query(user_identifier, prompt, quick_requests, context_key, success, error_message='', assets_count=0, processing_time_ms=None):
-    """Log finance query to database"""
+def _log_finance_query(user_identifier, prompt, quick_requests, context_key, success, error_message='', assets_count=0, processing_time_ms=None, is_prefetch=False):
+    """
+    Log finance query to database.
+
+    Args:
+        is_prefetch: If True, skip logging (used for dividend prefetch requests)
+    """
+    # Skip logging for prefetch requests
+    if is_prefetch:
+        return
+
     try:
         FinanceQueryLog.objects.create(
             user_identifier=user_identifier,
@@ -4984,12 +4993,48 @@ def _serialize_requested_assets(asset_list):
 
 
 def _asset_identity_key(asset):
+    """
+    Get a canonical identity key for an asset to enable proper deduplication.
+
+    This function now uses _find_known_asset_config to resolve asset IDs to their
+    canonical forms, preventing duplicates like:
+    - "005930.KS", "삼성전자(005930)", "Samsung Electronics" → all map to "005930.KS"
+    - "미국 10년물 국채", "^TNX", "US 10Y Treasury" → all map to "us10y"
+
+    This is critical for deduplication in _merge_asset_lists to ensure consistent
+    asset counts between main requests and dividend prefetch requests.
+    """
     if not asset:
         return ''
-    asset_id = (asset.get('id') or '').strip().lower()
+
+    # Try to find canonical config using our improved lookup function
+    asset_id = (asset.get('id') or '').strip()
+    label = (asset.get('label') or '').strip()
+    ticker = (asset.get('ticker') or '').strip()
+
+    # First try with ID (most reliable)
     if asset_id:
-        return asset_id
-    label_norm = _normalize_asset_label_text(asset.get('label'))
+        config = _find_known_asset_config(asset_id, label or asset_id)
+        if config and config.get('id'):
+            return config['id'].lower()
+
+    # Then try with ticker
+    if ticker:
+        config = _find_known_asset_config(ticker, label or ticker)
+        if config and config.get('id'):
+            return config['id'].lower()
+
+    # Then try with label
+    if label:
+        config = _find_known_asset_config(label, label)
+        if config and config.get('id'):
+            return config['id'].lower()
+
+    # Fallback to original logic if no canonical config found
+    if asset_id:
+        return asset_id.lower()
+
+    label_norm = _normalize_asset_label_text(label)
     return label_norm or ''
 
 
@@ -6252,6 +6297,9 @@ def finance_historical_returns_view(request):
     _ensure_finance_cache_purged(context_key)
     include_dividends = bool(payload.get('include_dividends'))
     backend_logger.info("Include Dividends: %s", include_dividends)
+    is_prefetch = bool(payload.get('isPrefetch') or payload.get('is_prefetch'))
+    if is_prefetch:
+        backend_logger.info("Request Type: Prefetch (will skip logging)")
     stream_channel = (payload.get('stream_channel') or '').strip()
     if stream_channel:
         finance_stream_manager.prepare_channel(stream_channel)
@@ -6272,7 +6320,7 @@ def finance_historical_returns_view(request):
     if use_streaming:
         # Return a streaming response (logging handled in stream generator)
         return StreamingHttpResponse(
-            _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key, start_year, end_year, user_identifier, start_time, include_dividends),
+            _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key, start_year, end_year, user_identifier, start_time, include_dividends, is_prefetch),
             content_type='text/event-stream'
         )
     else:
@@ -6322,7 +6370,7 @@ def finance_historical_returns_view(request):
                 backend_logger.warning("Request blocked by guardrail")
                 processing_time_ms = int((time.time() - start_time) * 1000)
                 _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                                 intent_result.get('error', 'Request blocked'), 0, processing_time_ms)
+                                 intent_result.get('error', 'Request blocked'), 0, processing_time_ms, is_prefetch)
                 stream_error(intent_result.get('error', 'Request blocked'))
                 stream_complete('error')
                 return JsonResponse({
@@ -6340,7 +6388,7 @@ def finance_historical_returns_view(request):
                 backend_logger.error("No assets found - returning 400")
                 processing_time_ms = int((time.time() - start_time) * 1000)
                 _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                                 '분석할 자산을 찾을 수 없습니다.', 0, processing_time_ms)
+                                 '분석할 자산을 찾을 수 없습니다.', 0, processing_time_ms, is_prefetch)
                 stream_error('분석할 자산을 찾을 수 없습니다.')
                 stream_complete('error')
                 return JsonResponse({
@@ -6371,7 +6419,7 @@ def finance_historical_returns_view(request):
                 backend_logger.error("No price data retrieved - returning 502")
                 processing_time_ms = int((time.time() - start_time) * 1000)
                 _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                                 '자산 데이터를 가져올 수 없습니다.', len(assets), processing_time_ms)
+                                 '자산 데이터를 가져올 수 없습니다.', len(assets), processing_time_ms, is_prefetch)
                 stream_error('자산 데이터를 가져올 수 없습니다. (티커를 확인해주세요)')
                 stream_complete('error')
                 return JsonResponse({
@@ -6393,7 +6441,7 @@ def finance_historical_returns_view(request):
             if not series_data:
                 processing_time_ms = int((time.time() - start_time) * 1000)
                 _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                                 '유효한 수익률 데이터를 계산할 수 없습니다.', len(assets), processing_time_ms)
+                                 '유효한 수익률 데이터를 계산할 수 없습니다.', len(assets), processing_time_ms, is_prefetch)
                 stream_error('유효한 수익률 데이터를 계산할 수 없습니다.')
                 stream_complete('error')
                 return JsonResponse({
@@ -6418,7 +6466,7 @@ def finance_historical_returns_view(request):
             # Log successful query
             processing_time_ms = int((time.time() - start_time) * 1000)
             _log_finance_query(user_identifier, prompt, quick_requests, context_key, True,
-                             '', len(assets), processing_time_ms)
+                             '', len(assets), processing_time_ms, is_prefetch)
             stream_complete('ok')
 
             # Construct Response
@@ -6449,7 +6497,7 @@ def finance_historical_returns_view(request):
             _finance_log_callback.reset(log_token)
 
 
-def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key, start_year, end_year, user_identifier, start_time, include_dividends=False):
+def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key, start_year, end_year, user_identifier, start_time, include_dividends=False, is_prefetch=False):
     """Generator function for streaming finance analysis logs."""
     import logging
     import time
@@ -6482,7 +6530,7 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
         if not intent_result.get('allowed'):
             processing_time_ms = int((time.time() - start_time) * 1000)
             _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                             intent_result.get('error', 'Request blocked'), 0, processing_time_ms)
+                             intent_result.get('error', 'Request blocked'), 0, processing_time_ms, is_prefetch)
             yield send_error(intent_result.get('error', 'Request blocked'))
             return
 
@@ -6491,7 +6539,7 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
         if not assets:
             processing_time_ms = int((time.time() - start_time) * 1000)
             _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                             '분석할 자산을 찾을 수 없습니다.', 0, processing_time_ms)
+                             '분석할 자산을 찾을 수 없습니다.', 0, processing_time_ms, is_prefetch)
             yield send_error('분석할 자산을 찾을 수 없습니다.')
             return
 
@@ -6519,7 +6567,7 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
         if not price_data_map:
             processing_time_ms = int((time.time() - start_time) * 1000)
             _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                             '자산 데이터를 가져올 수 없습니다.', len(assets), processing_time_ms)
+                             '자산 데이터를 가져올 수 없습니다.', len(assets), processing_time_ms, is_prefetch)
             yield send_error('자산 데이터를 가져올 수 없습니다.')
             return
 
@@ -6540,7 +6588,7 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
         if not series_data:
             processing_time_ms = int((time.time() - start_time) * 1000)
             _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                             '유효한 수익률 데이터를 계산할 수 없습니다.', len(assets), processing_time_ms)
+                             '유효한 수익률 데이터를 계산할 수 없습니다.', len(assets), processing_time_ms, is_prefetch)
             yield send_error('유효한 수익률 데이터를 계산할 수 없습니다.')
             return
 
@@ -6562,7 +6610,7 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
         # Log successful query
         processing_time_ms = int((time.time() - start_time) * 1000)
         _log_finance_query(user_identifier, prompt, quick_requests, context_key, True,
-                         '', len(assets), processing_time_ms)
+                         '', len(assets), processing_time_ms, is_prefetch)
 
         result_payload = {
             'ok': True,
@@ -6587,7 +6635,7 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
         backend_logger.error(f"Stream error: {e}", exc_info=True)
         processing_time_ms = int((time.time() - start_time) * 1000)
         _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                         f"분석 중 오류: {str(e)}", 0, processing_time_ms)
+                         f"분석 중 오류: {str(e)}", 0, processing_time_ms, is_prefetch)
         yield send_error(f"분석 중 오류가 발생했습니다: {str(e)}")
 
 
@@ -8606,6 +8654,10 @@ def admin_price_cache_view(request):
     """
     Admin endpoint to manage price cache entries.
     GET: List all cached assets with pagination
+    Query params:
+      - offset, limit: pagination
+      - search: filter by label or asset_id
+      - canonical_id: filter by exact canonical ID match
     """
     from blocks.models import AssetPriceCache
 
@@ -8614,15 +8666,22 @@ def admin_price_cache_view(request):
         limit = int(request.GET.get('limit', 10)) or 10
         limit = max(1, min(limit, 100))
         search_query = (request.GET.get('search') or '').strip()
+        canonical_id_filter = (request.GET.get('canonical_id') or '').strip()
 
         cache_qs = AssetPriceCache.objects.all()
+
+        # Apply canonical ID filter (exact match)
+        if canonical_id_filter:
+            cache_qs = cache_qs.filter(asset_id__iexact=canonical_id_filter)
+
+        # Apply search filter
         if search_query:
             cache_qs = cache_qs.filter(
                 Q(label__icontains=search_query) | Q(asset_id__icontains=search_query)
             )
 
         total_count = cache_qs.count()
-        cache_entries = cache_qs[offset:offset + limit]
+        cache_entries = cache_qs.order_by('-last_updated')[offset:offset + limit]
 
         return JsonResponse({
             'ok': True,
@@ -8656,6 +8715,54 @@ def admin_price_cache_detail_view(request, pk):
         asset_id = cache_entry.asset_id
         cache_entry.delete()
         return JsonResponse({'ok': True, 'message': f'Cache for {asset_id} deleted'})
+
+    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def admin_canonical_ids_view(request):
+    """
+    Admin endpoint to get list of all canonical IDs from SAFE_ASSETS and PRESET_STOCK_GROUPS.
+    Returns a complete mapping of canonical IDs to their configurations.
+    """
+    if request.method == 'GET':
+        canonical_ids = []
+
+        # Add all SAFE_ASSETS
+        for key, config in SAFE_ASSETS.items():
+            canonical_ids.append({
+                'canonical_id': key,
+                'label': config.get('label', ''),
+                'ticker': config.get('ticker', ''),
+                'category': config.get('category', ''),
+                'unit': config.get('unit', ''),
+                'aliases': config.get('aliases', []),
+                'source': 'SAFE_ASSETS'
+            })
+
+        # Add all PRESET_STOCK_GROUPS
+        for group_name, stocks in PRESET_STOCK_GROUPS.items():
+            for stock in stocks:
+                stock_id = stock.get('id', '')
+                if stock_id:
+                    canonical_ids.append({
+                        'canonical_id': stock_id,
+                        'label': stock.get('label', ''),
+                        'ticker': stock.get('ticker', ''),
+                        'category': stock.get('category', ''),
+                        'unit': stock.get('unit', ''),
+                        'aliases': stock.get('aliases', []),
+                        'source': f'PRESET_STOCK_GROUPS.{group_name}'
+                    })
+
+        # Sort by canonical_id
+        canonical_ids.sort(key=lambda x: x['canonical_id'].lower())
+
+        return JsonResponse({
+            'ok': True,
+            'canonical_ids': canonical_ids,
+            'total': len(canonical_ids)
+        })
 
     return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
 

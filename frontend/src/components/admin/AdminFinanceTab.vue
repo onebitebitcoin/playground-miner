@@ -168,49 +168,62 @@
       </div>
 
       <div class="px-6 py-5">
-        <div v-if="cachedAssetsLoading" class="text-center py-6 text-gray-500">
+        <div v-if="cachedAssetsLoading && !cachedAssetsInitialLoad" class="text-center py-6 text-gray-500">
           로딩 중...
         </div>
         <div v-else class="space-y-4">
-          <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div class="w-full md:max-w-md">
-              <label class="block text-sm font-medium text-gray-700">종목명/티커 검색</label>
-              <div class="mt-1 flex flex-col gap-2 sm:flex-row">
+          <div class="flex flex-col gap-3">
+            <div class="flex flex-col gap-3 md:flex-row md:items-end">
+              <div class="flex-1">
+                <label class="block text-sm font-medium text-gray-700 mb-1">종목명/티커 검색</label>
                 <input
                   v-model="cachedAssetsSearchInput"
                   type="text"
                   placeholder="예: 비트코인 또는 BTC"
-                  class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                   @keyup.enter="applyCachedAssetsSearch"
                 />
-                <div class="flex gap-2">
-                  <button
-                    @click="applyCachedAssetsSearch"
-                    class="px-3 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                  >
-                    검색
-                  </button>
-                  <button
-                    @click="resetCachedAssetsSearch"
-                    class="px-3 py-2 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-                    :disabled="!cachedAssetsSearchInput && !cachedAssetsSearchTerm"
-                  >
-                    초기화
-                  </button>
-                </div>
+              </div>
+              <div class="flex-1">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Canonical ID 필터</label>
+                <select
+                  v-model="selectedCanonicalId"
+                  @change="applyCanonicalIdFilter"
+                  class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="">전체 보기</option>
+                  <option v-for="canonicalId in canonicalIds" :key="canonicalId.canonical_id" :value="canonicalId.canonical_id">
+                    {{ canonicalId.canonical_id }} - {{ canonicalId.label }}
+                  </option>
+                </select>
+              </div>
+              <div class="flex gap-2">
+                <button
+                  @click="applyCachedAssetsSearch"
+                  class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap"
+                >
+                  검색
+                </button>
+                <button
+                  @click="resetCachedAssetsSearch"
+                  class="px-4 py-2 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 whitespace-nowrap"
+                  :disabled="!cachedAssetsSearchInput && !cachedAssetsSearchTerm && !selectedCanonicalId"
+                >
+                  초기화
+                </button>
               </div>
             </div>
-            <div class="text-sm text-gray-500">
+            <div class="text-sm text-gray-500 text-right">
               페이지 {{ cachedAssetsCurrentPage }} / {{ cachedAssetsTotalPages }}
             </div>
           </div>
 
-          <div v-if="cachedAssets.length" class="overflow-x-auto">
+          <div v-if="cachedAssets.length" class="relative overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200">
               <thead class="bg-gray-50">
                 <tr>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">종목명</th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">티커</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Canonical ID</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">카테고리</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">데이터 기간</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">데이터 포인트</th>
@@ -240,6 +253,14 @@
                 </tr>
               </tbody>
             </table>
+            <div
+              v-if="cachedAssetsLoading && cachedAssetsInitialLoad"
+              class="absolute inset-0 bg-white/50 backdrop-blur-[1px] flex items-center justify-center text-gray-600 text-sm font-medium transition-opacity duration-200"
+            >
+              <div class="bg-white px-4 py-2 rounded-lg shadow-sm border border-gray-200">
+                새 페이지 데이터를 불러오는 중...
+              </div>
+            </div>
             <div
               class="mt-4 flex flex-col gap-3 text-sm text-gray-500 md:flex-row md:items-center md:justify-between"
             >
@@ -534,10 +555,12 @@
           </tbody>
         </table>
         <div
-          v-if="financeLogsLoading"
-          class="absolute inset-0 bg-white/70 backdrop-blur-[1px] flex items-center justify-center text-gray-600 text-sm font-medium"
+          v-if="cachedAssetsLoading && cachedAssetsInitialLoad"
+          class="absolute inset-0 bg-white/50 backdrop-blur-[1px] flex items-center justify-center text-gray-600 text-sm font-medium transition-opacity duration-200"
         >
-          새 페이지 데이터를 불러오는 중입니다...
+          <div class="bg-white px-4 py-2 rounded-lg shadow-sm border border-gray-200">
+            새 페이지 데이터를 불러오는 중...
+          </div>
         </div>
       </div>
 
@@ -642,12 +665,16 @@ const customAssetErrorForm = ref('')
 
 const cachedAssets = ref([])
 const cachedAssetsLoading = ref(false)
+const cachedAssetsInitialLoad = ref(false)
 const cachedAssetsOffset = ref(0)
 const cachedAssetsLimit = ref(10)
 const cachedAssetsTotal = ref(0)
 const cachedAssetsSearchInput = ref('')
 const cachedAssetsSearchTerm = ref('')
 const deletingCacheId = ref(null)
+const canonicalIds = ref([])
+const canonicalIdsLoading = ref(false)
+const selectedCanonicalId = ref('')
 
 const cachedAssetsCurrentPage = computed(() => {
   if (!cachedAssetsLimit.value) return 1
@@ -667,7 +694,8 @@ const fetchIfAdmin = async () => {
     loadFinanceStats(),
     loadAgentPrompts(),
     loadFinanceQuickCompareGroups(),
-    loadCachedAssets()
+    loadCachedAssets(),
+    loadCanonicalIds()
   ])
 }
 
@@ -785,10 +813,16 @@ const applyCachedAssetsSearch = () => {
   loadCachedAssets()
 }
 
+const applyCanonicalIdFilter = () => {
+  cachedAssetsOffset.value = 0
+  loadCachedAssets()
+}
+
 const resetCachedAssetsSearch = () => {
-  if (!cachedAssetsSearchInput.value && !cachedAssetsSearchTerm.value) return
+  if (!cachedAssetsSearchInput.value && !cachedAssetsSearchTerm.value && !selectedCanonicalId.value) return
   cachedAssetsSearchInput.value = ''
   cachedAssetsSearchTerm.value = ''
+  selectedCanonicalId.value = ''
   cachedAssetsOffset.value = 0
   loadCachedAssets()
 }
@@ -1095,6 +1129,7 @@ const loadCachedAssets = async () => {
     cachedAssets.value = []
     cachedAssetsTotal.value = 0
     cachedAssetsOffset.value = 0
+    cachedAssetsInitialLoad.value = true
     return
   }
 
@@ -1104,7 +1139,8 @@ const loadCachedAssets = async () => {
     const data = await fetchAdminPriceCache({
       offset: cachedAssetsOffset.value,
       limit: cachedAssetsLimit.value,
-      search: cachedAssetsSearchTerm.value
+      search: cachedAssetsSearchTerm.value,
+      canonical_id: selectedCanonicalId.value
     })
     const total = data.total || 0
     if (total > 0 && cachedAssetsOffset.value >= total) {
@@ -1126,6 +1162,32 @@ const loadCachedAssets = async () => {
     props.showError(error.message || '캐시된 종목 목록을 불러올 수 없습니다')
   } finally {
     cachedAssetsLoading.value = false
+    cachedAssetsInitialLoad.value = true
+  }
+}
+
+const loadCanonicalIds = async () => {
+  if (!props.isAdmin) {
+    canonicalIds.value = []
+    return
+  }
+
+  canonicalIdsLoading.value = true
+  try {
+    const response = await fetch(`${import.meta.env.VITE_API_BASE || ''}/api/finance/admin/canonical-ids`, {
+      credentials: 'include'
+    })
+    const data = await response.json()
+
+    if (data.ok) {
+      canonicalIds.value = data.canonical_ids || []
+    } else {
+      props.showError(data.error || 'Canonical ID 목록을 불러올 수 없습니다')
+    }
+  } catch (error) {
+    console.error('Failed to load canonical IDs:', error)
+  } finally {
+    canonicalIdsLoading.value = false
   }
 }
 

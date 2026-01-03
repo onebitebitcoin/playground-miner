@@ -85,6 +85,7 @@ urlpatterns = [
     path('finance/admin/quick-compare-groups/<int:pk>', views.admin_finance_quick_compare_group_detail_view, name='admin_finance_quick_compare_group_detail'),
     path('finance/admin/price-cache', views.admin_price_cache_view, name='admin_price_cache'),
     path('finance/admin/price-cache/<int:pk>', views.admin_price_cache_detail_view, name='admin_price_cache_detail'),
+    path('finance/admin/canonical-ids', views.admin_canonical_ids_view, name='admin_canonical_ids'),
     # Time Capsule endpoints
     path('time-capsule/save', timecapsule.time_capsule_save_view, name='time_capsule_save'),
     path('time-capsule/admin/list', timecapsule.admin_time_capsules_view, name='admin_time_capsules'),

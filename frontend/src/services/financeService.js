@@ -377,13 +377,16 @@ export async function deleteAdminFinanceQuickCompareGroup(id, { signal } = {}) {
   return true
 }
 
-export async function fetchAdminPriceCache({ offset = 0, limit = 10, search = '', signal } = {}) {
+export async function fetchAdminPriceCache({ offset = 0, limit = 10, search = '', canonical_id = '', signal } = {}) {
   const params = new URLSearchParams({
     offset: offset.toString(),
     limit: limit.toString()
   })
   if (search) {
     params.append('search', search)
+  }
+  if (canonical_id) {
+    params.append('canonical_id', canonical_id)
   }
   const response = await fetch(`${resolveApiUrl('/api/finance/admin/price-cache')}?${params.toString()}`, {
     method: 'GET',

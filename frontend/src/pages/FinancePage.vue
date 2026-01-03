@@ -2490,7 +2490,12 @@ async function prefetchDividendVariant(val) {
 
   let wasSuccess = false
   try {
-    const result = await fetchHistoricalReturns({ ...request, includeDividends: val, signal: prefetchController.signal })
+    const result = await fetchHistoricalReturns({
+      ...request,
+      includeDividends: val,
+      isPrefetch: true,  // Mark as prefetch to skip logging
+      signal: prefetchController.signal
+    })
     if (result && result.ok) {
       dividendCache[key] = result
       dividendPrefetchStatus[key] = true
