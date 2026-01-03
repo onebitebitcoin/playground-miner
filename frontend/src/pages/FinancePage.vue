@@ -420,12 +420,9 @@ function handleStorageEvent(event) {
   }
 }
 
-watch(loading, (val) => {
-  if (!val && searchButtonAttention.value) {
-    searchButtonAttention.value = false
-    requestAgentAnalysis()
-  }
-})
+// Removed: watch handler that was causing duplicate requests
+// The previous watch(loading, ...) would automatically trigger requestAgentAnalysis()
+// when searchButtonAttention was true, causing duplicate requests after each analysis completion
 
 watch(loading, (val) => {
   if (!val) {
