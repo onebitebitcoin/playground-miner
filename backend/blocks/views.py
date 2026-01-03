@@ -912,21 +912,25 @@ def _ensure_assets_cached(resolved_assets, group_key=None):
 def _ensure_asset_prices_cached(asset, group_key=None):
     """
     Make sure a single asset has an entry inside AssetPriceCache.
+    Uses canonical ID to prevent duplicates (e.g., 'us10y' instead of both '미국 10년물 국채' and '^TNX').
     """
     try:
         if (asset.get('synthetic_asset') or (asset.get('metadata') or {}).get('synthetic_asset')):
             return False
-        primary_id = (asset.get('id') or asset.get('ticker') or '').strip()
-        fallback_ticker = (asset.get('ticker') or '').strip()
-        asset_id = primary_id or fallback_ticker
-        label = (asset.get('label') or asset_id).strip()
+
+        # Use canonical ID first (e.g., 'us10y', 'kospi'), then fall back to ticker
+        canonical_id = (asset.get('id') or '').strip()
+        ticker = (asset.get('ticker') or '').strip()
+        label = (asset.get('label') or canonical_id or ticker).strip()
         category = asset.get('category')
-        if not asset_id or not label:
+
+        if not canonical_id or not label:
             return False
 
+        # Build lookup filter to find existing entries by canonical ID or ticker
         lookup_filter = Q()
         seen_keys = set()
-        for candidate in (primary_id, fallback_ticker):
+        for candidate in (canonical_id, ticker):
             candidate_key = (candidate or '').strip()
             if not candidate_key:
                 continue
@@ -936,20 +940,33 @@ def _ensure_asset_prices_cached(asset, group_key=None):
             seen_keys.add(lowered)
             lookup_filter |= Q(asset_id__iexact=candidate_key)
 
-        cache_entry = None
-        if lookup_filter:
-            cache_entry = AssetPriceCache.objects.filter(lookup_filter).first()
+        # Find all matching entries (might have duplicates from legacy data)
+        cache_entries = list(AssetPriceCache.objects.filter(lookup_filter).all()) if lookup_filter else []
 
-        if cache_entry:
-            if primary_id and cache_entry.asset_id != primary_id:
-                conflict = AssetPriceCache.objects.filter(asset_id__iexact=primary_id).exclude(pk=cache_entry.pk).first()
-                if conflict:
-                    return True
-                cache_entry.asset_id = primary_id
-                cache_entry.save(update_fields=['asset_id', 'last_updated'])
+        if cache_entries:
+            # Use the first entry and migrate it to canonical ID
+            primary_entry = cache_entries[0]
+
+            # Update to canonical ID if needed
+            if primary_entry.asset_id != canonical_id:
+                primary_entry.asset_id = canonical_id
+                primary_entry.save(update_fields=['asset_id', 'last_updated'])
+
+            # Delete duplicate entries (e.g., if both '미국 10년물 국채' and '^TNX' exist)
+            if len(cache_entries) > 1:
+                duplicate_ids = [entry.pk for entry in cache_entries[1:]]
+                AssetPriceCache.objects.filter(pk__in=duplicate_ids).delete()
+                logger.info(
+                    "Merged %d duplicate cache entries for asset %s into canonical ID: %s",
+                    len(cache_entries) - 1,
+                    label,
+                    canonical_id
+                )
+
             return True
 
-        return _cache_asset_prices(asset_id, label, category)
+        # No existing entry - create new one with canonical ID
+        return _cache_asset_prices(canonical_id, label, category)
     except Exception as exc:
         logger.warning(
             "Failed to ensure cache for asset %s (group=%s): %s",
@@ -3711,12 +3728,20 @@ def _build_bitcoin_price_payload(start_year, end_year):
     return payload
 
 
-def _clone_asset_config(cfg, fallback_id=None):
+def _clone_asset_config(cfg, canonical_key=None):
+    """
+    Clone asset config and ensure it has a canonical ID.
+    canonical_key: the key from SAFE_ASSETS or PRESET_STOCK_GROUPS (e.g., 'us10y', 'kospi')
+    """
     if not cfg:
         return None
     cloned = dict(cfg)
-    if fallback_id and not cloned.get('id'):
-        cloned['id'] = fallback_id
+    # Use canonical key as ID if provided (prevents duplicate cache entries)
+    if canonical_key:
+        cloned['id'] = canonical_key
+    elif not cloned.get('id'):
+        # Fallback to ticker if no ID exists
+        cloned['id'] = cloned.get('ticker')
     return cloned
 
 
@@ -3732,26 +3757,30 @@ def _find_known_asset_config(asset_id=None, label=None):
     normalized_label = _normalize_asset_label_text(label)
     normalized_asset_text = _normalize_asset_label_text(asset_id)
 
+    # Direct lookup by canonical key in SAFE_ASSETS
     if normalized_id and normalized_id in SAFE_ASSETS:
-        return _clone_asset_config(SAFE_ASSETS[normalized_id], normalized_id)
+        return _clone_asset_config(SAFE_ASSETS[normalized_id], canonical_key=normalized_id)
 
+    # Lookup by alias - returns canonical key
     alias_candidates = [normalized_id, normalized_asset_text, normalized_label]
     for candidate in alias_candidates:
         if not candidate:
             continue
         alias_key = SAFE_ASSET_ALIASES.get(candidate)
         if alias_key and alias_key in SAFE_ASSETS:
-            return _clone_asset_config(SAFE_ASSETS[alias_key], alias_key)
+            return _clone_asset_config(SAFE_ASSETS[alias_key], canonical_key=alias_key)
 
+    # Lookup by ticker, stooq_symbol, or label in SAFE_ASSETS
     for key, cfg in SAFE_ASSETS.items():
         ticker = (cfg.get('ticker') or '').strip().lower()
         stooq_symbol = (cfg.get('stooq_symbol') or '').strip().lower()
         label_norm = _normalize_asset_label_text(cfg.get('label'))
         if normalized_id and normalized_id in {ticker, stooq_symbol}:
-            return _clone_asset_config(cfg, key)
+            return _clone_asset_config(cfg, canonical_key=key)
         if normalized_label and label_norm == normalized_label:
-            return _clone_asset_config(cfg, key)
+            return _clone_asset_config(cfg, canonical_key=key)
 
+    # Lookup in PRESET_STOCK_GROUPS (kr_equity, us_bigtech)
     for configs in PRESET_STOCK_GROUPS.values():
         for cfg in configs:
             cfg_id = (cfg.get('id') or cfg.get('ticker') or '').strip()
@@ -3760,13 +3789,13 @@ def _find_known_asset_config(asset_id=None, label=None):
             stooq_symbol = (cfg.get('stooq_symbol') or '').strip().lower()
             label_norm = _normalize_asset_label_text(cfg.get('label'))
 
-            # Check ID, ticker, stooq_symbol
+            # Check ID, ticker, stooq_symbol - use cfg_id as canonical key
             if normalized_id and normalized_id in {cfg_id_normalized, ticker, stooq_symbol}:
-                return _clone_asset_config(cfg, cfg_id or normalized_id)
+                return _clone_asset_config(cfg, canonical_key=cfg_id)
 
             # Check label
             if normalized_label and label_norm == normalized_label:
-                return _clone_asset_config(cfg, cfg_id or label_norm)
+                return _clone_asset_config(cfg, canonical_key=cfg_id)
 
             # Check aliases - IMPORTANT for matching Korean stock names
             cfg_aliases = cfg.get('aliases') or []
@@ -3775,7 +3804,7 @@ def _find_known_asset_config(asset_id=None, label=None):
                 # Check both normalized_id (from ticker field) and normalized_label
                 for check_val in [normalized_id, normalized_label, normalized_asset_text]:
                     if check_val and check_val in aliases_normalized:
-                        return _clone_asset_config(cfg, cfg_id or check_val)
+                        return _clone_asset_config(cfg, canonical_key=cfg_id)
 
     # Fallback: Check if the asset_id or label looks like a Korean stock ticker (e.g. 005930.KS)
     candidates = [asset_id, label]
@@ -8227,6 +8256,8 @@ def _resolve_assets(asset_names):
     """
     Resolve asset names to {label, ticker, id, category} objects.
     Returns list of resolved asset dicts.
+
+    Now uses canonical IDs (e.g., 'us10y', 'kospi') to prevent duplicate cache entries.
     """
     resolved = []
     for name in asset_names:
@@ -8234,11 +8265,12 @@ def _resolve_assets(asset_names):
         if not name:
             continue
 
-        # Try to find in known assets first
+        # Try to find in known assets first (returns canonical ID)
         config = _find_known_asset_config(name, name)
         if config:
+            # config['id'] now contains canonical key (e.g., 'us10y' instead of '미국 10년물 국채')
             resolved.append({
-                'id': config.get('id') or name,
+                'id': config.get('id'),  # Canonical ID
                 'label': config.get('label') or name,
                 'ticker': config.get('ticker') or config.get('id') or name,
                 'category': config.get('category'),
@@ -8250,7 +8282,7 @@ def _resolve_assets(asset_names):
         candidate = _lookup_ticker_with_llm(name, name)
         if candidate:
             resolved.append({
-                'id': candidate.get('id') or name,
+                'id': candidate.get('id') or candidate.get('ticker') or name,
                 'label': candidate.get('label') or name,
                 'ticker': candidate.get('ticker') or candidate.get('id') or name,
                 'category': candidate.get('category'),

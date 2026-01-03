@@ -1068,16 +1068,24 @@ function normalizeGroups(raw = []) {
     if (!assets.length) return null
     const key = (g?.key || '').trim() || `group-${g?.id ?? i}`
     const label = (g?.label || '').trim() || `그룹 ${i + 1}`
-    const context = (g?.context_key || g?.contextKey || QUICK_COMPARE_CONTEXT_MAP[key] || '').trim()
+
+    // Prioritize: explicit context_key/contextKey > static mapping > dynamic inference
+    const explicitContext = (g?.context_key || g?.contextKey || '').trim()
+    const staticContext = QUICK_COMPARE_CONTEXT_MAP[key] || ''
+    const baseContext = explicitContext || staticContext
+
     const resolved = Array.isArray(g?.resolved_assets) ? g.resolved_assets : []
-    const inferredContext = inferGroupContextKey(context, { resolved, assets })
+
+    // Only infer if baseContext is empty or 'safe_assets'
+    const finalContext = inferGroupContextKey(baseContext, { resolved, assets })
+
     return {
       id: g?.id ?? i,
       key,
       label,
       assets,
       resolved_assets: resolved,
-      contextKey: inferredContext,
+      contextKey: finalContext,
       sortOrder: Number.isFinite(g?.sort_order) ? Number(g.sort_order) : Number.isFinite(g?.sortOrder) ? Number(g.sortOrder) : i,
       isActive: g?.is_active !== false
     }
@@ -1211,16 +1219,22 @@ function isLikelyUSEquityAsset(asset) {
 
 function inferGroupContextKey(baseContext, meta = {}) {
   const normalized = (baseContext || '').trim()
-  if (normalized && normalized !== 'safe_assets') return normalized
 
+  // If a specific context is already set (not empty and not 'safe_assets'), respect it
+  // This prevents context from changing when the same prompt is used in different ways
+  if (normalized && normalized !== 'safe_assets') {
+    return normalized
+  }
+
+  // Only infer context if baseContext is empty or 'safe_assets'
   const resolvedAssets = Array.isArray(meta?.resolved) ? meta.resolved : []
+  const rawAssets = Array.isArray(meta?.assets) ? meta.assets : []
 
   // 한국 주식 우선 확인
   if (resolvedAssets.some((asset) => isLikelyKoreanEquityAsset(asset))) {
     return 'kr_equity'
   }
 
-  const rawAssets = Array.isArray(meta?.assets) ? meta.assets : []
   if (rawAssets.some(isLikelyKoreanAssetName)) {
     return 'kr_equity'
   }
@@ -1291,8 +1305,21 @@ async function addAsset() {
     const added = await appendResolvedAsset(raw)
     if (added) {
       newAssetInput.value = ''
+
+      // Preserve context if a specific group was selected, otherwise re-infer
+      const wasGroupSelected = !!selectedQuickCompareGroup.value
+      const previousContext = selectedContextKey.value
+
+      // Clear group selection when adding custom assets
       selectedQuickCompareGroup.value = ''
-      selectedContextKey.value = determineContextKeyForAssets()
+
+      // If a group was selected, try to preserve its context
+      // Otherwise, infer context from current asset list
+      if (wasGroupSelected && previousContext && previousContext !== 'safe_assets') {
+        selectedContextKey.value = previousContext
+      } else {
+        selectedContextKey.value = determineContextKeyForAssets()
+      }
 
       // Get the last added asset
       const lastAsset = customAssets.value[customAssets.value.length - 1]
@@ -1362,8 +1389,22 @@ function removeAsset(index) {
   const targetAsset = customAssets.value[index]
   customAssets.value = customAssets.value.filter((_, i) => i !== index)
   customAssetError.value = ''
+
+  // Preserve context if a specific group was selected, otherwise re-infer
+  const wasGroupSelected = !!selectedQuickCompareGroup.value
+  const previousContext = selectedContextKey.value
+
+  // Clear group selection when removing assets
   selectedQuickCompareGroup.value = ''
-  selectedContextKey.value = determineContextKeyForAssets()
+
+  // If a group was selected, try to preserve its context
+  // Otherwise, infer context from remaining asset list
+  if (wasGroupSelected && previousContext && previousContext !== 'safe_assets') {
+    selectedContextKey.value = previousContext
+  } else {
+    selectedContextKey.value = determineContextKeyForAssets()
+  }
+
   if (targetAsset) {
     removeAssetDataFromAnalysis(targetAsset)
   }
