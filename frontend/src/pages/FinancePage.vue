@@ -190,7 +190,7 @@ const LOADING_STAGES = [
   {
     key: 'init',
     label: '요청 준비 중',
-    description: '멀티 에이전트 구성을 시작하고 있어요.',
+    description: '여러 자산의 분석 워크플로우를 준비하고 있어요.',
     minProgress: 5,
     maxProgress: 12,
     fallbackDelayMs: 0,
@@ -199,8 +199,8 @@ const LOADING_STAGES = [
   },
   {
     key: 'intent',
-    label: '프롬프트 해석 중',
-    description: '요청에서 비교할 자산을 해석하고 있어요.',
+    label: '비교 자산 확인 중',
+    description: '선택된 자산들을 확인하고 분석을 준비하고 있어요.',
     minProgress: 15,
     maxProgress: 30,
     fallbackDelayMs: 1500,

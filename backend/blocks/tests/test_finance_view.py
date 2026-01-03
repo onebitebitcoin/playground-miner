@@ -1,9 +1,12 @@
 import json
 from unittest import mock
 
+from datetime import datetime
+
 from django.test import TestCase
 
 from blocks.models import FinanceQueryLog, FinanceQueryAsset
+from blocks import views
 
 
 def _mock_price_stream(assets, start_year, end_year):
@@ -130,3 +133,33 @@ class FinanceAnalysisViewTests(TestCase):
         self.assertTrue(data['ok'])
         self.assertEqual(len(data['logs']), 1)
         self.assertEqual(data['logs'][0]['assets'][0]['label'], '비트코인')
+
+    def test_dividend_reinvestment_affects_returns(self):
+        agent = views.CalculatorAgent()
+        price_data_map = {
+            'JEPI': {
+                'history': [
+                    (datetime(2020, 12, 31), 50.0),
+                    (datetime(2021, 12, 31), 50.0),
+                    (datetime(2022, 12, 31), 50.0),
+                    (datetime(2023, 12, 31), 50.0),
+                ],
+                'config': {'id': 'JEPI', 'label': 'JEPI', 'ticker': 'JEPI', 'unit': 'USD', 'category': 'ETF'},
+                'source': 'Yahoo Finance',
+                'calculation_method': 'cagr',
+                'metadata': {
+                    'yearly_dividends': {
+                        2020: 2.0,
+                        2021: 4.0,
+                        2022: 4.2,
+                        2023: 4.3,
+                    },
+                    'dividend_unit': 'USD'
+                }
+            }
+        }
+        series, _, _, _ = agent.run(price_data_map, 2020, 2023, calculation_method='cagr', include_dividends=True)
+        self.assertTrue(series)
+        je_series = series[0]
+        self.assertGreater(je_series['multiple_from_start'], 1.0)
+        self.assertTrue(je_series.get('dividends_reinvested'))

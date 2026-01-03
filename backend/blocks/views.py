@@ -4233,7 +4233,65 @@ def _fetch_asset_history(cfg, start_year, end_year):
     raise RuntimeError(error_msg)
 
 
-def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculation_method='cagr', source=None):
+def _normalize_dividend_history(dividend_map):
+    normalized = {}
+    if not isinstance(dividend_map, dict):
+        return normalized
+    for key, value in dividend_map.items():
+        try:
+            year = int(key)
+        except (TypeError, ValueError):
+            continue
+        amount = _safe_float(value, allow_negative=False)
+        if amount is None or amount <= 0:
+            continue
+        normalized[year] = amount
+    return normalized
+
+
+def _apply_dividend_reinvestment_to_series(adjusted_series, dividend_map):
+    """
+    Given a series of (year, price) tuples, adjust them to reflect dividend reinvestment.
+    """
+    if not adjusted_series or not dividend_map:
+        return adjusted_series
+
+    normalized_dividends = _normalize_dividend_history(dividend_map)
+    if not normalized_dividends:
+        return adjusted_series
+
+    reinvested_series = []
+    current_value = adjusted_series[0][1]
+    reinvested_series.append((adjusted_series[0][0], current_value))
+
+    for idx in range(1, len(adjusted_series)):
+        prev_year, prev_price = adjusted_series[idx - 1]
+        year, price = adjusted_series[idx]
+        if prev_price is None or prev_price <= 0:
+            return adjusted_series
+        if price is None or price <= 0:
+            return adjusted_series
+
+        # Reinvest dividends from the previous year at the previous year's price
+        dividend_amount = normalized_dividends.get(prev_year, 0.0)
+        if dividend_amount > 0:
+            current_value *= (1 + dividend_amount / prev_price)
+
+        # Apply price change to reach the next year
+        current_value *= (price / prev_price)
+        reinvested_series.append((year, current_value))
+
+    # Apply the most recent year's dividend, treating it as reinvested at the latest price
+    last_year, last_price = adjusted_series[-1]
+    final_dividend = normalized_dividends.get(last_year)
+    if final_dividend and last_price and last_price > 0:
+        current_value = reinvested_series[-1][1] * (1 + final_dividend / last_price)
+        reinvested_series[-1] = (last_year, current_value)
+
+    return reinvested_series
+
+
+def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculation_method='cagr', source=None, include_dividends=False, dividend_map=None):
     """
     Build asset series for charting.
 
@@ -4312,6 +4370,8 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculati
                         logger.info('[%s] 한국 주식 스케일 팩터 적용 안함 (Stooq: %.2f원)',
                                    cfg.get('label', 'Unknown'), avg_price)
 
+    dividend_history = dividend_map if include_dividends else None
+
     for index, year in enumerate(ordered_years):
         price = yearly_prices[year][1]
         if price is None:
@@ -4343,20 +4403,29 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculati
 
             adjusted_series.append((year, adjusted_value))
 
+    effective_series = adjusted_series
+    dividends_applied = False
+    if include_dividends and dividend_history:
+        reinvested_series = _apply_dividend_reinvestment_to_series(adjusted_series, dividend_history)
+        if reinvested_series and len(reinvested_series) == len(adjusted_series):
+            effective_series = reinvested_series
+            dividends_applied = True
+
     if len(adjusted_series) < 2:
         return None
 
-    base_value = adjusted_series[0][1]
+    base_value = effective_series[0][1]
     if not base_value or base_value <= 0:
         return None
 
     points = []
-    for idx, (year, adjusted_value) in enumerate(adjusted_series):
-        multiple = adjusted_value / base_value
+    for idx, (year, effective_value) in enumerate(effective_series):
+        multiple = effective_value / base_value
+        original_value = adjusted_series[idx][1]
 
         if calculation_method == 'price':
             # 실제 가격 표시 (Price mode shows actual prices)
-            return_pct = adjusted_value
+            return_pct = original_value
         elif calculation_method == 'cumulative':
             # 누적 상승률: (현재값 / 시작값 - 1) * 100
             return_pct = (multiple - 1) * 100
@@ -4365,9 +4434,9 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculati
             if idx == 0:
                 return_pct = 0.0
             else:
-                prev_val = adjusted_series[idx-1][1]
-                if prev_val > 0:
-                    return_pct = (adjusted_value - prev_val) / prev_val * 100
+                prev_effective = effective_series[idx - 1][1]
+                if prev_effective > 0:
+                    return_pct = (effective_value - prev_effective) / prev_effective * 100
                 else:
                     return_pct = 0.0
         else:
@@ -4380,14 +4449,14 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculati
                     return_pct = 0.0
                 else:
                     try:
-                        return_pct = ((adjusted_value / base_value) ** (1 / years_elapsed) - 1) * 100
+                        return_pct = ((effective_value / base_value) ** (1 / years_elapsed) - 1) * 100
                     except Exception:
                         return_pct = 0.0
 
         points.append({
             'year': year,
             'value': round(return_pct, 3),
-            'raw_value': adjusted_value,
+            'raw_value': original_value,
             'multiple': round(multiple, 6)
         })
 
@@ -4425,7 +4494,7 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculati
         # CAGR
         final_return_pct = cagr_return_pct
 
-    return {
+    result = {
         'id': cfg.get('id') or asset_key,
         'label': cfg['label'],
         'ticker': cfg.get('ticker'),
@@ -4437,6 +4506,9 @@ def _build_asset_series(asset_key, cfg, history, start_year, end_year, calculati
         'multiple_from_start': round(end_val / start_val, 3) if start_val else 0.0,
         'calculation_method': calculation_method,
     }
+    if dividends_applied:
+        result['dividends_reinvested'] = True
+    return result
 
 
 def _fetch_safe_asset_series(asset_keys, start_year, end_year):
@@ -5643,7 +5715,17 @@ class CalculatorAgent:
             asset_calc_method = data.get('calculation_method', calculation_method)
 
             try:
-                series_obj = _build_asset_series(config['id'], config, history, start_year, end_year, asset_calc_method, source=source)
+                series_obj = _build_asset_series(
+                    config['id'],
+                    config,
+                    history,
+                    start_year,
+                    end_year,
+                    asset_calc_method,
+                    source=source,
+                    include_dividends=include_dividends,
+                    dividend_map=(data.get('metadata') or {}).get('yearly_dividends')
+                )
                 if series_obj:
                     series_obj['id'] = config['id']
                     series_obj['calculation_method'] = asset_calc_method
@@ -5679,29 +5761,45 @@ class CalculatorAgent:
         """
         adjusted_assets = []
         if not price_data_map:
+            logger.info('[배당 재투자] price_data_map이 비어있어 스킵')
             return adjusted_assets
 
+        logger.info('[배당 재투자] %d개 자산 확인 시작', len(price_data_map))
         for asset_id, data in price_data_map.items():
             if not isinstance(data, dict):
+                logger.debug('[배당 재투자] %s: data가 dict 타입이 아님, 스킵', asset_id)
                 continue
             source = str(data.get('source') or '').strip()
             config = data.get('config') or {}
             ticker = (config.get('ticker') or '').strip()
+            label = config.get('label') or ticker or asset_id
 
-            if 'yahoo finance' not in source.lower() or not ticker:
+            logger.info('[배당 재투자] %s 확인 중 (source=%s, ticker=%s)', label, source, ticker)
+
+            if 'yahoo finance' not in source.lower():
+                logger.info('[배당 재투자] %s: Yahoo Finance 소스가 아님 (source=%s), 스킵', label, source)
+                continue
+
+            if not ticker:
+                logger.warning('[배당 재투자] %s: ticker가 없어 스킵', label)
                 continue
 
             try:
+                logger.info('[배당 재투자] %s: 배당 조정된 데이터 조회 시작 (ticker=%s, %d-%d)', label, ticker, start_year, end_year)
                 history = _fetch_yfinance_history(ticker, start_year, end_year, adjust_for_dividends=True)
                 if history:
+                    old_history_len = len(data.get('history', []))
                     data['history'] = history
                     metadata = data.setdefault('metadata', {})
                     metadata['dividends_reinvested'] = True
-                    adjusted_assets.append(config.get('label') or ticker)
-                    logger.info('[%s] Dividend reinvestment 적용 (Adjusted Close 사용)', config.get('label', ticker))
+                    adjusted_assets.append(label)
+                    logger.info('[%s] 배당 재투자 적용 완료 (Adjusted Close 사용, %d → %d 데이터 포인트)', label, old_history_len, len(history))
+                else:
+                    logger.warning('[%s] 배당 조정된 데이터를 가져왔지만 비어있음', label)
             except Exception as exc:
-                logger.warning('[%s] 배당 재투자 데이터 가져오기 실패: %s', config.get('label', ticker), exc)
+                logger.warning('[%s] 배당 재투자 데이터 가져오기 실패: %s', label, exc, exc_info=True)
 
+        logger.info('[배당 재투자] 완료: %d개 자산에 적용됨', len(adjusted_assets))
         return adjusted_assets
 
     def _build_chart_data_table(self, series_list, calculation_method):
@@ -6168,7 +6266,7 @@ def finance_historical_returns_view(request):
             return result_data
 
         def execute_request():
-            append_log(f"시스템: {start_year}-{end_year} 멀티 에이전트 분석 시작")
+            append_log(f"시스템: {start_year}-{end_year} 자산 분석 파이프라인 시작")
 
             # --- Multi-Agent Workflow ---
 
@@ -6336,7 +6434,7 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
         return f"data: {json.dumps({'type': 'result', 'data': data})}\n\n"
 
     try:
-        yield send_log(f"시스템: {start_year}-{end_year} 멀티 에이전트 분석 시작")
+        yield send_log(f"시스템: {start_year}-{end_year} 자산 분석 파이프라인 시작")
 
         # Agent 1: Build asset plan
         assets = _build_requested_assets(custom_assets, calculation_method)
@@ -8537,18 +8635,44 @@ def finance_add_single_asset_view(request):
             history, source = result
             logger.info(f"[Single Asset] Fetched {len(history)} data points from {source}")
 
+        # Apply dividend reinvestment if requested
+        dividends_reinvested = False
+        if include_dividends and 'yahoo finance' in source.lower() and cfg.get('ticker'):
+            try:
+                ticker = cfg.get('ticker')
+                logger.info(f"[Single Asset] Applying dividend reinvestment for {cfg.get('label')} (ticker={ticker})")
+                adjusted_history = _fetch_yfinance_history(ticker, start_year, end_year, adjust_for_dividends=True)
+                if adjusted_history:
+                    history = adjusted_history
+                    dividends_reinvested = True
+                    logger.info(f"[Single Asset] Dividend reinvestment applied: {len(adjusted_history)} data points (Adjusted Close)")
+                else:
+                    logger.warning(f"[Single Asset] Failed to get dividend-adjusted data for {cfg.get('label')}")
+            except Exception as exc:
+                logger.warning(f"[Single Asset] Dividend reinvestment failed for {cfg.get('label')}: {exc}")
+
+        # Build yearly dividend map for metadata (only if not using Adjusted Close)
+        yearly_dividends = None if dividends_reinvested else _build_yearly_dividend_map(cfg, start_year, end_year)
+
         # Build series
-        series = _build_asset_series(asset_id, cfg, history, start_year, end_year, calculation_method, source=source)
+        # Note: When using Adjusted Close, we don't apply dividends again (already included in price)
+        series = _build_asset_series(
+            asset_id, cfg, history, start_year, end_year, calculation_method,
+            source=source,
+            include_dividends=False,  # Don't apply dividends twice - Adjusted Close already includes them
+            dividend_map=yearly_dividends
+        )
         if not series:
             return JsonResponse({'ok': False, 'error': 'Failed to build series'}, status=500)
 
         # Enrich with dividend information
         base_metadata = series.get('metadata') or {}
         enriched_metadata = _enrich_metadata_with_dividend_info(cfg, base_metadata)
-        yearly_dividends = _build_yearly_dividend_map(cfg, start_year, end_year)
         if yearly_dividends:
             enriched_metadata['yearly_dividends'] = yearly_dividends
             enriched_metadata['dividend_unit'] = cfg.get('unit')
+        if dividends_reinvested:
+            enriched_metadata['dividends_reinvested'] = True
         series['metadata'] = enriched_metadata
 
         # Copy metadata fields to series root
