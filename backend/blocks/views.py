@@ -19,7 +19,7 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     pykrx_stock = None
 from django.db import transaction, OperationalError, ProgrammingError
-from django.db.models import Max, Q
+from django.db.models import Max, Q, Prefetch
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from .models import (
@@ -37,6 +37,7 @@ from .models import (
     FinanceQueryLog,
     FinanceQuickRequest,
     FinanceQuickCompareGroup,
+    FinanceQueryAsset,
     AssetPriceCache,
     CompatibilityAgentPrompt,
     CompatibilityAgentCache,
@@ -2879,16 +2880,23 @@ def admin_finance_logs_view(request):
     total_count = query.count()
 
     # Apply pagination
-    logs = query[offset:offset + limit]
+    asset_prefetch = Prefetch('asset_rows', to_attr='prefetched_assets')
+    logs = query.prefetch_related(asset_prefetch)[offset:offset + limit]
 
     # Serialize logs
     logs_data = []
     for log in logs:
+        asset_entries = []
+        for asset in getattr(log, 'prefetched_assets', []):
+            asset_entries.append({
+                'id': asset.asset_id,
+                'label': asset.label,
+                'ticker': asset.ticker,
+                'category': asset.category,
+            })
         logs_data.append({
             'id': log.id,
             'user_identifier': log.user_identifier,
-            'prompt': log.prompt,
-            'quick_requests': log.quick_requests,
             'context_key': log.context_key,
             'success': log.success,
             'error_message': log.error_message,
@@ -2896,6 +2904,7 @@ def admin_finance_logs_view(request):
             'processing_time_ms': log.processing_time_ms,
             'is_prefetch': log.is_prefetch,
             'created_at': log.created_at.isoformat(),
+            'assets': asset_entries,
         })
 
     return JsonResponse({
@@ -2939,8 +2948,8 @@ def admin_finance_stats_view(request):
         count=Count('id')
     ).order_by('-count')[:10])
 
-    # Most common context keys
-    top_contexts = list(FinanceQueryLog.objects.exclude(context_key='').values('context_key').annotate(
+    # Most requested assets
+    top_assets = list(FinanceQueryAsset.objects.values('asset_id', 'label', 'ticker').annotate(
         count=Count('id')
     ).order_by('-count')[:10])
 
@@ -2954,7 +2963,7 @@ def admin_finance_stats_view(request):
             'avg_processing_time_ms': round(avg_processing_time, 2) if avg_processing_time else 0,
             'queries_last_24h': queries_24h,
             'top_users': top_users,
-            'top_contexts': top_contexts,
+            'top_assets': top_assets,
         }
     })
 
@@ -2971,7 +2980,7 @@ def _get_client_identifier(request):
     return ip
 
 
-def _log_finance_query(user_identifier, prompt, quick_requests, context_key, success, error_message='', assets_count=0, processing_time_ms=None, is_prefetch=False):
+def _log_finance_query(user_identifier, context_key, success, *, requested_assets=None, error_message='', assets_count=0, processing_time_ms=None, is_prefetch=False):
     """
     Log finance query to database.
 
@@ -2979,10 +2988,8 @@ def _log_finance_query(user_identifier, prompt, quick_requests, context_key, suc
         is_prefetch: Whether this request originated from a dividend prefetch run
     """
     try:
-        FinanceQueryLog.objects.create(
+        log = FinanceQueryLog.objects.create(
             user_identifier=user_identifier,
-            prompt=prompt,
-            quick_requests=quick_requests if isinstance(quick_requests, list) else [],
             context_key=context_key,
             success=success,
             error_message=error_message,
@@ -2990,6 +2997,19 @@ def _log_finance_query(user_identifier, prompt, quick_requests, context_key, suc
             processing_time_ms=processing_time_ms,
             is_prefetch=is_prefetch,
         )
+        asset_payloads = []
+        for asset in requested_assets or []:
+            if not isinstance(asset, dict):
+                continue
+            asset_payloads.append(FinanceQueryAsset(
+                log=log,
+                asset_id=str(asset.get('id') or asset.get('ticker') or '').strip(),
+                label=str(asset.get('label') or '').strip(),
+                ticker=str(asset.get('ticker') or '').strip(),
+                category=str(asset.get('category') or '').strip(),
+            ))
+        if asset_payloads:
+            FinanceQueryAsset.objects.bulk_create(asset_payloads)
     except Exception as e:
         logger.error(f"Failed to log finance query: {e}")
 
@@ -4531,12 +4551,7 @@ def _get_agent_prompt(agent_type, default_prompt=''):
     """
     Get agent prompt from database or return default
     """
-    from .models import AgentPrompt
-    try:
-        agent = AgentPrompt.objects.get(agent_type=agent_type, is_active=True)
-        return agent.system_prompt
-    except AgentPrompt.DoesNotExist:
-        return default_prompt
+    return default_prompt
 
 
 
@@ -6161,12 +6176,21 @@ def finance_historical_returns_view(request):
             backend_logger.info("STEP 1: Building requested assets")
             assets = _build_requested_assets(custom_assets, calculation_method)
             backend_logger.info("Requested Assets (%d): %s", len(assets), assets)
+            serialized_requested_assets = _serialize_requested_assets(assets)
 
             if not assets:
                 backend_logger.error("No assets provided - returning 400")
                 processing_time_ms = int((time.time() - start_time) * 1000)
-                _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                                 '분석할 자산을 찾을 수 없습니다.', 0, processing_time_ms, is_prefetch)
+                _log_finance_query(
+                    user_identifier,
+                    context_key,
+                    False,
+                    requested_assets=serialized_requested_assets,
+                    error_message='분석할 자산을 찾을 수 없습니다.',
+                    assets_count=0,
+                    processing_time_ms=processing_time_ms,
+                    is_prefetch=is_prefetch,
+                )
                 stream_error('분석할 자산을 찾을 수 없습니다.')
                 stream_complete('error')
                 return JsonResponse({
@@ -6180,7 +6204,6 @@ def finance_historical_returns_view(request):
             append_log(f"[의도 분석] 최종 계산 방식: {_get_calculation_method_label(calculation_method)}")
 
             validated_assets = assets
-            serialized_requested_assets = _serialize_requested_assets(validated_assets)
 
             # Agent 2: Price Retriever
             backend_logger.info("STEP 2: Running PriceRetrieverAgent")
@@ -6192,8 +6215,16 @@ def finance_historical_returns_view(request):
             if not price_data_map:
                 backend_logger.error("No price data retrieved - returning 502")
                 processing_time_ms = int((time.time() - start_time) * 1000)
-                _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                                 '자산 데이터를 가져올 수 없습니다.', len(assets), processing_time_ms, is_prefetch)
+                _log_finance_query(
+                    user_identifier,
+                    context_key,
+                    False,
+                    requested_assets=serialized_requested_assets,
+                    error_message='자산 데이터를 가져올 수 없습니다.',
+                    assets_count=len(assets),
+                    processing_time_ms=processing_time_ms,
+                    is_prefetch=is_prefetch,
+                )
                 stream_error('자산 데이터를 가져올 수 없습니다. (티커를 확인해주세요)')
                 stream_complete('error')
                 return JsonResponse({
@@ -6214,8 +6245,16 @@ def finance_historical_returns_view(request):
 
             if not series_data:
                 processing_time_ms = int((time.time() - start_time) * 1000)
-                _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                                 '유효한 수익률 데이터를 계산할 수 없습니다.', len(assets), processing_time_ms, is_prefetch)
+                _log_finance_query(
+                    user_identifier,
+                    context_key,
+                    False,
+                    requested_assets=serialized_requested_assets,
+                    error_message='유효한 수익률 데이터를 계산할 수 없습니다.',
+                    assets_count=len(assets),
+                    processing_time_ms=processing_time_ms,
+                    is_prefetch=is_prefetch,
+                )
                 stream_error('유효한 수익률 데이터를 계산할 수 없습니다.')
                 stream_complete('error')
                 return JsonResponse({
@@ -6239,8 +6278,15 @@ def finance_historical_returns_view(request):
 
             # Log successful query
             processing_time_ms = int((time.time() - start_time) * 1000)
-            _log_finance_query(user_identifier, prompt, quick_requests, context_key, True,
-                             '', len(assets), processing_time_ms, is_prefetch)
+            _log_finance_query(
+                user_identifier,
+                context_key,
+                True,
+                requested_assets=serialized_requested_assets,
+                assets_count=len(assets),
+                processing_time_ms=processing_time_ms,
+                is_prefetch=is_prefetch,
+            )
             stream_complete('ok')
 
             # Construct Response
@@ -6296,8 +6342,16 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
         assets = _build_requested_assets(custom_assets, calculation_method)
         if not assets:
             processing_time_ms = int((time.time() - start_time) * 1000)
-            _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                             '분석할 자산을 찾을 수 없습니다.', 0, processing_time_ms, is_prefetch)
+            _log_finance_query(
+                user_identifier,
+                context_key,
+                False,
+                requested_assets=_serialize_requested_assets(assets),
+                error_message='분석할 자산을 찾을 수 없습니다.',
+                assets_count=0,
+                processing_time_ms=processing_time_ms,
+                is_prefetch=is_prefetch,
+            )
             yield send_error('분석할 자산을 찾을 수 없습니다.')
             return
 
@@ -6319,8 +6373,16 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
 
         if not price_data_map:
             processing_time_ms = int((time.time() - start_time) * 1000)
-            _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                             '자산 데이터를 가져올 수 없습니다.', len(assets), processing_time_ms, is_prefetch)
+            _log_finance_query(
+                user_identifier,
+                context_key,
+                False,
+                requested_assets=serialized_requested_assets,
+                error_message='자산 데이터를 가져올 수 없습니다.',
+                assets_count=len(assets),
+                processing_time_ms=processing_time_ms,
+                is_prefetch=is_prefetch,
+            )
             yield send_error('자산 데이터를 가져올 수 없습니다.')
             return
 
@@ -6340,8 +6402,16 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
 
         if not series_data:
             processing_time_ms = int((time.time() - start_time) * 1000)
-            _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                             '유효한 수익률 데이터를 계산할 수 없습니다.', len(assets), processing_time_ms, is_prefetch)
+            _log_finance_query(
+                user_identifier,
+                context_key,
+                False,
+                requested_assets=serialized_requested_assets,
+                error_message='유효한 수익률 데이터를 계산할 수 없습니다.',
+                assets_count=len(assets),
+                processing_time_ms=processing_time_ms,
+                is_prefetch=is_prefetch,
+            )
             yield send_error('유효한 수익률 데이터를 계산할 수 없습니다.')
             return
 
@@ -6362,8 +6432,15 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
 
         # Log successful query
         processing_time_ms = int((time.time() - start_time) * 1000)
-        _log_finance_query(user_identifier, prompt, quick_requests, context_key, True,
-                         '', len(assets), processing_time_ms, is_prefetch)
+        _log_finance_query(
+            user_identifier,
+            context_key,
+            True,
+            requested_assets=serialized_requested_assets,
+            assets_count=len(assets),
+            processing_time_ms=processing_time_ms,
+            is_prefetch=is_prefetch,
+        )
 
         result_payload = {
             'ok': True,
@@ -6387,8 +6464,19 @@ def _finance_analysis_stream(prompt, quick_requests, custom_assets, context_key,
     except Exception as e:
         backend_logger.error(f"Stream error: {e}", exc_info=True)
         processing_time_ms = int((time.time() - start_time) * 1000)
-        _log_finance_query(user_identifier, prompt, quick_requests, context_key, False,
-                         f"분석 중 오류: {str(e)}", 0, processing_time_ms, is_prefetch)
+        fallback_assets = locals().get('serialized_requested_assets')
+        if fallback_assets is None:
+            fallback_assets = _serialize_requested_assets(locals().get('assets') or [])
+        _log_finance_query(
+            user_identifier,
+            context_key,
+            False,
+            requested_assets=fallback_assets,
+            error_message=f"분석 중 오류: {str(e)}",
+            assets_count=len(locals().get('assets') or []),
+            processing_time_ms=processing_time_ms,
+            is_prefetch=is_prefetch,
+        )
         yield send_error(f"분석 중 오류가 발생했습니다: {str(e)}")
 
 
@@ -6833,172 +6921,6 @@ def admin_get_wallet_password_view(request):
     return JsonResponse({'ok': True, 'password': config.wallet_password_plain or ''})
 
 
-# ============================================================
-# Agent Prompt Management
-# ============================================================
-
-EXCLUDED_AGENT_PROMPT_TYPES = {
-    # Intent classifier (asset extraction) prompt is no longer managed via admin UI.
-    'intent_classifier',
-}
-
-
-def _cleanup_excluded_agent_prompts():
-    """Remove agent prompts that should not be edited via the admin page."""
-    if not EXCLUDED_AGENT_PROMPT_TYPES:
-        return
-    from .models import AgentPrompt
-    AgentPrompt.objects.filter(agent_type__in=EXCLUDED_AGENT_PROMPT_TYPES).delete()
-
-
-def _get_or_create_default_agent_prompts():
-    """Initialize default agent prompts if they don't exist"""
-    from .models import AgentPrompt
-
-    _cleanup_excluded_agent_prompts()
-
-    defaults = {
-        'guardrail': {
-            'name': '가드레일 Agent',
-            'description': '부적절한 요청을 필터링하고 안전성을 검사합니다.',
-            'system_prompt': (
-                "당신은 사용자 요청의 의도를 분류하는 전문가입니다.\n\n"
-                "주어진 사용자 요청이 다음 중 어디에 해당하는지 판단하세요:\n\n"
-                "1. **금융 분석 요청**: 자산(예: 비트코인, 삼성전자, S&P 500 등)의 수익률, 가격 변동, 비교 분석 등을 원하는 경우.\n"
-                "   - 이런 경우 'allowed': true를 반환하세요.\n\n"
-                "2. **부적절한 요청**: 금융 분석과 무관하거나, 개인정보를 요구하거나, 시스템 악용을 시도하는 경우.\n"
-                "   - 이런 경우 'allowed': false를 반환하고, 'reason'에 거부 사유를 간단히 설명하세요.\n\n"
-                "응답 형식 (JSON만 반환):\n"
-                "{\n"
-                '  "allowed": true 또는 false,\n'
-                '  "reason": "거부 사유 (allowed가 false일 때만)"\n'
-                "}\n\n"
-            ),
-        },
-    }
-
-    created = []
-    for agent_type, data in defaults.items():
-        agent, is_new = AgentPrompt.objects.get_or_create(
-            agent_type=agent_type,
-            defaults=data
-        )
-        if is_new:
-            created.append(agent.name)
-
-    return created
-
-
-@csrf_exempt
-def admin_agent_prompts_view(request):
-    """
-    GET: List all agent prompts
-    POST: Create or initialize default agent prompts
-    """
-    from .models import AgentPrompt
-
-    _cleanup_excluded_agent_prompts()
-
-    if request.method == 'GET':
-        # Initialize defaults if empty
-        if AgentPrompt.objects.count() == 0:
-            _get_or_create_default_agent_prompts()
-
-        prompts = AgentPrompt.objects.exclude(agent_type__in=EXCLUDED_AGENT_PROMPT_TYPES)
-        return JsonResponse({
-            'ok': True,
-            'prompts': [p.as_dict() for p in prompts]
-        })
-
-    elif request.method == 'POST':
-        # Initialize defaults
-        created = _get_or_create_default_agent_prompts()
-        prompts = AgentPrompt.objects.exclude(agent_type__in=EXCLUDED_AGENT_PROMPT_TYPES)
-        return JsonResponse({
-            'ok': True,
-            'created': created,
-            'prompts': [p.as_dict() for p in prompts]
-        })
-
-    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
-
-
-@csrf_exempt
-def admin_agent_prompt_detail_view(request, agent_type):
-    """
-    GET: Get specific agent prompt
-    PUT/PATCH: Update agent prompt
-    """
-    if agent_type in EXCLUDED_AGENT_PROMPT_TYPES:
-        return JsonResponse({
-            'ok': False,
-            'error': f'Agent prompt not supported: {agent_type}'
-        }, status=404)
-
-    from .models import AgentPrompt
-
-    if request.method == 'GET':
-        try:
-            prompt = AgentPrompt.objects.get(agent_type=agent_type)
-            return JsonResponse({
-                'ok': True,
-                'prompt': prompt.as_dict()
-            })
-        except AgentPrompt.DoesNotExist:
-            return JsonResponse({
-                'ok': False,
-                'error': f'Agent prompt not found: {agent_type}'
-            }, status=404)
-
-    elif request.method in ['PUT', 'PATCH']:
-        payload = _load_json_body(request)
-        if payload is None:
-            return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
-
-        try:
-            prompt = AgentPrompt.objects.get(agent_type=agent_type)
-
-            # Update fields
-            if 'name' in payload:
-                prompt.name = payload['name']
-            if 'description' in payload:
-                prompt.description = payload['description']
-            if 'system_prompt' in payload:
-                prompt.system_prompt = payload['system_prompt']
-                # Increment version when prompt changes
-                prompt.version += 1
-            if 'is_active' in payload:
-                prompt.is_active = payload['is_active']
-
-            prompt.save()
-
-            return JsonResponse({
-                'ok': True,
-                'prompt': prompt.as_dict()
-            })
-        except AgentPrompt.DoesNotExist:
-            return JsonResponse({
-                'ok': False,
-                'error': f'Agent prompt not found: {agent_type}'
-            }, status=404)
-        except Exception as e:
-            return JsonResponse({
-                'ok': False,
-                'error': str(e)
-            }, status=500)
-
-    elif request.method == 'DELETE':
-        try:
-            prompt = AgentPrompt.objects.get(agent_type=agent_type)
-            prompt.delete()
-            return JsonResponse({'ok': True})
-        except AgentPrompt.DoesNotExist:
-            return JsonResponse({
-                'ok': False,
-                'error': f'Agent prompt not found: {agent_type}'
-            }, status=404)
-
-    return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
 
 
 DEFAULT_COMPATIBILITY_AGENT_KEY = 'saju_bitcoin'

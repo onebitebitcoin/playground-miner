@@ -3,7 +3,7 @@ from unittest import mock
 
 from django.test import TestCase
 
-from blocks.models import FinanceQueryLog
+from blocks.models import FinanceQueryLog, FinanceQueryAsset
 
 
 def _mock_price_stream(assets, start_year, end_year):
@@ -82,6 +82,13 @@ class FinanceAnalysisViewTests(TestCase):
         self.assertIn('비트코인', requested_labels)
         self.assertTrue(any('애플' in label for label in requested_labels))
         self.assertEqual(FinanceQueryLog.objects.count(), 1)
+        log = FinanceQueryLog.objects.latest('id')
+        self.assertEqual(log.assets_count, 2)
+        logged_assets = list(log.asset_rows.all())
+        labels = [asset.label for asset in logged_assets]
+        self.assertTrue(any('비트코인' in label for label in labels))
+        self.assertTrue(any('애플' in label for label in labels))
+        self.assertEqual(FinanceQueryAsset.objects.count(), 2)
 
     @mock.patch('blocks.views.PriceRetrieverAgent.stream', side_effect=_mock_price_stream)
     @mock.patch('blocks.views.CalculatorAgent.stream', side_effect=_mock_calculator_stream)
@@ -101,3 +108,25 @@ class FinanceAnalysisViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         body = b''.join(response.streaming_content).decode('utf-8')
         self.assertIn('analysis_summary', body)
+
+    def test_admin_logs_endpoint_includes_assets(self):
+        log = FinanceQueryLog.objects.create(
+            user_identifier='127.0.0.1',
+            context_key='test',
+            success=True,
+            assets_count=1,
+            processing_time_ms=123,
+        )
+        FinanceQueryAsset.objects.create(
+            log=log,
+            asset_id='bitcoin',
+            label='비트코인',
+            ticker='BTC-USD',
+            category='디지털 자산',
+        )
+        response = self.client.get('/api/finance/admin/logs', {'username': 'admin'})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['ok'])
+        self.assertEqual(len(data['logs']), 1)
+        self.assertEqual(data['logs'][0]['assets'][0]['label'], '비트코인')

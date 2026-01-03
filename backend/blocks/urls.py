@@ -76,9 +76,6 @@ urlpatterns = [
     # Finance management endpoints
     path('finance/admin/logs', views.admin_finance_logs_view, name='admin_finance_logs'),
     path('finance/admin/stats', views.admin_finance_stats_view, name='admin_finance_stats'),
-    # Agent prompt management endpoints
-    path('finance/admin/agent-prompts', views.admin_agent_prompts_view, name='admin_agent_prompts'),
-    path('finance/admin/agent-prompts/<str:agent_type>', views.admin_agent_prompt_detail_view, name='admin_agent_prompt_detail'),
     path('finance/admin/quick-requests', views.admin_finance_quick_requests_view, name='admin_finance_quick_requests'),
     path('finance/admin/quick-requests/<int:pk>', views.admin_finance_quick_request_detail_view, name='admin_finance_quick_request_detail'),
     path('finance/admin/quick-compare-groups', views.admin_finance_quick_compare_groups_view, name='admin_finance_quick_compare_groups'),

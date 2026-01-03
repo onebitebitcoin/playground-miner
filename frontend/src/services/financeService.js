@@ -259,20 +259,6 @@ export async function fetchYearlyClosingPrices({ assets, startYear, endYear, sig
   return data
 }
 
-export async function fetchAgentPrompts({ signal }) {
-  const response = await fetch(resolveApiUrl('/api/finance/admin/agent-prompts'), {
-    method: 'GET',
-    headers: defaultHeaders,
-    signal
-  })
-
-  const data = await handleResponse(response)
-  if (!data.ok) {
-    throw new Error(data.error || 'Agent 프롬프트를 불러오지 못했습니다.')
-  }
-  return data
-}
-
 export async function resolveCustomAsset(name, { signal } = {}) {
   const body = { name: name || '' }
   const response = await fetch(resolveApiUrl('/api/finance/custom-asset/resolve'), {
@@ -287,58 +273,6 @@ export async function resolveCustomAsset(name, { signal } = {}) {
     throw new Error(data.error || '종목 정보를 가져오지 못했습니다.')
   }
   return data.asset
-}
-
-export async function updateAgentPrompt({ agentType, name, description, systemPrompt, isActive, signal }) {
-  const body = {}
-  if (name !== undefined) body.name = name
-  if (description !== undefined) body.description = description
-  if (systemPrompt !== undefined) body.system_prompt = systemPrompt
-  if (isActive !== undefined) body.is_active = isActive
-
-  const response = await fetch(resolveApiUrl(`/api/finance/admin/agent-prompts/${agentType}`), {
-    method: 'PATCH',
-    headers: defaultHeaders,
-    body: JSON.stringify(body),
-    signal
-  })
-
-  const data = await handleResponse(response)
-  if (!data.ok) {
-    throw new Error(data.error || 'Agent 프롬프트 업데이트에 실패했습니다.')
-  }
-  return data
-}
-
-export async function deleteAgentPrompt({ agentType, signal }) {
-  if (!agentType) {
-    throw new Error('Agent 타입이 필요합니다.')
-  }
-  const response = await fetch(resolveApiUrl(`/api/finance/admin/agent-prompts/${agentType}`), {
-    method: 'DELETE',
-    headers: defaultHeaders,
-    signal
-  })
-
-  const data = await handleResponse(response)
-  if (!data.ok) {
-    throw new Error(data.error || 'Agent 프롬프트 삭제에 실패했습니다.')
-  }
-  return data
-}
-
-export async function initializeAgentPrompts({ signal }) {
-  const response = await fetch(resolveApiUrl('/api/finance/admin/agent-prompts'), {
-    method: 'POST',
-    headers: defaultHeaders,
-    signal
-  })
-
-  const data = await handleResponse(response)
-  if (!data.ok) {
-    throw new Error(data.error || 'Agent 프롬프트 초기화에 실패했습니다.')
-  }
-  return data
 }
 
 export async function fetchFinanceQuickCompareGroups({ signal } = {}) {

@@ -20,143 +20,32 @@
     </div>
 
     <div class="bg-white rounded-lg shadow overflow-hidden">
-      <div class="px-6 py-4 border-b border-gray-200">
-        <h3 class="text-lg font-semibold text-gray-900">재무 프롬프트 템플릿</h3>
-        <p class="text-sm text-gray-500 mt-1">
-          Finance 페이지에서 사용하는 단일 프롬프트와 변수 구성을 확인할 수 있습니다.
-        </p>
-      </div>
-      <div class="p-6 space-y-5">
+      <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
         <div>
-          <p class="text-sm font-medium text-gray-700 mb-2">실제 요청</p>
-          <div class="bg-slate-900/5 border border-slate-200 rounded-xl p-4 font-mono text-sm text-slate-800">
-            {{ investmentPromptTemplate }}
-          </div>
-        </div>
-        <div>
-          <p class="text-sm font-medium text-gray-700 mb-2">변수 설명</p>
-          <ul class="space-y-2">
-            <li
-              v-for="variable in investmentPromptVariables"
-              :key="variable.key"
-              class="flex items-start gap-2 text-sm text-gray-700"
-            >
-              <span class="px-2 py-0.5 bg-slate-100 text-slate-700 rounded font-mono text-xs">
-                {{ variable.key }}
-              </span>
-              <span>{{ variable.description }}</span>
-            </li>
-          </ul>
+          <h3 class="text-lg font-semibold text-gray-900">가장 많이 요청된 종목</h3>
+          <p class="text-sm text-gray-500 mt-1">최근 로그 기준 상위 10개 종목입니다.</p>
         </div>
       </div>
-    </div>
-
-    <div class="bg-white rounded-lg shadow overflow-hidden">
-      <div class="px-6 py-4 border-b border-gray-200">
-        <h3 class="text-lg font-semibold text-gray-900">Agent 프롬프트 관리</h3>
-      </div>
-
-      <div v-if="agentPromptsLoading" class="text-center py-12 text-gray-500">
-        로딩 중...
-      </div>
-
-      <div v-else-if="!agentPrompts.length" class="text-center py-12 text-gray-500">
-        Agent 프롬프트가 없습니다.
-        <button
-          @click="initializeAgentPrompts"
-          class="block mx-auto mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-        >
-          기본 프롬프트 초기화
-        </button>
-      </div>
-
-      <div v-else class="divide-y divide-gray-200">
-        <div v-for="agent in agentPrompts" :key="agent.id" class="p-6">
-          <div class="flex items-start justify-between mb-4 gap-3 flex-wrap">
+      <div class="p-6">
+        <div v-if="financeStats.top_assets && financeStats.top_assets.length" class="divide-y divide-gray-100">
+          <div
+            v-for="asset in financeStats.top_assets"
+            :key="`${asset.asset_id || asset.ticker}-${asset.count}`"
+            class="py-2 flex items-center justify-between text-sm"
+          >
             <div>
-              <h4 class="text-lg font-semibold text-gray-900">{{ agent.name }}</h4>
-              <p class="text-sm text-gray-600 mt-1">{{ agent.description }}</p>
-              <div class="flex items-center gap-3 mt-2">
-                <span class="text-xs text-gray-500">타입: {{ agent.agent_type }}</span>
-                <span class="text-xs text-gray-500">버전: v{{ agent.version }}</span>
-                <span :class="agent.is_active ? 'text-green-600' : 'text-red-600'" class="text-xs font-semibold">
-                  {{ agent.is_active ? '활성' : '비활성' }}
-                </span>
-              </div>
+              <p class="font-semibold text-gray-800">
+                {{ asset.label || asset.asset_id || '알 수 없는 종목' }}
+              </p>
+              <p class="text-xs text-gray-500" v-if="asset.ticker">
+                {{ asset.ticker }}
+              </p>
             </div>
-            <div class="flex gap-2">
-              <button
-                @click="toggleAgentPromptEdit(agent.agent_type)"
-                class="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-                :disabled="!isAdmin"
-              >
-                {{ editingAgentType === agent.agent_type ? '취소' : '수정' }}
-              </button>
-              <button
-                @click="deleteAgentPromptEntry(agent.agent_type)"
-                class="px-3 py-1 text-sm border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
-                :disabled="agentPromptDeleting === agent.agent_type || !isAdmin"
-              >
-                {{ agentPromptDeleting === agent.agent_type ? '삭제 중...' : '삭제' }}
-              </button>
-            </div>
+            <span class="text-xs font-medium text-gray-500">요청 {{ asset.count }}회</span>
           </div>
-
-          <div v-if="editingAgentType === agent.agent_type" class="space-y-4 mt-4 border-t pt-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">이름</label>
-              <input
-                v-model="editingAgentData.name"
-                type="text"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">설명</label>
-              <input
-                v-model="editingAgentData.description"
-                type="text"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">시스템 프롬프트</label>
-              <textarea
-                v-model="editingAgentData.system_prompt"
-                rows="10"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-              ></textarea>
-            </div>
-            <div class="flex items-center">
-              <input
-                v-model="editingAgentData.is_active"
-                type="checkbox"
-                id="agent-active"
-                class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <label for="agent-active" class="ml-2 text-sm text-gray-700">활성화</label>
-            </div>
-            <div class="flex gap-2">
-              <button
-                @click="saveAgentPrompt(agent.agent_type)"
-                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                저장
-              </button>
-              <button
-                @click="editingAgentType = null"
-                class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                취소
-              </button>
-            </div>
-          </div>
-
-          <div v-else class="mt-4">
-            <div class="bg-gray-50 rounded-lg p-4">
-              <pre class="text-xs text-gray-700 whitespace-pre-wrap font-mono">{{ agent.system_prompt }}</pre>
-            </div>
-          </div>
+        </div>
+        <div v-else class="text-sm text-gray-500 text-center py-4">
+          아직 집계된 종목 요청이 없습니다.
         </div>
       </div>
     </div>
@@ -470,7 +359,7 @@
             <tr>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">시간</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사용자</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">프롬프트</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">요청 자산</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">컨텍스트</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">자산 수</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">처리시간</th>
@@ -485,53 +374,31 @@
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                 {{ log.user_identifier }}
               </td>
-              <td class="px-6 py-4 text-sm text-gray-900 max-w-xs">
-                <div class="space-y-2">
-                  <div class="flex items-start gap-2">
-                    <span class="truncate block" :title="log.prompt">
-                      {{ log.prompt || '-' }}
-                    </span>
+              <td class="px-6 py-4 text-sm text-gray-900">
+                <div class="flex flex-wrap gap-2">
+                  <template v-if="log.assets && log.assets.length">
                     <span
-                      v-if="log.is_prefetch"
-                      class="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded-full border border-blue-100 bg-blue-50 text-blue-600"
+                      v-for="(asset, idx) in log.assets"
+                      :key="`${log.id}-${asset.id || asset.ticker || idx}`"
+                      class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs border border-gray-200 bg-gray-50"
                     >
-                      Prefetch
+                      <span class="font-semibold text-gray-800">{{ asset.label || asset.id || '알 수 없음' }}</span>
+                      <span v-if="asset.ticker && asset.ticker !== asset.label" class="text-gray-500">
+                        ({{ asset.ticker }})
+                      </span>
                     </span>
-                    <button
-                      v-if="log.prompt"
-                      class="text-gray-400 hover:text-gray-600 flex-shrink-0"
-                      @click="toggleLogPrompt(log.id)"
-                      :aria-expanded="expandedLogPromptId === log.id"
-                      title="전체 프롬프트 보기"
-                    >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                  <div
-                    v-if="expandedLogPromptId === log.id"
-                    class="text-xs text-gray-700 bg-slate-50 border border-slate-200 rounded p-3 whitespace-pre-wrap"
+                  </template>
+                  <span v-else class="text-xs text-gray-400">-</span>
+                  <span
+                    v-if="log.is_prefetch"
+                    class="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded-full border border-blue-100 bg-blue-50 text-blue-600"
                   >
-                    <p class="font-medium text-gray-900 mb-2">Full Prompt</p>
-                    <p>{{ log.prompt }}</p>
-                    <div v-if="Array.isArray(log.quick_requests) && log.quick_requests.length" class="mt-2">
-                      <p class="font-medium text-gray-900 mb-1">Quick 요청</p>
-                      <ul class="list-disc list-inside space-y-0.5">
-                        <li v-for="(item, idx) in log.quick_requests" :key="idx">{{ item }}</li>
-                      </ul>
-                    </div>
-                    <div v-if="log.error_message" class="mt-2 text-red-600">
-                      <p class="font-medium mb-1">오류</p>
-                      <p>{{ log.error_message }}</p>
-                    </div>
-                  </div>
+                    Prefetch
+                  </span>
                 </div>
+                <p v-if="log.error_message" class="mt-2 text-xs text-red-600">
+                  {{ log.error_message }}
+                </p>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                 {{ log.context_key || '-' }}
@@ -608,30 +475,12 @@ const props = defineProps({
   showError: { type: Function, required: true }
 })
 
-const investmentPromptTemplate =
-  '{{투자기간}}년 전에 비트코인에 {{투자금}}만원을 투자했다면 지금 얼마인지 알려주고, 비트코인과 비교 종목({{비교자산}})을 비교해줘.'
-const investmentPromptVariables = [
-  {
-    key: '{{투자기간}}',
-    description: '사용자가 Finance 화면에서 입력한 투자 시점 (1~30년 사이에서 선택)'
-  },
-  {
-    key: '{{투자금}}',
-    description: '입력한 투자 금액(만원 단위, 1~100,000 범위에서 제한)'
-  },
-  {
-    key: '{{비교자산}}',
-    description: '사용자가 선택하거나 추가한 비교 종목 목록 (없으면 대표 자산군으로 대체)'
-  }
-]
-
 const financeLogs = ref([])
 const financeLogsLoading = ref(false)
 const financeLogsOffset = ref(0)
 const financeLogsLimit = ref(10)
 const financeLogsTotal = ref(0)
 const hasLoadedFinanceLogs = ref(false)
-const expandedLogPromptId = ref(null)
 const financeStats = ref({
   total_queries: 0,
   successful_queries: 0,
@@ -640,19 +489,8 @@ const financeStats = ref({
   avg_processing_time_ms: 0,
   queries_last_24h: 0,
   top_users: [],
-  top_contexts: []
+  top_assets: []
 })
-
-const agentPrompts = ref([])
-const agentPromptsLoading = ref(false)
-const editingAgentType = ref(null)
-const editingAgentData = ref({
-  name: '',
-  description: '',
-  system_prompt: '',
-  is_active: true
-})
-const agentPromptDeleting = ref('')
 
 const quickCompareGroups = ref([])
 const quickCompareGroupsLoading = ref(false)
@@ -698,7 +536,6 @@ const fetchIfAdmin = async () => {
   await Promise.all([
     loadFinanceLogs(),
     loadFinanceStats(),
-    loadAgentPrompts(),
     loadFinanceQuickCompareGroups(),
     loadCachedAssets(),
     loadCanonicalIds()
@@ -733,7 +570,8 @@ const loadFinanceLogs = async () => {
     if (data.ok) {
       financeLogs.value = (data.logs || []).map((log) => ({
         ...log,
-        is_prefetch: Boolean(log.is_prefetch)
+        is_prefetch: Boolean(log.is_prefetch),
+        assets: Array.isArray(log.assets) ? log.assets : []
       }))
       financeLogsTotal.value = data.total || 0
     } else {
@@ -784,10 +622,6 @@ const formatDateTime = (isoString) => {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 }
 
-const toggleLogPrompt = (logId) => {
-  expandedLogPromptId.value = expandedLogPromptId.value === logId ? null : logId
-}
-
 const prevFinanceLogsPage = () => {
   if (financeLogsOffset.value > 0) {
     financeLogsOffset.value = Math.max(0, financeLogsOffset.value - financeLogsLimit.value)
@@ -834,91 +668,6 @@ const resetCachedAssetsSearch = () => {
   selectedCanonicalId.value = ''
   cachedAssetsOffset.value = 0
   loadCachedAssets()
-}
-
-const loadAgentPrompts = async () => {
-  if (!props.isAdmin) return
-  agentPromptsLoading.value = true
-  try {
-    const { fetchAgentPrompts } = await import('../../services/financeService')
-    const data = await fetchAgentPrompts({})
-    agentPrompts.value = data.prompts || []
-  } catch (error) {
-    props.showError(error.message || 'Agent 프롬프트를 불러올 수 없습니다')
-  } finally {
-    agentPromptsLoading.value = false
-  }
-}
-
-const toggleAgentPromptEdit = (agentType) => {
-  if (editingAgentType.value === agentType) {
-    editingAgentType.value = null
-    editingAgentData.value = {
-      name: '',
-      description: '',
-      system_prompt: '',
-      is_active: true
-    }
-  } else {
-    const agent = agentPrompts.value.find((a) => a.agent_type === agentType)
-    if (agent) {
-      editingAgentType.value = agentType
-      editingAgentData.value = {
-        name: agent.name,
-        description: agent.description,
-        system_prompt: agent.system_prompt,
-        is_active: agent.is_active
-      }
-    }
-  }
-}
-
-const saveAgentPrompt = async (agentType) => {
-  try {
-    const { updateAgentPrompt } = await import('../../services/financeService')
-    await updateAgentPrompt({
-      agentType,
-      name: editingAgentData.value.name,
-      description: editingAgentData.value.description,
-      systemPrompt: editingAgentData.value.system_prompt,
-      isActive: editingAgentData.value.is_active
-    })
-    props.showSuccess('Agent 프롬프트가 업데이트되었습니다')
-    editingAgentType.value = null
-    await loadAgentPrompts()
-  } catch (error) {
-    props.showError(error.message || 'Agent 프롬프트 업데이트에 실패했습니다')
-  }
-}
-
-const initializeAgentPrompts = async () => {
-  try {
-    const { initializeAgentPrompts } = await import('../../services/financeService')
-    await initializeAgentPrompts({})
-    props.showSuccess('기본 Agent 프롬프트가 초기화되었습니다')
-    await loadAgentPrompts()
-  } catch (error) {
-    props.showError(error.message || 'Agent 프롬프트 초기화에 실패했습니다')
-  }
-}
-
-const deleteAgentPromptEntry = async (agentType) => {
-  if (!props.isAdmin) return
-  if (!confirm('선택한 Agent 프롬프트를 삭제하시겠습니까?')) return
-  agentPromptDeleting.value = agentType
-  try {
-    const { deleteAgentPrompt } = await import('../../services/financeService')
-    await deleteAgentPrompt({ agentType })
-    props.showSuccess('Agent 프롬프트가 삭제되었습니다')
-    if (editingAgentType.value === agentType) {
-      editingAgentType.value = null
-    }
-    await loadAgentPrompts()
-  } catch (error) {
-    props.showError(error.message || 'Agent 프롬프트 삭제에 실패했습니다')
-  } finally {
-    agentPromptDeleting.value = ''
-  }
 }
 
 const normalizeQuickCompareGroup = (entry, index) => {
@@ -1233,9 +982,8 @@ watch(
         avg_processing_time_ms: 0,
         queries_last_24h: 0,
         top_users: [],
-        top_contexts: []
+        top_assets: []
       }
-      agentPrompts.value = []
       quickCompareGroups.value = []
       cachedAssets.value = []
       cachedAssetsTotal.value = 0

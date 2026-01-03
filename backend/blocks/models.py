@@ -505,8 +505,6 @@ class FinanceQueryCache(models.Model):
 class FinanceQueryLog(models.Model):
     """Log for finance query requests"""
     user_identifier = models.CharField(max_length=255, blank=True, default='')  # IP or username
-    prompt = models.TextField()  # User's prompt
-    quick_requests = models.JSONField(default=list, blank=True)  # Quick request buttons
     context_key = models.CharField(max_length=50, blank=True, default='')  # e.g., 'us_bigtech', 'kr_equity'
     success = models.BooleanField(default=False)  # Whether query succeeded
     error_message = models.TextField(blank=True, default='')  # Error if failed
@@ -525,7 +523,34 @@ class FinanceQueryLog(models.Model):
 
     def __str__(self):
         status = "✓" if self.success else "✗"
-        return f"{status} [{self.created_at.strftime('%Y-%m-%d %H:%M')}] {self.user_identifier}: {self.prompt[:50]}"
+        sample_asset = getattr(getattr(self, 'asset_rows', None), 'first', lambda: None)()
+        asset_label = sample_asset.label if sample_asset else '자산 미지정'
+        return f"{status} [{self.created_at.strftime('%Y-%m-%d %H:%M')}] {self.user_identifier}: {asset_label}"
+
+
+class FinanceQueryAsset(models.Model):
+    """Individual assets requested for each finance query log."""
+    log = models.ForeignKey(FinanceQueryLog, on_delete=models.CASCADE, related_name='asset_rows')
+    asset_id = models.CharField(max_length=100, blank=True, default='')
+    label = models.CharField(max_length=255, blank=True, default='')
+    ticker = models.CharField(max_length=100, blank=True, default='')
+    category = models.CharField(max_length=100, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['asset_id']),
+            models.Index(fields=['label']),
+            models.Index(fields=['ticker']),
+        ]
+
+    def as_dict(self):
+        return {
+            'id': self.asset_id,
+            'label': self.label,
+            'ticker': self.ticker,
+            'category': self.category,
+        }
 
 
 class FinanceQuickRequest(models.Model):
