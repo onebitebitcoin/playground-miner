@@ -97,7 +97,6 @@
           :dividend-toggle-pending="dividendTogglePending"
           :price-data="priceTableData"
           :calculation-method="analysisResultType"
-          :bitcoin-summary="bitcoinPerformanceText"
           @update:start-year="displayStartYear = $event"
           @toggle-tax="includeTax = !includeTax"
           @toggle-dividends="handleDividendToggle"
@@ -407,6 +406,7 @@ const quickCompareGroups = ref([])
 const quickCompareGroupsLoading = ref(false)
 const selectedQuickCompareGroup = ref('')
 const feKey = ref('')
+const quickCompareLoadingKey = feKey
 const allowRealtimeLogs = computed(() => import.meta.env.DEV || isAdmin.value)
 
 function syncAdminStatus() {
@@ -1958,23 +1958,6 @@ function formatPercent(value) {
   return `${value.toFixed(1)}%`
 }
 
-const bitcoinPerformanceText = computed(() => {
-  const stats = bitcoinPerformanceStats.value
-  if (!stats) return ''
-  const segments = []
-  if (Number.isFinite(stats.annualizedReturnPct)) {
-    segments.push(`연평균 ${formatPercent(stats.annualizedReturnPct)}`)
-  }
-  if (Number.isFinite(stats.multipleFromStart)) {
-    segments.push(`${formatMultiple(stats.multipleFromStart)}배`)
-  }
-  if (stats.priceText) {
-    segments.push(`현재 ${stats.priceText}`)
-  }
-  if (!segments.length) return ''
-  return `비트코인 (${stats.startYear}년 → ${stats.endYear}년) · ${segments.join(' · ')}`
-})
-
 const bitcoinHeroSummary = computed(() => {
   const stats = bitcoinPerformanceStats.value
   if (!stats || !analysis.value) return null
@@ -2004,22 +1987,22 @@ function getReturnForYear(series, year, options = {}) {
   if (!series?.points) return '-'
   const point = series.points.find((p) => p.year === year)
   if (!point) return '-'
-  if (analysisResultType.value === 'price') {
-    const mode = options.priceMode || priceTableMode.value
-    if (mode === 'dividend') {
-      const yieldPct = getDividendYieldForYear(series, year)
-      if (!Number.isFinite(yieldPct) || yieldPct < MIN_DIVIDEND_YIELD_DISPLAY) return '-'
-      return `${yieldPct.toFixed(1)}%`
-    }
-    if (mode === 'multiple') {
-      const multiple = Number(point.multiple)
-      if (!Number.isFinite(multiple) || multiple <= 0) return '-'
-      const investmentInManwon = investmentAmount.value * multiple
-      const formattedInvestment = investmentInManwon >= 10000
-        ? `${(investmentInManwon / 10000).toFixed(1)}억원`
-        : `${Math.round(investmentInManwon).toLocaleString('ko-KR')}만원`
-      return `${formatMultiple(multiple)}배\n${formattedInvestment}`
-    }
+  const mode = options.priceMode || priceTableMode.value
+
+  if (mode === 'dividend') {
+    const yieldPct = getDividendYieldForYear(series, year)
+    if (!Number.isFinite(yieldPct) || yieldPct < MIN_DIVIDEND_YIELD_DISPLAY) return '-'
+    return `${yieldPct.toFixed(1)}%`
+  }
+
+  if (mode === 'return') {
+    const pct = getReturnPercentForYear(series, year)
+    if (!Number.isFinite(pct)) return '-'
+    const sign = pct > 0 ? '+' : ''
+    return `${sign}${pct.toFixed(1)}%`
+  }
+
+  if (mode === 'price' || analysisResultType.value === 'price') {
     const displayCurrency = getSeriesDisplayCurrency(series)
     const { value } = resolvePriceValueForCurrency(series, point, year, displayCurrency)
     if (!Number.isFinite(value)) return '-'
@@ -2043,16 +2026,43 @@ function getReturnForYear(series, year, options = {}) {
 
 function determineYearlySign(series, year) {
   if (!series) return 0
-  if (analysisResultType.value === 'price') {
-    if (priceTableMode.value === 'dividend') return 0
+  if (priceTableMode.value === 'dividend') {
+    return getDividendYearlySign(series, year)
+  }
+  if (priceTableMode.value === 'price') {
     return getPriceYearlySign(series, year)
   }
+  if (priceTableMode.value === 'return') {
+    const pct = getReturnPercentForYear(series, year)
+    if (!Number.isFinite(pct)) return 0
+    if (pct > 0) return 1
+    if (pct < 0) return -1
+    return 0
+  }
+
+  if (analysisResultType.value === 'price') {
+    return getPriceYearlySign(series, year)
+  }
+
   const point = series.points?.find((p) => p.year === year)
   if (!point) return 0
   const value = Number(point.value)
   if (!Number.isFinite(value)) return 0
   if (value > 0) return 1
   if (value < 0) return -1
+  return 0
+}
+
+function getDividendYearlySign(series, year) {
+  const years = tableYears.value
+  const idx = years.indexOf(year)
+  if (idx <= 0) return 0
+  const prevYear = years[idx - 1]
+  const current = getDividendYieldForYear(series, year)
+  const prev = getDividendYieldForYear(series, prevYear)
+  if (!Number.isFinite(current) || !Number.isFinite(prev)) return 0
+  if (current > prev) return 1
+  if (current < prev) return -1
   return 0
 }
 
@@ -2076,6 +2086,44 @@ function getPriceValueForYear(series, year) {
   const displayCurrency = getSeriesDisplayCurrency(series)
   const { value } = resolvePriceValueForCurrency(series, point, year, displayCurrency)
   return Number.isFinite(value) ? value : null
+}
+
+function getReturnPercentForYear(series, year) {
+  if (!series?.points) return null
+  const point = series.points.find((p) => p.year === year)
+  if (!point) return null
+  if (analysisResultType.value === 'price' || priceTableMode.value === 'return') {
+    const years = tableYears.value || []
+    const idx = years.indexOf(year)
+    if (idx <= 0) return null
+    const prevYear = years[idx - 1]
+    const currentPrice = getPriceValueForYear(series, year)
+    const prevPrice = getPriceValueForYear(series, prevYear)
+    if (Number.isFinite(currentPrice) && Number.isFinite(prevPrice) && prevPrice !== 0) {
+      return ((currentPrice / prevPrice) - 1) * 100
+    }
+    const currentMultiple = getMultipleForYear(series, year)
+    const prevMultiple = getMultipleForYear(series, prevYear)
+    if (Number.isFinite(currentMultiple) && Number.isFinite(prevMultiple) && prevMultiple > 0) {
+      return ((currentMultiple / prevMultiple) - 1) * 100
+    }
+    return null
+  }
+  const value = Number(point.value)
+  if (Number.isFinite(value)) return value
+  const fallbackMultiple = Number(point.multiple)
+  if (Number.isFinite(fallbackMultiple)) {
+    return (fallbackMultiple - 1) * 100
+  }
+  return null
+}
+
+function getMultipleForYear(series, year) {
+  if (!series?.points) return null
+  const point = series.points.find((p) => p.year === year)
+  if (!point) return null
+  const multiple = Number(point.multiple ?? point.value)
+  return Number.isFinite(multiple) ? multiple : null
 }
 
 function getReturnCellClass(series, year) {
@@ -2279,6 +2327,47 @@ function buildPromptFromInputs() {
   return `${years}년 전에 비트코인에 ${amountText}을 투자했다면 지금 얼마인지 알려주고, 비트코인과 비교 종목(${assetText})을 비교해줘.`
 }
 
+function buildAssetRequestPayload() {
+  const seen = new Set()
+  const requests = []
+
+  const pushAsset = (asset) => {
+    if (!asset) return
+    const id = (asset.id || asset.ticker || asset.label || '').toString().trim()
+    const label = (asset.label || asset.display || id).toString().trim()
+    const ticker = (asset.ticker || id || label).toString().trim()
+    const key = (id || ticker || label).toLowerCase()
+    if (!key || seen.has(key)) return
+    seen.add(key)
+    const entry = {
+      id: id || ticker || label,
+      label: label || ticker || id,
+      ticker,
+      category: asset.category || '',
+      unit: asset.unit || ''
+    }
+    if (asset.synthetic_asset) {
+      entry.synthetic_asset = asset.synthetic_asset
+    }
+    if (Object.prototype.hasOwnProperty.call(asset, 'target_rate_pct')) {
+      entry.target_rate_pct = asset.target_rate_pct
+    }
+    requests.push(entry)
+  }
+
+  pushAsset({
+    id: 'bitcoin',
+    label: '비트코인',
+    ticker: 'BTC-USD',
+    category: '디지털 자산',
+    unit: 'USD'
+  })
+
+  customAssets.value.forEach((asset) => pushAsset(asset))
+
+  return requests
+}
+
 const formattedInvestmentAmountNumber = computed(() => {
   return investmentAmount.value.toLocaleString('ko-KR')
 })
@@ -2341,7 +2430,8 @@ async function requestAgentAnalysis(options = {}) {
   const requestContext = {
     prompt: prompt.value,
     contextKey: selectedContextKey.value,
-    customAssets: customAssets.value.map((a) => a.ticker || a.label)
+    assetRequests: buildAssetRequestPayload(),
+    calculationMethod: analysisResultType.value
   }
 
   lastAnalysisRequest.value = requestContext
@@ -2493,7 +2583,7 @@ async function prefetchDividendVariant(val) {
     const result = await fetchHistoricalReturns({
       ...request,
       includeDividends: val,
-      isPrefetch: true,  // Mark as prefetch to skip logging
+      isPrefetch: true,  // Mark as prefetch for logging/analytics
       signal: prefetchController.signal
     })
     if (result && result.ok) {

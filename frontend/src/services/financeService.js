@@ -33,12 +33,28 @@ async function handleResponse(response) {
   return payload
 }
 
-export async function fetchHistoricalReturns({ prompt, quickRequests, contextKey, customAssets, includeDividends, isPrefetch = false, signal }) {
+export async function fetchHistoricalReturns({
+  prompt,
+  quickRequests,
+  contextKey,
+  customAssets,
+  assetRequests,
+  includeDividends,
+  calculationMethod,
+  isPrefetch = false,
+  signal
+}) {
+  const normalizedAssets = Array.isArray(assetRequests)
+    ? assetRequests
+    : Array.isArray(customAssets)
+      ? customAssets
+      : []
   const body = {
     prompt: prompt || '',
     quick_requests: Array.isArray(quickRequests) ? quickRequests : [],
-    custom_assets: Array.isArray(customAssets) ? customAssets : [],
+    custom_assets: normalizedAssets,
     include_dividends: Boolean(includeDividends),
+    calculation_method: calculationMethod || 'cagr',
     is_prefetch: Boolean(isPrefetch)
   }
   if (contextKey) {
@@ -96,7 +112,17 @@ function parseSseChunk(chunk, onLog) {
   return null
 }
 
-export async function fetchHistoricalReturnsStream({ prompt, quickRequests, contextKey, customAssets, includeDividends, signal, onLog }) {
+export async function fetchHistoricalReturnsStream({
+  prompt,
+  quickRequests,
+  contextKey,
+  customAssets,
+  assetRequests,
+  includeDividends,
+  calculationMethod,
+  signal,
+  onLog
+}) {
   if (signal?.aborted) {
     throw createAbortError('요청이 취소되었습니다.')
   }
@@ -119,11 +145,17 @@ export async function fetchHistoricalReturnsStream({ prompt, quickRequests, cont
     abortHandlers.push({ target: signal, handler: abortHandler })
   }
 
+  const normalizedAssets = Array.isArray(assetRequests)
+    ? assetRequests
+    : Array.isArray(customAssets)
+      ? customAssets
+      : []
   const body = {
     prompt: prompt || '',
     quick_requests: Array.isArray(quickRequests) ? quickRequests : [],
-    custom_assets: Array.isArray(customAssets) ? customAssets : [],
-    include_dividends: Boolean(includeDividends)
+    custom_assets: normalizedAssets,
+    include_dividends: Boolean(includeDividends),
+    calculation_method: calculationMethod || 'cagr'
   }
   if (contextKey) {
     body.context_key = contextKey

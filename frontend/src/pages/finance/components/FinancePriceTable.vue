@@ -6,19 +6,16 @@
     <div class="flex items-center justify-between gap-3 flex-wrap px-1">
       <div class="flex flex-col">
         <div class="text-sm font-semibold text-slate-900">
-          {{ analysisResultType === 'price' ? '연도별 비교' : analysisResultType === 'cumulative' ? '연도별 누적 수익률 비교' : analysisResultType === 'yearly_growth' ? '연도별 전년 대비 증감률 비교' : '연도별 연평균 상승률 비교' }}
+          {{ tableTitle }}
         </div>
         <p
-          v-if="analysisResultType === 'price'"
+          v-if="tableDescription"
           class="text-[11px] text-slate-400"
         >
-          연말 종가 기준 (12월 31일, 현재 연도는 최신 가격) · 배당률은 그 해 배당금 ÷ 연말 가격
+          {{ tableDescription }}
         </p>
       </div>
-      <div
-        v-if="analysisResultType === 'price'"
-        class="flex items-center text-xs text-slate-500"
-      >
+      <div class="flex items-center text-xs text-slate-500">
         <div class="inline-flex items-center bg-slate-100 rounded-full p-0.5">
           <button
             v-for="mode in PRICE_TABLE_OPTIONS"
@@ -87,7 +84,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch, nextTick } from 'vue'
+import { onMounted, ref, watch, nextTick, computed } from 'vue'
 
 const props = defineProps({
   tableYears: Array,
@@ -107,11 +104,36 @@ defineEmits(['update:priceTableMode'])
 
 const PRICE_TABLE_OPTIONS = [
   { key: 'price', label: '가격' },
-  { key: 'multiple', label: '배수' },
+  { key: 'return', label: '상승률' },
   { key: 'dividend', label: '배당률' }
 ]
 
 const tableWrapper = ref(null)
+const tableTitle = computed(() => {
+  if (props.priceTableMode === 'price') {
+    return '연도별 종가 비교 (연말 기준)'
+  }
+  if (props.priceTableMode === 'return') {
+    return '연도별 상승률 비교'
+  }
+  if (props.priceTableMode === 'dividend') {
+    return '연도별 배당률 비교'
+  }
+  return '연도별 비교'
+})
+
+const tableDescription = computed(() => {
+  if (props.priceTableMode === 'price') {
+    return '연말 종가 기준 (12월 31일, 현재 연도는 최신 가격)'
+  }
+  if (props.priceTableMode === 'return') {
+    return '기준 연도를 1로 두고 누적 상승률(%)을 표시합니다'
+  }
+  if (props.priceTableMode === 'dividend') {
+    return '해당 연도 배당금 ÷ 연말 가격 기준 배당 수익률'
+  }
+  return ''
+})
 
 function scrollToLatestColumns(behavior = 'auto') {
   if (!props.tableYears?.length) return

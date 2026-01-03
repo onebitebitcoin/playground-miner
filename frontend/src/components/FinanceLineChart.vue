@@ -689,7 +689,7 @@ const chartTitle = computed(() => {
   } else {
     methodText = '연평균 상승률'
   }
-  return `${displayYears}년 ${methodText} 비교 (${props.startYear} ~ ${props.endYear})`
+  return `${displayYears}년 ${methodText} 비교 (${props.startYear} ~ ${props.endYear}, 배수 기준)`
 })
 
 const loadingProgress = computed(() => {
@@ -757,23 +757,13 @@ watch(() => props.loading, (newLoading) => {
   }
 })
 
-const clampNormalizedValue = (value) => {
-  if (!Number.isFinite(value)) return null
-  // Price 모드, YoY Growth, CAGR 등은 음수 및 100 초과가 가능하므로 클램핑 하지 않음
-  if (props.calculationMethod === 'price' || props.calculationMethod === 'yearly_growth' || props.calculationMethod === 'cagr') {
-    return value
-  }
-  // 누적 수익률(Cumulative)만 0-100 범위로 클램핑
-  return Math.max(0, Math.min(100, value))
-}
-
-const extractAnnualizedRate = (point) => {
+const extractMultipleValue = (point) => {
   if (!point || typeof point !== 'object') return null
-  const candidates = [point.value, point.annualized_return_pct, point.annualizedReturnPct]
+  const candidates = [point.multiple, point.value]
   for (const candidate of candidates) {
-    const rate = Number(candidate)
-    if (Number.isFinite(rate)) {
-      return rate
+    const multiple = Number(candidate)
+    if (Number.isFinite(multiple) && multiple > 0) {
+      return multiple
     }
   }
   return null
@@ -808,41 +798,21 @@ const chart = computed(() => {
   const lineData = visibleSeries.map((series, idx) => {
     const orderedPoints = [...series.points].sort((a, b) => a.year - b.year)
     const color = props.colors[series.id] || palette[idx % palette.length]
-
-    // Price 모드: 로그 스케일 적용을 위해 원본 가격(Raw Price) 사용
-    let firstValue = null
-    if (props.calculationMethod === 'price' && orderedPoints.length > 0) {
-      firstValue = extractAnnualizedRate(orderedPoints[0])
-    }
-
     const rawPoints = orderedPoints
       .map((point) => {
-        const annualizedRate = extractAnnualizedRate(point)
-        if (!Number.isFinite(annualizedRate)) {
+        const multipleValue = extractMultipleValue(point)
+        if (!Number.isFinite(multipleValue)) {
           return null
         }
-
-        let normalizedValue
-        let originalValue = annualizedRate
-
-        // Price 모드: 배수 값 그대로 사용
-        if (props.calculationMethod === 'price') {
-          normalizedValue = annualizedRate
-        } else {
-          normalizedValue = clampNormalizedValue(annualizedRate)
-        }
-
-        if (normalizedValue === null) {
-          return null
-        }
-
-        values.push(normalizedValue)
+        values.push(multipleValue)
         return {
           year: point.year,
-          value: normalizedValue,
-          originalValue: originalValue,
+          value: multipleValue,
+          multiple: multipleValue,
+          raw_value: point.raw_value ?? point.rawValue,
+          unit: series.unit || point.unit,
           isRaw: false,
-          isRate: true
+          isRate: false
         }
       })
       .filter(Boolean)
@@ -860,51 +830,27 @@ const chart = computed(() => {
   }
 
   // Y축 스케일링 계산
-  let minValue = 0
-  let maxValue = 100
-
-  const allValues = values
-  if (allValues.length > 0) {
-    const realMin = Math.min(...allValues)
-    const realMax = Math.max(...allValues)
-
-    // Price 모드: 로그 스케일용 범위 (0 이하 제외)
-    if (props.calculationMethod === 'price') {
-      minValue = realMin > 0 ? realMin * 0.9 : 1
-      maxValue = realMax * 1.1
-    }
-    // 데이터가 음수를 포함하거나 100을 크게 초과하는 경우 동적 스케일링 적용
-    else if (realMin < 0 || realMax > 120) {
-      const range = realMax - realMin
-      minValue = Math.floor(realMin - range * 0.1)
-      maxValue = Math.ceil(realMax + range * 0.1)
-    } else {
-      // 기존 정규화 로직 유지
-      const rawMax = Math.max(...values, 0)
-      if (Number.isFinite(rawMax) && rawMax > 0) {
-        maxValue = Math.min(100, rawMax * 1.1)
-        if (maxValue < rawMax + 5) {
-          maxValue = Math.min(100, rawMax + 5)
-        }
-        if (maxValue < 20) {
-          maxValue = Math.min(100, 20)
-        }
-      }
-    }
+  let minValue = Math.min(...values)
+  let maxValue = Math.max(...values)
+  if (!Number.isFinite(minValue) || !Number.isFinite(maxValue)) {
+    return { lines: [], xLabels: [], yTicks: [], usesRawValues: false, fallbackOnly: false }
+  }
+  if (minValue === maxValue) {
+    const padding = minValue * 0.1 || 0.1
+    minValue = Math.max(0, minValue - padding)
+    maxValue = maxValue + padding
+  } else {
+    const padding = (maxValue - minValue) * 0.1
+    minValue = Math.max(0, minValue - padding)
+    maxValue += padding
+  }
+  if (minValue > 0.8 && minValue < 1) {
+    minValue = 0.8
+  } else if (minValue > 1 || minValue === 0) {
+    minValue = Math.max(0, Math.min(minValue, 1))
   }
 
   const scaleValue = (value) => {
-    // Price 모드: 로그 스케일
-    if (props.calculationMethod === 'price') {
-        if (value <= 0) return dimensions.padding + chartHeight
-        const minLog = Math.log10(minValue)
-        const maxLog = Math.log10(maxValue)
-        const valLog = Math.log10(value)
-        const ratio = (valLog - minLog) / (maxLog - minLog || 1)
-        return dimensions.padding + chartHeight - ratio * chartHeight
-    }
-    
-    // Linear Scale
     const ratio = (value - minValue) / (maxValue - minValue || 1)
     return dimensions.padding + chartHeight - ratio * chartHeight
   }
@@ -934,19 +880,9 @@ const chart = computed(() => {
     let value
     let label
 
-    if (props.calculationMethod === 'price') {
-        // Log Scale Ticks (multiples)
-        const minLog = Math.log10(minValue)
-        const maxLog = Math.log10(maxValue)
-        const logVal = minLog + (maxLog - minLog) * (idx / 4)
-        value = Math.pow(10, logVal)
-        label = formatMultipleValue(value)
-    } else {
-        // Linear Scale Ticks
-        const ratio = idx / 4
-        value = minValue + (maxValue - minValue) * ratio
-        label = value.toFixed(0)
-    }
+    const ratio = idx / 4
+    value = minValue + (maxValue - minValue) * ratio
+    label = formatMultipleValue(value)
 
     return {
       y: scaleValue(value),
@@ -1012,30 +948,19 @@ function getLineFilter(label) {
 
 function tooltipValueFormatter(point) {
   if (!point) return '-'
-
-  // Price 모드: 실제 가격 표시
+  const multiple = Number(point.multiple ?? point.value)
+  const parts = []
+  if (Number.isFinite(multiple)) {
+    parts.push(formatMultipleValue(multiple))
+  }
   if (props.calculationMethod === 'price') {
-    const multiple = Number(point.value)
     const rawPrice = Number(point.raw_value ?? point.rawValue)
     const convertedPrice = convertPriceForMode(rawPrice, point.unit, props.currencyMode, props.fxRate)
-    const parts = []
-    if (Number.isFinite(multiple)) {
-      parts.push(formatMultipleValue(multiple))
-    }
     if (Number.isFinite(convertedPrice)) {
       parts.push(formatCurrencyValue(convertedPrice, props.currencyMode))
     }
-    return parts.length ? parts.join(' · ') : '-'
   }
-
-  // 다른 모드일 때는 % 표시
-  if (Number.isFinite(point.originalValue)) {
-    return `${point.originalValue.toFixed(1)}%`
-  }
-  if (Number.isFinite(point.value)) {
-    return `${point.value.toFixed(1)}%`
-  }
-  return '-'
+  return parts.length ? parts.join(' · ') : '-'
 }
 
 function showTooltip(seriesLabel, point) {
