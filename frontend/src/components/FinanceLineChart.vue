@@ -391,9 +391,17 @@
               <p>세후 연평균 수익률 = 세전 연평균 수익률 × (1 - 0.154)</p>
               <p>세후 배수 = (1 + 세후 연평균 수익률) ^ 투자기간</p>
             </div>
+            <div class="bg-sky-50 rounded-xl border border-sky-200 p-4 space-y-2 text-xs font-mono text-sky-900">
+              <p class="font-semibold text-sky-700">배당 재투자 + 세금</p>
+              <p>적용 조건: <span class="font-semibold">배당</span> 토글 ON ∧ <span class="font-semibold">세금</span> 토글 ON</p>
+              <p>배당 과세: 세율 τ<sub>div</sub> = 15% (미국) / 15.4% (한국) → 세후 배당금 = 배당금 × (1 - τ<sub>div</sub>)</p>
+              <p>전년 대비 가치 업데이트: V<sub>t+1</sub> = V<sub>t</sub> × (1 + (세후 배당금<sub>t</sub> ÷ 종가<sub>t</sub>)) × (종가<sub>t+1</sub> ÷ 종가<sub>t</sub>)</p>
+              <p>마지막 연도 배당: V<sub>last</sub> = V<sub>last</sub> × (1 + (세후 배당금<sub>last</sub> ÷ 종가<sub>last</sub>))</p>
+              <p>이후에 자본이득세(22%)를 복리 배수에 1 - τ<sub>cg</sub>를 곱해 반영합니다.</p>
+            </div>
           </div>
           <p class="text-xs text-slate-500">
-            해외 주식(USD 표기)은 기본공제 250만원 이후 일괄 22% 세율을 적용하고, 국내 주식(KRW 표기)은 5천만원까지 비과세 후 동일 세율을 적용합니다. 예금·적금은 매년 15.4% 이자소득세를 납부한 뒤 나머지를 다시 적금/예금에 넣는다고 가정합니다. 실제 신고 절차와는 다를 수 있는 단순 모델이며, 비트코인·기타 자산에는 세금이 반영되지 않습니다.
+            해외 주식(USD 표기)은 기본공제 250만원 이후 일괄 22% 세율을 적용하고, 국내 주식(KRW 표기)은 5천만원까지 비과세 후 동일 세율을 적용합니다. 예금·적금은 매년 15.4% 이자소득세를 납부한 뒤 나머지를 다시 적금/예금에 넣는다고 가정합니다. 배당만 켜진 경우에는 Yahoo Finance의 Adjusted Close(세전 100% 재투자)를 그대로 사용하고, 배당+세금이 모두 켜졌을 때만 위 세후 배당 공식을 적용합니다. 실제 신고 절차와는 다를 수 있는 단순 모델이며, 비트코인·기타 자산에는 세금이 반영되지 않습니다.
           </p>
         </div>
         <div class="text-right">

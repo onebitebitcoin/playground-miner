@@ -1125,6 +1125,20 @@ async function loadQuickCompareGroups() {
   await ensureDefaultSelection({ reapply: !exists })
 }
 
+function resetAnalysisDisplay({ resetCaches = false } = {}) {
+  analysis.value = null
+  Te.value = ''
+  displayStartYear.value = null
+  sliderMinYear.value = null
+  yearlyPriceMap.value = {}
+  hiddenSeries.value = new Set()
+  resetColorAssignments()
+  if (resetCaches) {
+    resetDividendCache()
+    lastAnalysisRequest.value = null
+  }
+}
+
 function clearAllCustomAssets() {
   Gt += 1
   customAssetResolving.value = false
@@ -1133,6 +1147,7 @@ function clearAllCustomAssets() {
   selectedQuickCompareGroup.value = ''
   selectedContextKey.value = 'safe_assets'
   feKey.value = ''
+  resetAnalysisDisplay({ resetCaches: true })
 }
 
 function determineContextKeyForAssets(list = customAssets.value) {
