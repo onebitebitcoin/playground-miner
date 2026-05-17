@@ -8,3 +8,6 @@ bitcoinlib>=0.7.5
 pykrx>=1.0.48
 gunicorn>=21.2.0
 google-generativeai>=0.8.0
+psycopg2-binary>=2.9.9
+dj-database-url>=2.1.0
+whitenoise[brotli]>=6.6.0

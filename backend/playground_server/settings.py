@@ -3,7 +3,8 @@ import tempfile
 import warnings
 from pathlib import Path
 
-from decouple import Config, RepositoryEnv
+import dj_database_url
+from decouple import AutoConfig
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -11,10 +12,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 os.environ.setdefault('BCL_DATA_DIR', str(BASE_DIR.parent / 'tmp' / 'bitcoinlib'))
 
 # Load .env from project root (two levels up from settings.py)
-env_path = BASE_DIR.parent / '.env'
-# Decouple Config always requires a repository; fall back to an empty mapping
-# so production environments without a .env still work via os.environ.
-config = Config(RepositoryEnv(env_path)) if env_path.exists() else Config({})
+config = AutoConfig(search_path=BASE_DIR.parent)
 
 # Load environment variables
 SECRET_KEY = config('SECRET_KEY', default='dev-secret-key-change-in-production')
@@ -50,6 +48,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -80,13 +79,11 @@ TEMPLATES = [
 WSGI_APPLICATION = 'playground_server.wsgi.application'
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-        'OPTIONS': {
-            'timeout': 20,
-        },
-    }
+    'default': dj_database_url.config(
+        default=f'sqlite:///{BASE_DIR / "db.sqlite3"}',
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 }
 
 LANGUAGE_CODE = 'ko-kr'
@@ -96,9 +93,7 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-
-# Persistent DB connections to reduce cold-connection latency
-CONN_MAX_AGE = 60
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 LOG_FALLBACK_DIR = Path(tempfile.gettempdir()) / 'playground-logs'
 
