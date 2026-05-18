@@ -94,6 +94,7 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+WHITENOISE_ROOT = BASE_DIR / 'frontend_dist'
 
 LOG_FALLBACK_DIR = Path(tempfile.gettempdir()) / 'playground-logs'
 
