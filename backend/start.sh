@@ -7,6 +7,9 @@ python manage.py collectstatic --noinput
 echo "[start] migrate"
 python manage.py migrate --noinput
 
+echo "[start] init defaults"
+python init_defaults.py
+
 echo "[start] gunicorn"
 exec gunicorn playground_server.wsgi:application \
   --bind 0.0.0.0:"${PORT:-8000}" \
