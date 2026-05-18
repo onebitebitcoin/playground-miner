@@ -6,17 +6,14 @@ from django.db import migrations
 
 
 def _rename_if_exists(old_name, new_name):
-    return migrations.RunSQL(
-        sql=f"""
-DO $$
-BEGIN
-    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = '{old_name}') THEN
-        ALTER INDEX {old_name} RENAME TO {new_name};
-    END IF;
-END $$;
-""",
-        reverse_sql=migrations.RunSQL.noop,
-    )
+    def forward(apps, schema_editor):
+        if schema_editor.connection.vendor != 'postgresql':
+            return
+        schema_editor.execute(
+            f"ALTER INDEX IF EXISTS {old_name} RENAME TO {new_name};"
+        )
+
+    return migrations.RunPython(forward, migrations.RunPython.noop)
 
 
 class Migration(migrations.Migration):

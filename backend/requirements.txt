@@ -11,3 +11,10 @@ google-generativeai>=0.8.0
 psycopg2-binary>=2.9.9
 dj-database-url>=2.1.0
 whitenoise[brotli]>=6.6.0
+
+# Test dependencies
+pytest>=9.0.0
+pytest-django>=4.9.0
+pytest-cov>=7.1.0
+factory-boy>=3.3.0
+faker>=37.0.0

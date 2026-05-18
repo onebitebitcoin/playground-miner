@@ -1,3 +1,4 @@
+import copy
 import json
 from unittest import mock
 
@@ -203,7 +204,9 @@ class FinanceAnalysisViewTests(TestCase):
         self.assertAlmostEqual(att_series['multiple_from_start'], 1.2, places=5)
         self.assertTrue(att_series.get('dividends_reinvested'))
 
-    def test_capital_gains_tax_only_applied_when_dividends_and_tax_enabled(self):
+    @mock.patch('blocks.views._fetch_yfinance_history', return_value=[])
+    @mock.patch('blocks.views._build_yearly_dividend_map', return_value={})
+    def test_capital_gains_tax_only_applied_when_dividends_and_tax_enabled(self, *_mocks):
         agent = views.CalculatorAgent()
         price_data_map = {
             'US_STOCK': {
@@ -225,21 +228,31 @@ class FinanceAnalysisViewTests(TestCase):
             }
         }
 
-        # Baseline: dividends on, tax off -> no capital gains tax adjustment
-        series_no_tax, _, _, _ = agent.run(price_data_map, 2019, 2021, calculation_method='cagr', include_dividends=True, include_tax=False)
+        # Each call gets a fresh deepcopy to prevent _apply_dividend_reinvestment
+        # from mutating shared metadata between runs.
+        series_no_tax, _, _, _ = agent.run(
+            copy.deepcopy(price_data_map), 2019, 2021, calculation_method='cagr',
+            include_dividends=True, include_tax=False,
+        )
         self.assertEqual(len(series_no_tax), 1)
         baseline_multiple = series_no_tax[0]['multiple_from_start']
         self.assertAlmostEqual(baseline_multiple, 1.6, places=5)
 
         # Both toggles on -> capital gains tax of 22% applied on gains above principal
-        series_with_tax, _, _, _ = agent.run(price_data_map, 2019, 2021, calculation_method='cagr', include_dividends=True, include_tax=True)
+        series_with_tax, _, _, _ = agent.run(
+            copy.deepcopy(price_data_map), 2019, 2021, calculation_method='cagr',
+            include_dividends=True, include_tax=True,
+        )
         self.assertEqual(len(series_with_tax), 1)
         after_tax_multiple = series_with_tax[0]['multiple_from_start']
         expected_after_tax = 1 + (0.6 * (1 - 0.22))
         self.assertAlmostEqual(after_tax_multiple, expected_after_tax, places=5)
 
         # Tax on but dividends toggle off -> capital gains tax should not be applied
-        series_tax_without_div, _, _, _ = agent.run(price_data_map, 2019, 2021, calculation_method='cagr', include_dividends=False, include_tax=True)
+        series_tax_without_div, _, _, _ = agent.run(
+            copy.deepcopy(price_data_map), 2019, 2021, calculation_method='cagr',
+            include_dividends=False, include_tax=True,
+        )
         self.assertEqual(len(series_tax_without_div), 1)
         self.assertAlmostEqual(series_tax_without_div[0]['multiple_from_start'], baseline_multiple, places=5)
 

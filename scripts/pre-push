@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Pre-push hook: runs backend and frontend unit/integration tests.
+# Blocks push if tests fail or coverage drops below 85%.
+# E2E tests (e2e/*.spec.js) are NOT run here — run them manually before releases.
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+echo "[pre-push] Running backend tests (coverage >= 85%)..."
+cd "$REPO_ROOT/backend"
+if ! venv/bin/python3.10 -m pytest --tb=short -q; then
+    echo "[pre-push] FAIL: Backend tests failed. Push blocked."
+    exit 1
+fi
+
+echo "[pre-push] Running frontend unit tests (coverage >= 85%)..."
+cd "$REPO_ROOT/frontend"
+
+VITEST_BIN=""
+if [ -x "./node_modules/.bin/vitest" ]; then
+    VITEST_BIN="./node_modules/.bin/vitest"
+elif [ -x "/tmp/vitest-install/node_modules/.bin/vitest" ]; then
+    VITEST_BIN="/tmp/vitest-install/node_modules/.bin/vitest"
+    export NODE_PATH="/tmp/vitest-install/node_modules"
+else
+    echo "[pre-push] WARNING: vitest not found. Run 'npm install' in frontend/ to install."
+    echo "[pre-push] Skipping frontend tests."
+    exit 0
+fi
+
+if ! "$VITEST_BIN" run --coverage --config vitest.config.js; then
+    echo "[pre-push] FAIL: Frontend tests failed. Push blocked."
+    exit 1
+fi
+
+echo "[pre-push] All tests passed. Proceeding with push."
+exit 0
